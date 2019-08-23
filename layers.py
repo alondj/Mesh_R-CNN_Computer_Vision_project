@@ -1,32 +1,87 @@
 import torch
+import torch.Tensor as Tensor
 import torch.nn as nn
+
+from typing import Tuple
 
 
 class GraphConv(nn.Module):
     # f′i = ReLU(W0xfi +∑j∈N(i)W1xfj)
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels: int, out_channels: int):
         super(GraphConv, self).__init__()
+        self.w0 = torch.nn.Parameter(data=torch.empty(in_channels, out_channels),
+                                     requires_grad=True)
+        self.w1 = torch.nn.Parameter(data=torch.empty(in_channels, out_channels),
+                                     requires_grad=True)
 
-    def forward(self, *xs):
-        pass
+        self.relu = nn.ReLU()
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        bound = 1.0/torch.sqrt(self.w0.shape[0])
+        self.w0.data.uniform_(-bound, bound)
+        self.w1.data.uniform_(-bound, bound)
+
+    def forward(self, vertix_features: Tensor, vertex_adjacency: Tensor) -> Tensor:
+        # sanity checks for dimentions
+        assert vertix_features.dim() == vertex_adjacency.dim()
+        assert vertix_features.shape[0] == vertex_adjacency.shape[0]
+        assert vertix_features[1] == vertex_adjacency.shape[1]
+        assert vertex_adjacency.shape[2] == vertex_adjacency.shape[1]
+
+        # NxVxIn @ InxOut => NxVxOut
+        w0_features = torch.matmul(vertix_features, self.w0)
+
+        # NxVxIn @ InxOut => NxVxOut
+        w1_features = torch.matmul(vertix_features, self.w1)
+
+        # batch ∑j∈N(i)W1xfj
+        # use the adjacency matrix as a mask
+        # note a vertex is not connected to itself
+        # NxVxV @ NxVxOut
+        # resulting in output shape of NxVxOut
+        neighbours = torch.bmm(vertex_adjacency, w1_features)
+
+        # aggregate features of neighbours
+        new_features = w0_features + neighbours
+
+        return self.relu(new_features)
 
 
 class ResGraphConv(nn.Module):
     # ResGraphConv(D1→D2)consists of two graph convolution layers (each preceeded by ReLU)
     # and an additive skip connection, with a linear projection if the input and output dimensions are different
 
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels: int, out_channels: int):
         super(ResGraphConv, self).__init__()
+        self.conv0 = GraphConv(in_channels, out_channels)
+        self.conv1 = GraphConv(out_channels, out_channels)
 
-    def forward(self, *xs):
-        pass
+        self.project = (in_channels == out_channels)
+
+        if self.project:
+            self.projection = nn.Linear(in_channels, out_channels)
+        else:
+            self.projection = None
+
+    def forward(self, vertix_features: Tensor, vertex_adjacency: Tensor) -> Tensor:
+        # NxVxOut
+        skip = vertix_features if not self.project else self.projection(
+            vertix_features)
+
+        # NxVxOut
+        out = self.conv0(vertix_features, vertex_adjacency)
+        # NxVxOut
+        out = self.conv1(out, vertex_adjacency)
+
+        return skip+out
 
 
 # vertix refinement stages for ShapeNet
-
 class ResVertixRefineShapenet(nn.Module):
     # xplained in the article
-    def __init__(self, use_input_features=True):
+    def __init__(self, use_input_features: bool = True):
         super(ResVertixRefineShapenet, self).__init__()
 
         self.vertAlign0 = VertexAlign()
@@ -36,11 +91,8 @@ class ResVertixRefineShapenet(nn.Module):
 
         self.linear = nn.Linear(3840, 128)
 
-        if use_input_features:
-            self.resGraphConv0 = ResGraphConv(259, 128)
-        else:
-            self.resGraphConv0 = ResGraphConv(131, 128)
-
+        in_channels = 259 if use_input_features else 131
+        self.resGraphConv0 = ResGraphConv(in_channels, 128)
         self.use_input_features = use_input_features
 
         self.resGraphConv1 = ResGraphConv(128, 128)
@@ -49,7 +101,8 @@ class ResVertixRefineShapenet(nn.Module):
 
         self.tanh = nn.Tanh()
 
-    def forward(self, conv2_3, conv3_4, conv4_6, conv5_3, vertex_positions, vertex_features=None):
+    def forward(self, conv2_3: Tensor, conv3_4: Tensor, conv4_6: Tensor, conv5_3: Tensor,
+                vertex_adjacency: Tensor, vertex_positions: Tensor, vertex_features: bool = None) -> Tuple[Tensor, Tensor]:
         vert0 = self.vertAlign0(conv2_3, vertex_positions)
         vert1 = self.vertAlign1(conv3_4, vertex_positions)
         vert2 = self.vertAlign2(conv4_6, vertex_positions)
@@ -71,13 +124,13 @@ class ResVertixRefineShapenet(nn.Module):
         vertex_features = torch.concat(to_concat, dim=1)
 
         # transforms input features to 128 features
-        new_features = self.resGraphConv0(vertex_features)
+        new_features = self.resGraphConv0(vertex_features, vertex_adjacency)
         # NxVx128
-        new_features = self.resGraphConv1(new_features)
-        new_features = self.resGraphConv2(new_features)
+        new_features = self.resGraphConv1(new_features, vertex_adjacency)
+        new_features = self.resGraphConv2(new_features, vertex_adjacency)
 
         # new_positions is of shape NxVx3
-        new_positions = self.graphConv(new_features)
+        new_positions = self.graphConv(new_features, vertex_adjacency)
         new_positions = self.tanh(new_positions)
         new_positions = vertex_positions+new_positions
 
@@ -86,7 +139,7 @@ class ResVertixRefineShapenet(nn.Module):
 
 class VertixRefineShapeNet(nn.Module):
     # explained in the article
-    def __init__(self, use_input_features=True):
+    def __init__(self, use_input_features: bool = True):
         super(VertixRefineShapeNet, self).__init__()
         self.vertAlign0 = VertexAlign()
         self.vertAlign1 = VertexAlign()
@@ -95,11 +148,8 @@ class VertixRefineShapeNet(nn.Module):
 
         self.linear0 = nn.Linear(3840, 128)
 
-        if use_input_features:
-            self.resGraphConv0 = ResGraphConv(259, 128)
-        else:
-            self.resGraphConv0 = ResGraphConv(131, 128)
-
+        in_channels = 259 if use_input_features else 131
+        self.graphConv0 = GraphConv(in_channels, 131)
         self.use_input_features = use_input_features
 
         self.graphConv1 = GraphConv(131, 128)
@@ -107,7 +157,8 @@ class VertixRefineShapeNet(nn.Module):
         self.linear1 = nn.Linear(128, 3)
         self.tanh = nn.Tanh()
 
-    def forward(self, conv2_3, conv3_4, conv4_6, conv5_3, vertex_positions, vertex_features=None):
+    def forward(self, conv2_3: Tensor, conv3_4: Tensor, conv4_6: Tensor, conv5_3: Tensor,
+                vertex_adjacency: Tensor, vertex_positions: Tensor, vertex_features: bool = None) -> Tuple[Tensor, Tensor]:
         vert0 = self.vertAlign0(conv2_3, vertex_positions)
         vert1 = self.vertAlign1(conv3_4, vertex_positions)
         vert2 = self.vertAlign2(conv4_6, vertex_positions)
@@ -129,16 +180,16 @@ class VertixRefineShapeNet(nn.Module):
         vertex_features = torch.concat(to_concat, dim=1)
 
         # transforms input features to 128 features
-        new_features = self.graphConv0(vertex_features)
+        new_features = self.graphConv0(vertex_features, vertex_adjacency)
 
         # NxVx131
         new_features = torch.cat([vertex_positions, new_features], dim=1)
         # NxVx128
-        new_features = self.graphConv1(new_features)
+        new_features = self.graphConv1(new_features, vertex_adjacency)
         # NxVx131
         new_features = torch.cat([vertex_positions, new_features], dim=1)
         # NxVx128
-        new_features = self.graphConv2(new_features)
+        new_features = self.graphConv2(new_features, vertex_adjacency)
 
         # NxVx3
         new_positions = self.linear1(new_features)
@@ -151,14 +202,12 @@ class VertixRefineShapeNet(nn.Module):
 # vertix refinement stage for Pix3D
 class VertixRefinePix3D(nn.Module):
     # explained in the article
-    def __init__(self, use_input_features=True):
+    def __init__(self, use_input_features: bool = True):
         super(VertixRefinePix3D, self).__init__()
         self.vertAlign = VertexAlign()
 
-        if use_input_features:
-            self.GraphConv0 = GraphConv(387, 128)
-        else:
-            self.GraphConv0 = GraphConv(259, 128)
+        in_channels = 387 if use_input_features else 259
+        self.graphConv0 = GraphConv(in_channels, 128)
 
         self.use_input_features = use_input_features
 
@@ -167,7 +216,8 @@ class VertixRefinePix3D(nn.Module):
         self.linear = nn.Linear(131, 3)
         self.tanh = nn.Tanh()
 
-    def forward(self, back_bone_features, vertex_positions, vertex_features=None):
+    def forward(self, back_bone_features: Tensor, vertex_adjacency: Tensor,
+                vertex_positions: Tensor, vertex_features: bool = None) -> Tuple[Tensor, Tensor]:
         algined = self.vertAlign(back_bone_features, vertex_positions)
 
         # NxVx387 if there are initial vertex_features
@@ -181,16 +231,16 @@ class VertixRefinePix3D(nn.Module):
         vertex_features = torch.concat(to_concat, dim=1)
 
         # tramsform to input features to 128 features
-        new_featues = self.graphConv0(vertex_features)
+        new_featues = self.graphConv0(vertex_features, vertex_adjacency)
         # NxVx131
         new_featues = torch.cat([vertex_positions, new_featues], dim=1)
 
         # NxVx128
-        new_featues = self.graphConv1(new_featues)
+        new_featues = self.graphConv1(new_featues, vertex_adjacency)
         # NxVx131
         new_featues = torch.cat([vertex_positions, new_featues], dim=1)
         # NxVx128
-        new_featues = self.graphConv2(new_featues)
+        new_featues = self.graphConv2(new_featues, vertex_adjacency)
 
         # NxVx131
         new_positions = torch.cat([vertex_positions, new_featues], dim=1)
@@ -218,7 +268,7 @@ class Cubify(nn.Module):
 
 class VoxelBranch(nn.Sequential):
     # explained in the article
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels: int, out_channels: int):
         super(VoxelBranch, self).__init__(
             # N x in_channels x V/2 x V/2
             nn.Conv2d(in_channels, 256, kernel_size=3, padding=1),
