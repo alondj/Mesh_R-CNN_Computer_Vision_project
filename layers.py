@@ -43,12 +43,6 @@ class GraphConv(nn.Module):
         self.w1.data.uniform_(-bound, bound)
 
     def forward(self, vertix_features: Tensor, vertex_adjacency: Tensor) -> Tensor:
-        # sanity checks for dimentions
-        assert vertix_features.dim() == vertex_adjacency.dim()
-        assert vertix_features.shape[0] == vertex_adjacency.shape[0]
-        assert vertix_features[1] == vertex_adjacency.shape[1]
-        assert vertex_adjacency.shape[2] == vertex_adjacency.shape[1]
-
         # NxVxIn @ InxOut => NxVxOut
         w0_features = torch.matmul(vertix_features, self.w0)
 
@@ -272,18 +266,6 @@ class VertixRefinePix3D(nn.Module):
         return new_positions, new_featues
 
 
-# this layer projects the 3D mesh to the 2D image and use
-# bilinear interpolation to get the corresponding feature
-class VertexAlign(nn.Module):
-    # explained in the article http://openaccess.thecvf.com/content_ECCV_2018/papers/Nanyang_Wang_Pixel2Mesh_Generating_3D_ECCV_2018_paper.pdf
-    # as perceptual feature pooling https://github.com/Tong-ZHAO/Pixel2Mesh-Pytorch
-    # https://github.com/nywang16/Pixel2Mesh original source code
-
-    # TODO vertexAlign
-    def forward(self, features, vertex_positions):
-        pass
-
-
 # conversion from voxels to meshes
 
 # there is also the marching cube algorithm https://github.com/pmneila/PyMCubes
@@ -421,8 +403,6 @@ class Cubify(nn.Module):
 
         # in this stage we output tensor representation of vertices positions and faces
         # where the faces is represented as a shortTensor 16 bits per v_idx is plenty
-        assert len(vertices) > 0 and len(vertices) % 4 == 0
-        assert len(faces) > 0 and len(faces) % 2 == 0
 
         cannonic_vertices = list(dict.fromkeys(vertices))
         vertex_indices = {v: i for i, v in enumerate(cannonic_vertices)}
@@ -509,5 +489,87 @@ class FCN(nn.Module):
         return img2, img3, img4, img5
 
 
+class VertexAlign(nn.Module):
+    # explained in the article http://openaccess.thecvf.com/content_ECCV_2018/papers/Nanyang_Wang_Pixel2Mesh_Generating_3D_ECCV_2018_paper.pdf
+    # as perceptual feature pooling https://github.com/Tong-ZHAO/Pixel2Mesh-Pytorch
+    # https://github.com/nywang16/Pixel2Mesh original source code
+
+    """Graph Projection layer, which pool 2D features to mesh
+    The layer projects a vertex of the mesh to the 2D image and use 
+    bilinear interpolation to get the corresponding feature.
+    """
+
+    def __init__(self):
+        super(VertexAlign, self).__init__()
+
+    def forward(self, img_features: List[Tensor], vertex_positions: Tensor):
+        h = 248 * (vertex_positions[:, 1] / vertex_positions[:, 2]) + 111.5
+        w = 248 * (vertex_positions[:, 0] / -vertex_positions[:, 2]) + 111.5
+
+        h = torch.clamp(h, min=0, max=223)
+        w = torch.clamp(w, min=0, max=223)
+
+        feats = [self.project(img_feat, h, w) for img_feat in img_features]
+
+        output = torch.cat(feats, 1)
+
+        return output
+
+    def project(self, img_feat, h, w):
+        print()
+        img_size = img_feat.shape[-1]
+        x = h / (224. / img_size)
+        y = w / (224. / img_size)
+
+        x1, x2 = torch.floor(x).long(), torch.ceil(x).long()
+        y1, y2 = torch.floor(y).long(), torch.ceil(y).long()
+
+        x2 = torch.clamp(x2, max=img_size - 1)
+        y2 = torch.clamp(y2, max=img_size - 1)
+
+        Q11 = img_feat[:, x1, y1].clone()
+        Q12 = img_feat[:, x1, y2].clone()
+        Q21 = img_feat[:, x2, y1].clone()
+        Q22 = img_feat[:, x2, y2].clone()
+
+        x, y = x.long(), y.long()
+
+        weights = torch.mul(x2 - x, y2 - y)
+        Q11 = torch.mul(weights.float().view(-1, 1),
+                        torch.transpose(Q11, 0, 1))
+
+        weights = torch.mul(x2 - x, y - y1)
+        Q12 = torch.mul(weights.float().view(-1, 1),
+                        torch.transpose(Q12, 0, 1))
+
+        weights = torch.mul(x - x1, y2 - y)
+        Q21 = torch.mul(weights.float().view(-1, 1),
+                        torch.transpose(Q21, 0, 1))
+
+        weights = torch.mul(x - x1, y - y1)
+        Q22 = torch.mul(weights.float().view(-1, 1),
+                        torch.transpose(Q22, 0, 1))
+
+        output = Q11 + Q21 + Q12 + Q22
+
+        print(f"projection shape {output.shape}")
+        print()
+
+        return output
+
+
 if __name__ == "__main__":
-    pass
+    align = VertexAlign()
+
+    img2 = torch.randn(256, 35, 35)
+    img3 = torch.randn(512, 18, 18)
+    img4 = torch.randn(1024, 9, 9)
+    img5 = torch.randn(2048, 5, 5)
+
+    vgg_features = [img2, img3, img4, img5]
+
+    V = 128
+    vertex_pos: Tensor = torch.rand(3, V)*224
+    print("aligning vertices")
+    out = align(vgg_features, vertex_pos)
+    print(out.shape)
