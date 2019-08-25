@@ -1,8 +1,14 @@
 import torch
-import torch.Tensor as Tensor
+from torch import Tensor
 import torch.nn as nn
+import torch.nn.functional as F
+from typing import Tuple, Optional, List
 
-from typing import Tuple, Optional
+from utils import conv_output, convT_output
+# TODO create adjacency matrices from the faces matrices
+
+# TODO is it possible that the number of mesh faces / vertices will differ per sample?
+
 
 # TODO use sparse Tensor for adjacency matrix
 # the problem is that bmm does not support sparse dense batch multipication and a for loop is slow
@@ -10,7 +16,13 @@ from typing import Tuple, Optional
 
 # TODO fast efficient cubify now it envolves 4 loops over all dimentions
 
-# TODO maybe add more modularity for the refinement and voxel branches
+# TODO maybe add more modularity to everything such as specify number of layers kernels etc
+
+Point = Tuple[float, float, float]
+Face = Tuple[Point, Point, Point]
+
+
+# basic graph operations
 
 class GraphConv(nn.Module):
     # f′i = ReLU(W0xfi +∑j∈N(i)W1xfj)
@@ -260,9 +272,13 @@ class VertixRefinePix3D(nn.Module):
         return new_positions, new_featues
 
 
+# this layer projects the 3D mesh to the 2D image and use
+# bilinear interpolation to get the corresponding feature
 class VertexAlign(nn.Module):
     # explained in the article http://openaccess.thecvf.com/content_ECCV_2018/papers/Nanyang_Wang_Pixel2Mesh_Generating_3D_ECCV_2018_paper.pdf
-    # as perceptual feature pooling
+    # as perceptual feature pooling https://github.com/Tong-ZHAO/Pixel2Mesh-Pytorch
+    # https://github.com/nywang16/Pixel2Mesh original source code
+
     # TODO vertexAlign
     def forward(self, features, vertex_positions):
         pass
@@ -275,8 +291,8 @@ class VertexAlign(nn.Module):
 # we might want to compare between them
 class Cubify(nn.Module):
     # explained in the article
-    # each voxel is replaced with a triangular mesh cube (each face is replaced with 2 triangles)
-    # resulting in 8 vertices 18 edges 12 faces
+    # each voxel is replaced with a triangular mesh cube (each cube face is composed of 2 triangles)
+    # resulting in 8 vertices 18 edges 12 faces per cube
     # I assume that z,y,x is the center of the cube so the vertices are at
     # bottom face z-0.5,y+-0.5,x+-0.5
     # top face z+0.5,y+-0.5,x+-0.5
@@ -394,7 +410,7 @@ class Cubify(nn.Module):
 
         return torch.stack(batched_vertices), torch.stack(batched_faces)
 
-    def remove_shared_vertices(self, vertices, faces) -> Tuple[Tensor, Tensor]:
+    def remove_shared_vertices(self, vertices: List[Point], faces: List[Face]) -> Tuple[Tensor, Tensor]:
         # for performence reasons in the construction phase we duplicate shared vertices
         # and also we save the vertices coordinates explicitly inside the faces (each face is a tuple of 3 3D coordinates)
 
@@ -430,3 +446,68 @@ class VoxelBranch(nn.Sequential):
             nn.Conv2d(256, out_channels, kernel_size=1)
             # N x out_channels x V x V
         )
+
+
+# extracts 2D planes which we will project our 3D mesh into
+class FCN(nn.Module):
+    # assume input image is atleast 32x32
+    def __init__(self, in_channels: int):
+        super(FCN, self).__init__()
+        self.conv0_1 = nn.Conv2d(in_channels, 16, 3, stride=1, padding=1)
+        self.conv0_2 = nn.Conv2d(16, 16, 3, stride=1, padding=1)
+
+        self.conv1_1 = nn.Conv2d(16, 32, 3, stride=2, padding=1)  # 224 -> 112
+        self.conv1_2 = nn.Conv2d(32, 32, 3, stride=1, padding=1)
+        self.conv1_3 = nn.Conv2d(32, 32, 3, stride=1, padding=1)
+
+        self.conv2_1 = nn.Conv2d(32, 64, 3, stride=2, padding=1)  # 112 -> 56
+        self.conv2_2 = nn.Conv2d(64, 64, 3, stride=1, padding=1)
+        self.conv2_3 = nn.Conv2d(64, 64, 3, stride=1, padding=1)
+
+        self.conv3_1 = nn.Conv2d(64, 128, 3, stride=2, padding=1)  # 56 -> 28
+        self.conv3_2 = nn.Conv2d(128, 128, 3, stride=1, padding=1)
+        self.conv3_3 = nn.Conv2d(128, 128, 3, stride=1, padding=1)
+
+        self.conv4_1 = nn.Conv2d(128, 256, 5, stride=2, padding=2)  # 28 -> 14
+        self.conv4_2 = nn.Conv2d(256, 256, 3, stride=1, padding=1)
+        self.conv4_3 = nn.Conv2d(256, 256, 3, stride=1, padding=1)
+
+        self.conv5_1 = nn.Conv2d(256, 512, 5, stride=2, padding=2)  # 14 -> 7
+        self.conv5_2 = nn.Conv2d(512, 512, 3, stride=1, padding=1)
+        self.conv5_3 = nn.Conv2d(512, 512, 3, stride=1, padding=1)
+        self.conv5_4 = nn.Conv2d(512, 512, 3, stride=1, padding=1)
+
+    def forward(self, img) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
+        img = F.relu(self.conv0_1(img))
+        img = F.relu(self.conv0_2(img))
+
+        img = F.relu(self.conv1_1(img))
+        img = F.relu(self.conv1_2(img))
+        img = F.relu(self.conv1_3(img))
+
+        img = F.relu(self.conv2_1(img))
+        img = F.relu(self.conv2_2(img))
+        img = F.relu(self.conv2_3(img))
+        img2 = torch.squeeze(img)  # 56
+
+        img = F.relu(self.conv3_1(img))
+        img = F.relu(self.conv3_2(img))
+        img = F.relu(self.conv3_3(img))
+        img3 = torch.squeeze(img)  # 28
+
+        img = F.relu(self.conv4_1(img))
+        img = F.relu(self.conv4_2(img))
+        img = F.relu(self.conv4_3(img))
+        img4 = torch.squeeze(img)  # 14
+
+        img = F.relu(self.conv5_1(img))
+        img = F.relu(self.conv5_2(img))
+        img = F.relu(self.conv5_3(img))
+        img = F.relu(self.conv5_4(img))
+        img5 = torch.squeeze(img)  # 7
+
+        return img2, img3, img4, img5
+
+
+if __name__ == "__main__":
+    pass
