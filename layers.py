@@ -9,6 +9,11 @@ from utils import conv_output, convT_output
 
 # TODO is it possible that the number of mesh faces / vertices will differ per sample?
 
+#TODO check that all dimentions are correct i suspect the article has them switched
+
+#TODO we use the N,Z,Y,X notation make sure we are consistant (i think VertexAlign uses N,Z,X,Y)
+
+#TODO perform batch operations in all layers
 
 # TODO use sparse Tensor for adjacency matrix
 # the problem is that bmm does not support sparse dense batch multipication and a for loop is slow
@@ -495,28 +500,48 @@ class VertexAlign(nn.Module):
     # https://github.com/nywang16/Pixel2Mesh original source code
 
     """Graph Projection layer, which pool 2D features to mesh
-    The layer projects a vertex of the mesh to the 2D image and use 
+    The layer projects a vertex of the mesh to the 2D image and use
     bilinear interpolation to get the corresponding feature.
     """
 
     def __init__(self):
         super(VertexAlign, self).__init__()
 
-    def forward(self, img_features: List[Tensor], vertex_positions: Tensor):
+    def forward(self, img_features: List[Tensor], vertex_positions: Tensor, batched_feat: List[Tensor], batched_positions: Tensor,  batched=False) -> Tensor:
+        if batched:
+            return self.batched_forward(batched_feat, batched_positions)
+
+        return self.single_forward(img_features, vertex_positions)
+
+    def single_forward(self, img_features: List[Tensor], vertex_positions: Tensor) -> Tensor:
+        
+        #TODO should be Y/ Z
+        #               X/ -Z
         h = 248 * (vertex_positions[:, 1] / vertex_positions[:, 2]) + 111.5
         w = 248 * (vertex_positions[:, 0] / -vertex_positions[:, 2]) + 111.5
+
+
+        shapes="feat shapes"
+        for f in img_features:
+            shapes+=f" {f.shape}"
+        print(f"single forward feat_shape {shapes}\nvertex_pos shape {vertex_positions.shape}")
+        print(f"single_forward h shape {h.shape}  w shape {w.shape}")
 
         h = torch.clamp(h, min=0, max=223)
         w = torch.clamp(w, min=0, max=223)
 
-        feats = [self.project(img_feat, h, w) for img_feat in img_features]
+        feats = [self.single_project(img_feat, h, w)
+                 for img_feat in img_features]
 
         output = torch.cat(feats, 1)
 
+        print(f"single align output shape {output.shape}")
+
         return output
 
-    def project(self, img_feat, h, w):
-        print()
+    def single_project(self, img_feat: Tensor, h: Tensor, w: Tensor) -> Tensor:
+        print("\nsingle_project")
+        print(f"image features shape {img_feat.shape}")
         img_size = img_feat.shape[-1]
         x = h / (224. / img_size)
         y = w / (224. / img_size)
@@ -527,49 +552,188 @@ class VertexAlign(nn.Module):
         x2 = torch.clamp(x2, max=img_size - 1)
         y2 = torch.clamp(y2, max=img_size - 1)
 
+        print(f"x1 shape {x1.shape} y1 shape {y1.shape}")
+        print(f"x2 shape {x2.shape} y2 shape {y2.shape}\n")
+
         Q11 = img_feat[:, x1, y1].clone()
         Q12 = img_feat[:, x1, y2].clone()
         Q21 = img_feat[:, x2, y1].clone()
         Q22 = img_feat[:, x2, y2].clone()
 
+        print("Qs original shapes")
+        print(f"Q11 shape {Q11.shape} Q12 shape {Q12.shape}")
+        print(f"Q21 shape {Q21.shape} Q22 shape {Q22.shape}\n")
+
         x, y = x.long(), y.long()
 
+        print("Q11 calculation")
         weights = torch.mul(x2 - x, y2 - y)
+        print(
+            f"weight shape {weights.shape} weightT shape {weights.view(-1,1).shape}")
+        print(f"Q11T shape {torch.transpose(Q11, 0, 1).shape}\n")
         Q11 = torch.mul(weights.float().view(-1, 1),
                         torch.transpose(Q11, 0, 1))
 
+        print("Q12 calculation")
         weights = torch.mul(x2 - x, y - y1)
+        print(
+            f"weight shape {weights.shape} weightT shape {weights.view(-1,1).shape}")
+        print(f"Q12T shape {torch.transpose(Q12, 0, 1).shape}\n")
         Q12 = torch.mul(weights.float().view(-1, 1),
                         torch.transpose(Q12, 0, 1))
 
+        print("Q21 calculation")
         weights = torch.mul(x - x1, y2 - y)
+        print(
+            f"weight shape {weights.shape} weightT shape {weights.view(-1,1).shape}")
+        print(f"Q21T shape {torch.transpose(Q21, 0, 1).shape}\n")
         Q21 = torch.mul(weights.float().view(-1, 1),
                         torch.transpose(Q21, 0, 1))
 
+        print("Q22 calculation")
         weights = torch.mul(x - x1, y - y1)
+        print(
+            f"weight shape {weights.shape} weightT shape {weights.view(-1,1).shape}")
+        print(f"Q22T shape {torch.transpose(Q22, 0, 1).shape}\n")
         Q22 = torch.mul(weights.float().view(-1, 1),
                         torch.transpose(Q22, 0, 1))
 
         output = Q11 + Q21 + Q12 + Q22
 
-        print(f"projection shape {output.shape}")
-        print()
+        print(f"single_projection shape {output.shape}")
+        print("\n")
+
+        return output
+
+    def batched_forward(self, img_features: List[Tensor], vertex_positions: Tensor) -> Tensor:
+        #TODO should be Y/ Z
+        #               X/ -Z
+        h = 248 * (vertex_positions[:,:, 1] / vertex_positions[:,:, 2]) + 111.5
+        w = 248 * (vertex_positions[:,:, 0] / -vertex_positions[:,:, 2]) + 111.5
+
+        shapes = "feat shapes"
+        for f in img_features:
+            shapes += f" {f.shape}"
+        print(
+            f"batched forward {shapes}\nvertex_pos shape {vertex_positions.shape}")
+        print(f"batched_forward h shape {h.shape}  w shape {w.shape}")
+
+
+        h = torch.clamp(h, min=0, max=223)
+        w = torch.clamp(w, min=0, max=223)
+
+        feats = [self.batched_projection(img_feat, h, w)
+                 for img_feat in img_features]
+
+        output = torch.cat(feats, 2)
+
+        print(f"batched align output shape {output.shape}")
+
+        return output
+
+    def batched_projection(self, img_feat: Tensor, h: Tensor, w: Tensor) -> Tensor:
+        print("\batched_project")
+        print(f"image features shape {img_feat.shape}")
+        b_size=img_feat.shape[0]
+        img_size = img_feat.shape[-1]
+        x = h / (224. / img_size)
+        y = w / (224. / img_size)
+
+        x1, x2 = torch.floor(x).long(), torch.ceil(x).long()
+        y1, y2 = torch.floor(y).long(), torch.ceil(y).long()
+
+        x2 = torch.clamp(x2, max=img_size - 1)
+        y2 = torch.clamp(y2, max=img_size - 1)
+
+        print(f"x1 shape {x1.shape} y1 shape {y1.shape}")
+        print(f"x2 shape {x2.shape} y2 shape {y2.shape}\n")
+
+
+        #TODO we need to take a slice accross the batch dim
+        #this is a slow but functioning way of doing it
+        q11=[]
+        q12=[]
+        q21=[]
+        q22=[]
+        for i in range(b_size):
+            q11.append(img_feat[i,:,x1[i],y1[i]].clone())
+            q12.append(img_feat[i,:,x1[i],y2[i]].clone())
+            q21.append(img_feat[i,:,x2[i],y1[i]].clone())
+            q22.append(img_feat[i,:,x2[i],y2[i]].clone())
+        
+        # Q11 = img_feat[:, x1, y1].clone()
+        # Q12 = img_feat[:, x1, y2].clone()
+        # Q21 = img_feat[:, x2, y1].clone()
+        # Q22 = img_feat[:, x2, y2].clone()
+
+        Q11=torch.stack(q11)
+        Q12 = torch.stack(q12)
+        Q21 = torch.stack(q21)
+        Q22 = torch.stack(q22)
+
+
+        print("Qs original shapes")
+        print(f"Q11 shape {Q11.shape} Q12 shape {Q12.shape}")
+        print(f"Q21 shape {Q21.shape} Q22 shape {Q22.shape}\n")
+
+        x, y = x.long(), y.long()
+
+        print("Q11 calculation")
+        weights = torch.mul(x2 - x, y2 - y)
+        print(
+            f"weight shape {weights.shape} weightT shape {weights.view(b_size,-1,1).shape}")
+        print(f"Q11T shape {torch.transpose(Q11, 1, 2).shape}\n")
+        Q11 = torch.mul(weights.float().view(b_size,-1, 1),
+                        torch.transpose(Q11, 1, 2))
+
+        print("Q12 calculation")
+        weights = torch.mul(x2 - x, y - y1)
+        print(
+            f"weight shape {weights.shape} weightT shape {weights.view(b_size,-1,1).shape}")
+        print(f"Q12T shape {torch.transpose(Q12, 1, 2).shape}\n")
+        Q12 = torch.mul(weights.float().view(b_size,-1, 1),
+                        torch.transpose(Q12, 1,2))
+
+        print("Q21 calculation")
+        weights = torch.mul(x - x1, y2 - y)
+        print(
+            f"weight shape {weights.shape} weightT shape {weights.view(b_size,-1,1).shape}")
+        print(f"Q21T shape {torch.transpose(Q21, 1, 2).shape}\n")
+        Q21 = torch.mul(weights.float().view(b_size,-1, 1),
+                        torch.transpose(Q21,1,2))
+
+        print("Q22 calculation")
+        weights = torch.mul(x - x1, y - y1)
+        print(
+            f"weight shape {weights.shape} weightT shape {weights.view(b_size,-1,1).shape}")
+        print(f"Q22T shape {torch.transpose(Q22, 1, 2).shape}\n")
+        Q22 = torch.mul(weights.float().view(b_size,-1, 1),
+                        torch.transpose(Q22, 1,2))
+
+        output = Q11 + Q21 + Q12 + Q22
+
+        print(f"batched_projection shape {output.shape}")
+        print("\n")
 
         return output
 
 
 if __name__ == "__main__":
+    V = 128
     align = VertexAlign()
 
     img2 = torch.randn(256, 35, 35)
     img3 = torch.randn(512, 18, 18)
     img4 = torch.randn(1024, 9, 9)
     img5 = torch.randn(2048, 5, 5)
+    
+    single_pos: Tensor = torch.rand(V,3)*224
+    single_features = [img2, img3, img4, img5]
 
-    vgg_features = [img2, img3, img4, img5]
+    batched_pos = single_pos.expand(10, *single_pos.shape)
+    batched_features=[img2.expand(10,*img2.shape),img3.expand(10,*img3.shape),img4.expand(10,*img4.shape),img5.expand(10,*img5.shape)]
 
-    V = 128
-    vertex_pos: Tensor = torch.rand(3, V)*224
+   
+
     print("aligning vertices")
-    out = align(vgg_features, vertex_pos)
-    print(out.shape)
+    out = align(single_features,single_pos,batched_features,batched_pos,batched=False)
