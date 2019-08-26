@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Tuple
 import torch
 from torch import Tensor
 
@@ -35,7 +35,7 @@ def _tuple(n):
     return n, n
 
 
-def block_matrices(*matrices) -> Tensor:
+def block_matrices(*matrices, sparse=False) -> Tensor:
     # given multiple matrices of irregular shapes return one squre matrix which contains them all
     ms = torch.LongTensor([m.shape[0] for m in matrices])
     ns = torch.LongTensor([m.shape[1] for m in matrices])
@@ -50,21 +50,38 @@ def block_matrices(*matrices) -> Tensor:
     device = matrices[0].device
     dtype = matrices[0].dtype
 
-    res = torch.zeros(N, N, device=device, dtype=dtype)
+    if not sparse:
+        # TODO vectorize
+        dense = torch.zeros(N, N, device=device, dtype=dtype)
+        for idx, m in enumerate(matrices):
+            st_r = torch.sum(ms[:idx])
+            c_end = columns[idx]
+            dense[st_r:st_r+m.shape[0], st_r:c_end] = m
+        return dense
+    else:
+        i_coords = []
+        j_coords = []
+        data = []
+        # occupied indices in the block matrix
+        for idx, m in enumerate(matrices):
+            st_r = torch.sum(ms[:idx])
+            c_end = columns[idx]
+            data.append(m.flatten())
+            for i in range(st_r, st_r+m.shape[0]):
+                for j in range(st_r, c_end):
+                    i_coords.append(i)
+                    j_coords.append(j)
 
-    # TODO vectorize
-    for idx, m in enumerate(matrices):
-        st_r = torch.sum(ms[:idx])
-        c_end = columns[idx]
-
-        res[st_r:st_r+m.shape[0], st_r:c_end] = m
-
-    return res
+        data = torch.cat(data)
+        return torch.sparse.FloatTensor(torch.LongTensor([i_coords, j_coords]), data, torch.Size([N, N]))
 
 
 def unblock_matrices(M: Tensor, shapes: list) -> List[Tensor]:
     sum_rows = 0
     ms = []
+
+    if M.is_sparse:
+        M = M.to_dense()
 
     # TODO vectorize
     for shape in shapes:
@@ -84,7 +101,8 @@ if __name__ == "__main__":
     m3 = torch.arange(6).reshape(2, 3)
     m4 = torch.arange(8).reshape(2, 4)
 
-    M = block_matrices(m1, m2, m3, m4).to("cuda:0").to(torch.float32)
-    print(M)
+    M = block_matrices(m1, m2, m3, m4)
 
-    ms = unblock_matrices(M, [(2, 5), (3, 3), (2, 3), (2, 4)])
+    sparseM = block_matrices(m1, m2, m3, m4, sparse=True)
+
+    print(M == sparseM)
