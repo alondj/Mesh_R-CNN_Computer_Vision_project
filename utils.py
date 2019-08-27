@@ -39,7 +39,7 @@ def _tuple(n):
     return n, n
 
 
-def to_block_diagonal(*matrices, sparse=False) -> Tensor:
+def to_block_diagonal(matrices, sparse=False) -> Tensor:
     ''' given multiple matrices of irregular shapes return one matrix which contains them all on the diagonal\n
         if requested the block matirx will be a sparse instead of dense
     '''
@@ -50,7 +50,6 @@ def to_block_diagonal(*matrices, sparse=False) -> Tensor:
     # maybe later if necessary
     M = torch.sum(ms)
     columns = ns+torch.cumsum(ms, 0)-ms
-
     N = torch.max(columns)
 
     device = matrices[0].device
@@ -118,11 +117,17 @@ if __name__ == "__main__":
     m4 = torch.arange(6*n_features).reshape(6, n_features)
     m5 = torch.arange(n_features*n_features).reshape(n_features, n_features)
 
-    M = to_block_diagonal(m1, m2, sparse=False)
-    N = to_block_diagonal(m3, m4, sparse=False)
-    sM = to_block_diagonal(m1, m2, sparse=True)
-    sN = to_block_diagonal(m3, m4, sparse=True)
-    print(M.shape, N.shape)
-    print(sM.shape, sN.shape)
+    # M = to_block_diagonal([m1, m2], sparse=False)
+    # N = to_block_diagonal([m3, m4], sparse=False)
+    # sM = to_block_diagonal([m1, m2], sparse=True)
+    # sN = to_block_diagonal([m3, m4], sparse=True)
+    # print(M.shape, N.shape)
+    # print(sM.shape, sN.shape)
 
-    print(M)
+    stacked_ms = torch.arange(3*5*5).reshape(3, 5, 5)
+
+    # TODO this is not ok we should not have the zero column in the middle
+    stacked = to_block_diagonal(
+        [torch.ones(3, 2).float(), torch.ones(3, 2).float()])
+
+    print(stacked)
