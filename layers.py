@@ -135,7 +135,7 @@ class ResVertixRefineShapenet(nn.Module):
 
         self.tanh = nn.Tanh()
 
-    def forward(self, img_feature_maps: List[Tensor], vertex_adjacency: Tensor, vertex_positions: Tensor, vertex_features: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
+    def forward(self, vertices_per_sample: List[int], img_feature_maps: List[Tensor], vertex_adjacency: Tensor, vertex_positions: Tensor, vertex_features: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
 
         # note that vertex_features is the concatination of all feature matrices of the batch
         # along the vertex dimension (we stack them vertically)
@@ -151,7 +151,8 @@ class ResVertixRefineShapenet(nn.Module):
         # project the 3D mesh to the 2D feature planes and pool new features
         # TODO we need to keep track of how many vertices are in each sample for vertex align
         # ∑Vx3840
-        aligned_vertices = self.vertAlign(img_feature_maps, vertex_positions)
+        aligned_vertices = self.vertAlign(img_feature_maps, vertex_positions,
+                                          vertices_per_sample)
 
         # ∑Vx128
         projected = self.linear(aligned_vertices)
@@ -200,7 +201,7 @@ class VertixRefineShapeNet(nn.Module):
         self.linear1 = nn.Linear(128, 3, bias=False)
         self.tanh = nn.Tanh()
 
-    def forward(self, img_feature_maps: List[Tensor], vertex_adjacency: Tensor, vertex_positions: Tensor, vertex_features: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
+    def forward(self, vertices_per_sample: List[int], img_feature_maps: List[Tensor], vertex_adjacency: Tensor, vertex_positions: Tensor, vertex_features: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
 
         # note that vertex_features is the concatination of all feature matrices of the batch
         # along the vertex dimension (we stack them vertically)
@@ -216,7 +217,8 @@ class VertixRefineShapeNet(nn.Module):
         # project the 3D mesh to the 2D feature planes and pool new features
         # TODO we need to keep track of how many vertices are in each sample for vertex align
         # ∑Vx3840
-        aligned_vertices = self.vertAlign(img_feature_maps, vertex_positions)
+        aligned_vertices = self.vertAlign(img_feature_maps, vertex_positions,
+                                          vertices_per_sample)
         # ∑Vx128
         projected = self.linear(aligned_vertices)
 
@@ -269,7 +271,7 @@ class VertixRefinePix3D(nn.Module):
         self.linear = nn.Linear(131, 3, bias=False)
         self.tanh = nn.Tanh()
 
-    def forward(self, back_bone_features: Tensor, vertex_adjacency: Tensor,
+    def forward(self, vertices_per_sample: List[int], back_bone_features: Tensor, vertex_adjacency: Tensor,
                 vertex_positions: Tensor, vertex_features: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
 
         # note that vertex_features is the concatination of all feature matrices of the batch
@@ -285,7 +287,8 @@ class VertixRefinePix3D(nn.Module):
 
         # project the 3D mesh to the 2D feature planes and pool new features
         # TODO we need to keep track of how many vertices are in each sample for vertex align
-        algined = self.vertAlign([back_bone_features], vertex_positions)
+        algined = self.vertAlign([back_bone_features], vertex_positions,
+                                 vertices_per_sample)
 
         # ∑Vx387 if there are initial vertex_features
         # and ∑Vx259 otherwise
@@ -677,14 +680,3 @@ class VertexAlign(nn.Module):
         # print("\n")
 
         return output
-
-
-if __name__ == "__main__":
-    images = FCN(3)(torch.randn(3, 3, 224, 224))
-
-    v_pos = torch.randn(192, 3)
-    vertices_per_mesh = [50, 62, 80]
-
-    out = VertexAlign()(images, v_pos, vertices_per_mesh)
-
-    print(out.shape)
