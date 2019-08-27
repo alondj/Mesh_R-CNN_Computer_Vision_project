@@ -12,17 +12,14 @@ from utils import conv_output, convT_output, to_block_diagonal, from_block_diago
 # vertex features matrix: we concatenate over the vertex dim resulting in total_vertices x Num_features
 # this representation allows us to batch graph operations
 
-# TODO create adjacency matrices from the faces matrices
 
 # TODO check that all dimensions are correct I suspect the article has them switched
 
 # TODO we use the N,Z,Y,X notation in Cubify make sure we are consistent (I think Pix2Mesh used the N,Z,X,Y notation)
 
-# TODO perform batch operations in all layers
-
 # TODO maybe use block matrices in sparse format(only if the dense representation is slow)
 
-# TODO fast efficient cubify now it envolves 4 loops over all dimensions
+# TODO fast efficient Cubify and VertexAlign
 
 # TODO maybe add more modularity to everything such as specify number of layers kernels etc
 
@@ -149,7 +146,6 @@ class ResVertixRefineShapenet(nn.Module):
         # note that the conv_feature are batched NxCxHxW
 
         # project the 3D mesh to the 2D feature planes and pool new features
-        # TODO we need to keep track of how many vertices are in each sample for vertex align
         # ∑Vx3840
         aligned_vertices = self.vertAlign(img_feature_maps, vertex_positions,
                                           vertices_per_sample)
@@ -215,7 +211,6 @@ class VertixRefineShapeNet(nn.Module):
         # note that the conv_feature are batched NxCxHxW
 
         # project the 3D mesh to the 2D feature planes and pool new features
-        # TODO we need to keep track of how many vertices are in each sample for vertex align
         # ∑Vx3840
         aligned_vertices = self.vertAlign(img_feature_maps, vertex_positions,
                                           vertices_per_sample)
@@ -286,7 +281,6 @@ class VertixRefinePix3D(nn.Module):
         # note that the back_bone_features are batched NxCxHxW
 
         # project the 3D mesh to the 2D feature planes and pool new features
-        # TODO we need to keep track of how many vertices are in each sample for vertex align
         algined = self.vertAlign([back_bone_features], vertex_positions,
                                  vertices_per_sample)
 
@@ -613,13 +607,6 @@ class VertexAlign(nn.Module):
         h = 248 * (vertex_positions[:, 1] / vertex_positions[:, 2]) + 111.5
         w = 248 * (vertex_positions[:, 0] / -vertex_positions[:, 2]) + 111.5
 
-        # shapes = "feat shapes"
-        # for f in img_features:
-        #     shapes += f" {f.shape}"
-        # print(
-        #     f"single forward feat_shape {shapes}\nvertex_pos shape {vertex_positions.shape}")
-        # print(f"single_forward h shape {h.shape}  w shape {w.shape}")
-
         # scale upto original image size
         h = torch.clamp(h, min=0, max=223)
         w = torch.clamp(w, min=0, max=223)
@@ -632,8 +619,6 @@ class VertexAlign(nn.Module):
         return output
 
     def project(self, img_feat: Tensor, h: Tensor, w: Tensor) -> Tensor:
-        # print("\nsingle_project")
-        # print(f"image features shape {img_feat.shape}")
         size_x, size_y = img_feat.shape[-2:]
 
         # scale to current feature map size
@@ -646,55 +631,29 @@ class VertexAlign(nn.Module):
         x2 = torch.clamp(x2, max=size_x - 1)
         y2 = torch.clamp(y2, max=size_y - 1)
 
-        # print(f"x1 shape {x1.shape} y1 shape {y1.shape}")
-        # print(f"x2 shape {x2.shape} y2 shape {y2.shape}\n")
-
         Q11 = img_feat[:, x1, y1].clone()
         Q12 = img_feat[:, x1, y2].clone()
         Q21 = img_feat[:, x2, y1].clone()
         Q22 = img_feat[:, x2, y2].clone()
 
-        # print("Qs original shapes")
-        # print(f"Q11 shape {Q11.shape} Q12 shape {Q12.shape}")
-        # print(f"Q21 shape {Q21.shape} Q22 shape {Q22.shape}\n")
-
         x, y = x.long(), y.long()
 
-        # print("Q11 calculation")
         weights = torch.mul(x2 - x, y2 - y)
-        # print(
-        #     f"weight shape {weights.shape} weightT shape {weights.view(-1,1).shape}")
-        # print(f"Q11T shape {torch.transpose(Q11, 0, 1).shape}\n")
         Q11 = torch.mul(weights.float().view(-1, 1),
                         torch.transpose(Q11, 0, 1))
 
-        # print("Q12 calculation")
         weights = torch.mul(x2 - x, y - y1)
-        # print(
-        #     f"weight shape {weights.shape} weightT shape {weights.view(-1,1).shape}")
-        # print(f"Q12T shape {torch.transpose(Q12, 0, 1).shape}\n")
         Q12 = torch.mul(weights.float().view(-1, 1),
                         torch.transpose(Q12, 0, 1))
 
-        # print("Q21 calculation")
         weights = torch.mul(x - x1, y2 - y)
-        # print(
-        #     f"weight shape {weights.shape} weightT shape {weights.view(-1,1).shape}")
-        # print(f"Q21T shape {torch.transpose(Q21, 0, 1).shape}\n")
         Q21 = torch.mul(weights.float().view(-1, 1),
                         torch.transpose(Q21, 0, 1))
 
-        # print("Q22 calculation")
         weights = torch.mul(x - x1, y - y1)
-        # print(
-        #     f"weight shape {weights.shape} weightT shape {weights.view(-1,1).shape}")
-        # print(f"Q22T shape {torch.transpose(Q22, 0, 1).shape}\n")
         Q22 = torch.mul(weights.float().view(-1, 1),
                         torch.transpose(Q22, 0, 1))
 
         output = Q11 + Q21 + Q12 + Q22
-
-        # print(f"single_projection shape {output.shape}")
-        # print("\n")
 
         return output
