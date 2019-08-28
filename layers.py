@@ -321,6 +321,7 @@ class VertixRefinePix3D(nn.Module):
         return new_positions, new_featues
 
 
+#TODO the vertices/faces seem fishy need to verify
 # there is also the marching cube algorithm https://github.com/pmneila/PyMCubes
 # explained https://medium.com/zeg-ai/voxel-to-mesh-conversion-marching-cube-algorithm-43dbb0801359
 # we might want to compare between them
@@ -582,6 +583,7 @@ class VertexAlign(nn.Module):
     # explained in the article http://openaccess.thecvf.com/content_ECCV_2018/papers/Nanyang_Wang_Pixel2Mesh_Generating_3D_ECCV_2018_paper.pdf
     # as perceptual feature pooling https://github.com/Tong-ZHAO/Pixel2Mesh-Pytorch
     # https://github.com/nywang16/Pixel2Mesh original source code
+    # https://gist.github.com/peteflorence/a1da2c759ca1ac2b74af9a83f69ce20e
 
     """VertexAlign layer, which pool 2D features to mesh
     The layer projects a vertex of the mesh to the 2D image and use

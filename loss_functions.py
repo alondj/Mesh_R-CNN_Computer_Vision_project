@@ -13,10 +13,55 @@ def voxel_loss():
 
 # mesh losses
 
-def mesh_sampling():
+def mesh_sampling(vertex_positions: Tensor, mesh_faces: Tensor, num_points: int) -> Tensor:
     # described originally here https://arxiv.org/pdf/1901.11461.pdf
     # given a mesh sample a point cloud to be used in the loss functions
-    pass
+
+    # first find probabilities of choosing a face denoted by area of the face / total surface area
+    probas = face_probas(vertex_positions, mesh_faces)
+
+    device = vertex_positions.device
+
+    face_indices = torch.multinomial(probas, num_points, replacement=True)
+
+    # num_points x 3 x 3
+    chosen_faces = vertex_positions[mesh_faces[face_indices]]
+
+    # num_points
+    XI2s = torch.randn(num_points, device=device)
+    XI1sqrt = torch.randn(num_points, device=device).sqrt()
+
+    w0 = 1.0 - XI1sqrt
+    w1 = torch.mul(1-XI2s, XI1sqrt)
+    w2 = torch.mul(XI2s, XI1sqrt)
+
+    # num_points x 3
+    ws = torch.stack([w0, w1, w2], dim=1).unsqueeze(1)
+
+    # broadcat ws and multiply
+    # the result is p=∑wi*vi where each wi multiplyes a different row in chosen_faces
+    # we then sum accross the vertice dimention to recieve the sampled vertices
+    point_cloud = torch.mul(chosen_faces, ws.transpose(1, 2)).sum(1)
+
+    return point_cloud
+
+
+def face_probas(vertex_positions: Tensor, mesh_faces: Tensor) -> Tensor:
+    # given triangle ABC the area is |AB x AC|/2
+
+    mesh_points = vertex_positions[mesh_faces]
+
+    ABs = mesh_points[:, 1]-mesh_points[:0]
+    ACs = mesh_points[:, 2]-mesh_points[:0]
+
+    norm_vecs = ABs.cross(ACs, dim=1)
+
+    # we can use the rectangle surface area (|AB x AC|) as the 2 factor will cancel out
+    surface_areas = norm_vecs.mm(norm_vecs.t()).diagonal().sqrt()
+
+    probas = surface_areas / surface_areas.sum()
+
+    return probas
 
 
 class ChamferDistance(nn.Module):
@@ -33,7 +78,7 @@ class ChamferDistance(nn.Module):
 
         return loss_1 + loss_2
 
-    def batch_pairwise_dist(self, x: Tensor, y: Tensor):
+    def batch_pairwise_dist(self, x: Tensor, y: Tensor) -> Tensor:
         xx = torch.bmm(x, x.transpose(2, 1))
         yy = torch.bmm(y, y.transpose(2, 1))
         xy = torch.bmm(x, y.transpose(2, 1))
@@ -48,7 +93,7 @@ def normal_distance_between_point_clouds():
     pass
 
 
-def edge_loss(vertex_positions: Tensor, vertex_adjacency: Tensor):
+def edge_loss(vertex_positions: Tensor, vertex_adjacency: Tensor) -> Tensor:
     ''' compute the edge loss as denoted by L(V,E) =1/|E| * ∑(v,v′)∈E ‖v−v′‖^2\n
         vertex_positions can be many vertices stacked along the vertix dimention\n
         vertex_adjacency can be many adjacency matrices stacked together in block diagonal format
