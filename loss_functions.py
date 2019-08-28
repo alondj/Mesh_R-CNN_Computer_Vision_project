@@ -20,34 +20,27 @@ def mesh_sampling():
 
 
 class ChamferDistance(nn.Module):
-    # compute the chamder distance between point clouds
+    ''' compute the Chamfer distance between point clouds\n
+    '''
     # basically we sum the distance of each point in cloud A to it's nearest neighbour in cload B and vice versa
-    # https://github.com/chrdiller/pyTorchChamferDistance cuda extention
-    # https://github.com/345ishaan/DenseLidarNet/blob/master/code/chamfer_loss.py
-    def __init__(self):
-        super(ChamferDistance, self).__init__()
-        self.use_cuda = torch.cuda.is_available()
 
     def forward(self, preds: Tensor, gts: Tensor) -> Tensor:
         P = self.batch_pairwise_dist(gts, preds)
         mins, _ = torch.min(P, 1)
-        loss_1 = torch.sum(mins)
+        loss_1 = torch.sum(mins)/mins.size(1)
         mins, _ = torch.min(P, 2)
-        loss_2 = torch.sum(mins)
+        loss_2 = torch.sum(mins)/mins.size(1)
 
         return loss_1 + loss_2
 
     def batch_pairwise_dist(self, x: Tensor, y: Tensor):
-        num_points_x, num_points_y = x.shape[1], y.shape[1]
         xx = torch.bmm(x, x.transpose(2, 1))
         yy = torch.bmm(y, y.transpose(2, 1))
-        zz = torch.bmm(x, y.transpose(2, 1))
-        diag_ind_x = torch.arange(0, num_points_x).type(x.dtype)
-        diag_ind_y = torch.arange(0, num_points_y).type(y.dtype)
-        rx = xx[:, diag_ind_x, diag_ind_x].unsqueeze(
-            1).expand_as(zz.transpose(2, 1))
-        ry = yy[:, diag_ind_y, diag_ind_y].unsqueeze(1).expand_as(zz)
-        P = (rx.transpose(2, 1) + ry - 2*zz)
+        xy = torch.bmm(x, y.transpose(2, 1))
+        rx = torch.diagonal(xx, dim1=-2, dim2=-1)
+        rx = rx.unsqueeze(1).expand_as(xy.transpose(2, 1))
+        ry = torch.diagonal(yy, dim1=-2, dim2=-1).unsqueeze(1).expand_as(xy)
+        P = (rx.transpose(2, 1) + ry - 2*xy)
         return P
 
 
@@ -87,3 +80,12 @@ def mask_loss():
 
 def box_loss():
     pass
+
+
+if __name__ == "__main__":
+    chamfer = ChamferDistance()
+
+    preds = torch.ones(10, 100, 3)
+    gts = torch.ones(10, 100, 3)*2
+
+    print(chamfer(preds.cuda(), gts.cuda()))
