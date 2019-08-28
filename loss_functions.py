@@ -1,17 +1,20 @@
+from typing import Tuple
+
 import torch
 import torch.nn as nn
 from torch import Tensor
 
 # TODO maybe later we will use custom kernels for all of these ops
+
+
 # losses of of mesh prediction network
 
-
-def voxel_loss():
+def voxel_loss(voxel_prediction: Tensor, voxel_gts: Tensor):
     # minimize binary cross entropy between predicted voxel occupancy probabilities and true voxel occupancies.
-    pass
+    return nn.functional.binary_cross_entropy(voxel_prediction, voxel_gts, reduction='mean')
 
+# ------------------------------------------------------------------------------------------------------
 
-# mesh losses
 
 def mesh_sampling(vertex_positions: Tensor, mesh_faces: Tensor, num_points: int) -> Tensor:
     # described originally here https://arxiv.org/pdf/1901.11461.pdf
@@ -27,15 +30,15 @@ def mesh_sampling(vertex_positions: Tensor, mesh_faces: Tensor, num_points: int)
     # num_points x 3 x 3
     chosen_faces = vertex_positions[mesh_faces[face_indices]]
 
-    # num_points
     XI2s = torch.randn(num_points, device=device)
     XI1sqrt = torch.randn(num_points, device=device).sqrt()
 
+    # the weights for the face sampling
     w0 = 1.0 - XI1sqrt
     w1 = torch.mul(1-XI2s, XI1sqrt)
     w2 = torch.mul(XI2s, XI1sqrt)
 
-    # num_points x 3
+    # num_points x 1 x 3
     ws = torch.stack([w0, w1, w2], dim=1).unsqueeze(1)
 
     # broadcat ws and multiply
@@ -48,7 +51,6 @@ def mesh_sampling(vertex_positions: Tensor, mesh_faces: Tensor, num_points: int)
 
 def face_probas(vertex_positions: Tensor, mesh_faces: Tensor) -> Tensor:
     # given triangle ABC the area is |AB x AC|/2
-
     mesh_points = vertex_positions[mesh_faces]
 
     ABs = mesh_points[:, 1]-mesh_points[:0]
@@ -64,29 +66,28 @@ def face_probas(vertex_positions: Tensor, mesh_faces: Tensor) -> Tensor:
     return probas
 
 
-class ChamferDistance(nn.Module):
-    ''' compute the Chamfer distance between point clouds\n
+# ------------------------------------------------------------------------------------------------------
+
+def chamfer_distance(pt0: Tensor, pt1: Tensor) -> Tuple[Tensor, Tensor]:
+    ''' compute the chamfer distance between 2 point clouds\n
+        which is defined by the summed distance of each point in cloud A to it's nearest neighbour in cload B\n
+        and vice versa
     '''
-    # basically we sum the distance of each point in cloud A to it's nearest neighbour in cload B and vice versa
+    # batched point to point distance computation
+    xx = torch.bmm(pt0, pt0.transpose(2, 1))
+    yy = torch.bmm(pt1, pt1.transpose(2, 1))
+    xy = torch.bmm(pt0, pt1.transpose(2, 1))
+    rx = torch.diagonal(xx, dim1=-2, dim2=-1)
+    rx = rx.unsqueeze(1).expand_as(xy.transpose(2, 1))
+    ry = torch.diagonal(yy, dim1=-2, dim2=-1).unsqueeze(1).expand_as(xy)
+    p2p_dist = (rx.transpose(2, 1) + ry - 2*xy)
 
-    def forward(self, preds: Tensor, gts: Tensor) -> Tensor:
-        P = self.batch_pairwise_dist(gts, preds)
-        mins, _ = torch.min(P, 1)
-        loss_1 = torch.sum(mins)/mins.size(1)
-        mins, _ = torch.min(P, 2)
-        loss_2 = torch.sum(mins)/mins.size(1)
+    mins, _ = torch.min(p2p_dist, 1)
+    loss_1 = torch.sum(mins)
+    mins, _ = torch.min(p2p_dist, 2)
+    loss_2 = torch.sum(mins)
 
-        return loss_1 + loss_2
-
-    def batch_pairwise_dist(self, x: Tensor, y: Tensor) -> Tensor:
-        xx = torch.bmm(x, x.transpose(2, 1))
-        yy = torch.bmm(y, y.transpose(2, 1))
-        xy = torch.bmm(x, y.transpose(2, 1))
-        rx = torch.diagonal(xx, dim1=-2, dim2=-1)
-        rx = rx.unsqueeze(1).expand_as(xy.transpose(2, 1))
-        ry = torch.diagonal(yy, dim1=-2, dim2=-1).unsqueeze(1).expand_as(xy)
-        P = (rx.transpose(2, 1) + ry - 2*xy)
-        return P
+    return loss_1, loss_2
 
 
 def normal_distance_between_point_clouds():
@@ -98,7 +99,6 @@ def edge_loss(vertex_positions: Tensor, vertex_adjacency: Tensor) -> Tensor:
         vertex_positions can be many vertices stacked along the vertix dimention\n
         vertex_adjacency can be many adjacency matrices stacked together in block diagonal format
     '''
-
     # xx[i,j] = pi dot pj
     xx = vertex_positions.mm(vertex_positions.t())
 
@@ -128,9 +128,8 @@ def box_loss():
 
 
 if __name__ == "__main__":
-    chamfer = ChamferDistance()
 
     preds = torch.ones(10, 100, 3)
     gts = torch.ones(10, 100, 3)*2
 
-    print(chamfer(preds.cuda(), gts.cuda()))
+    print(chamfer_distance(preds.cuda(), gts.cuda()))
