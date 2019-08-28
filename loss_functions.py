@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-
 # TODO maybe later we will use custom kernels for all of these ops
 # losses of of mesh prediction network
 
@@ -56,9 +55,27 @@ def normal_distance_between_point_clouds():
     pass
 
 
-def edge_loss():
-    # L(V,E) =1/|E| * ∑(v,v′)∈E ‖v−v′‖^2
-    pass
+def edge_loss(vertex_positions: Tensor, vertex_adjacency: Tensor):
+    ''' compute the edge loss as denoted by L(V,E) =1/|E| * ∑(v,v′)∈E ‖v−v′‖^2\n
+        vertex_positions can be many vertices stacked along the vertix dimention\n
+        vertex_adjacency can be many adjacency matrices stacked together in block diagonal format
+    '''
+
+    # xx[i,j] = pi dot pj
+    xx = vertex_positions.mm(vertex_positions.t())
+
+    rx = torch.diagonal(xx).expand_as(xx.t())
+
+    dist_matrix = rx.t() + rx - 2*xx
+
+    # we mask only (v,v′)∈E
+    masked_dist_matrix = torch.mul(vertex_adjacency, dist_matrix)
+
+    # normalize by the number of edges
+    normalize_factor = torch.nonzero(masked_dist_matrix).shape[0]
+
+    # we count each edge twice so when we normalize it cancels out 2*s /2|E|
+    return masked_dist_matrix.sum() / normalize_factor
 
 
 # losses of the backbone network

@@ -132,7 +132,9 @@ class ResVertixRefineShapenet(nn.Module):
 
         self.tanh = nn.Tanh()
 
-    def forward(self, vertices_per_sample: List[int], img_feature_maps: List[Tensor], vertex_adjacency: Tensor, vertex_positions: Tensor, vertex_features: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
+    def forward(self,vertices_per_sample: List[int], img_feature_maps: List[Tensor],
+                    vertex_adjacency: Tensor, vertex_positions: Tensor,
+                    vertex_features: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
 
         # note that vertex_features is the concatination of all feature matrices of the batch
         # along the vertex dimension (we stack them vertically)
@@ -197,7 +199,9 @@ class VertixRefineShapeNet(nn.Module):
         self.linear1 = nn.Linear(128, 3, bias=False)
         self.tanh = nn.Tanh()
 
-    def forward(self, vertices_per_sample: List[int], img_feature_maps: List[Tensor], vertex_adjacency: Tensor, vertex_positions: Tensor, vertex_features: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
+    def forward(self,vertices_per_sample: List[int], img_feature_maps: List[Tensor], 
+                    vertex_adjacency: Tensor, vertex_positions: Tensor, 
+                    vertex_features: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
 
         # note that vertex_features is the concatination of all feature matrices of the batch
         # along the vertex dimension (we stack them vertically)
@@ -329,6 +333,8 @@ class Cubify(nn.Module):
     # bottom face z-0.5,y+-0.5,x+-0.5
     # top face z+0.5,y+-0.5,x+-0.5
 
+    #Cubify will generate a mesh for each grid given we can think of a mesh as a group of disjoint graphs
+
     def __init__(self, threshold: float, output_device: torch.device):
         super(Cubify, self).__init__()
         assert 0.0 <= threshold <= 1.0
@@ -448,7 +454,7 @@ class Cubify(nn.Module):
         mesh_faces = torch.cat(batched_faces)
         adjacency_matrix = to_block_diagonal(batched_adjacency_matrices)
 
-        return vertices_per_sample,vertex_positions,adjacency_matrix,mesh_faces
+        return torch.Tensor(vertices_per_sample),vertex_positions,adjacency_matrix,mesh_faces
 
     def remove_shared_vertices(self, vertices: List[Point], faces: List[Face]) -> Tuple[Tensor, Tensor]:
         # for performence reasons in the construction phase we duplicate shared vertices
@@ -467,7 +473,10 @@ class Cubify(nn.Module):
 
         efficient_faces = [[vertex_indices[v] for v in f] for f in faces]
 
-        return torch.Tensor(cannonic_vertices, device=self.out_device), torch.Tensor(efficient_faces, device=self.out_device).short()
+        mesh_vertices = torch.Tensor(cannonic_vertices, device=self.out_device)
+        mesh_faces = torch.Tensor(efficient_faces,dtype=torch.short, device=self.out_device)
+
+        return mesh_vertices, mesh_faces
 
     def create_undirected_adjacency_matrix(self,faces:Tensor,num_vertices:int)->Tensor:
         adjacency_matrix=torch.zeros(num_vertices,num_vertices)
