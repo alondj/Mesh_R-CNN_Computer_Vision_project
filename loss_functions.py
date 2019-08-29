@@ -9,12 +9,43 @@ from torch import Tensor
 
 # losses of of mesh prediction network
 
-def voxel_loss(voxel_prediction: Tensor, voxel_gts: Tensor):
+def voxel_loss(voxel_prediction: Tensor, voxel_gts: Tensor) -> Tensor:
     # minimize binary cross entropy between predicted voxel occupancy probabilities and true voxel occupancies.
     return nn.functional.binary_cross_entropy(voxel_prediction, voxel_gts, reduction='mean')
 
 
+# TODO vectorize
+def mesh_loss(vertex_positions_pred: Tensor, mesh_faces_pred: Tensor, pred_adjacency: Tensor,
+              vertex_positions_gt: Tensor, mesh_faces_gt: Tensor, point_cloud_size: float = 10e3,
+              num_neighbours_for_normal_loss: int = 10) -> Tuple[Tensor, Tensor, Tensor]:
+    # edge loss
+    p2p_dist = point2point_distance(pt0=vertex_positions_pred)
+    edge_loss = edges_total_length(p2p_dist, pred_adjacency)
+
+    # sample point clouds
+    point_cloud_pred = mesh_sampling(vertex_positions_pred,
+                                     mesh_faces_pred, point_cloud_size)
+    point_cloud_gt = mesh_sampling(vertex_positions_gt,
+                                   mesh_faces_gt, point_cloud_size)
+
+    # find distance between the points
+    p2p_dist = point2point_distance(point_cloud_pred, point_cloud_gt)
+
+    # chamfer_distance
+    chamfer_p, idx_p, chamfer_gt, idx_gt = chamfer_distance(p2p_dist)
+    chamfer_loss = (chamfer_p+chamfer_gt)/point_cloud_size
+
+    # normal_distance
+    normal_dist_p, normal_dist_gt = normal_distance_between_point_clouds(point_cloud_pred, point_cloud_gt,
+                                                                         p2p_dist, idx_p, idx_gt,
+                                                                         k=num_neighbours_for_normal_loss)
+    normal_loss = -(normal_dist_p + normal_dist_gt) / point_cloud_size
+
+    return chamfer_loss, normal_loss, edge_loss
+
 # ------------------------------------------------------------------------------------------------------
+
+
 def mesh_sampling(vertex_positions: Tensor, mesh_faces: Tensor, num_points: float = 10e3) -> Tensor:
     # described originally here https://arxiv.org/pdf/1901.11461.pdf
     # given a mesh sample a point cloud to be used in the loss functions
@@ -66,21 +97,21 @@ def face_probas(vertex_positions: Tensor, mesh_faces: Tensor) -> Tensor:
 
 
 # ------------------------------------------------------------------------------------------------------
-def chamfer_distance(p2p_distance: Tensor) -> Tuple[Tensor, Tensor]:
+def chamfer_distance(p2p_distance: Tensor) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
     ''' compute the chamfer distance between 2 point clouds\n
         which is defined by the summed distance of each point in cloud A to it's nearest neighbour in cload B\n
         and vice versa
     '''
-    mins, _ = torch.min(p2p_distance, 1)
+    mins, idx1 = torch.min(p2p_distance, 1)
     loss_1 = torch.sum(mins)
-    mins, _ = torch.min(p2p_distance, 2)
+    mins, idx2 = torch.min(p2p_distance, 2)
     loss_2 = torch.sum(mins)
 
-    return loss_1, loss_2
+    return loss_1, idx1, loss_2, idx2
 
 
 # ------------------------------------------------------------------------------------------------------
-def normal_distance_between_point_clouds(p: Tensor, pgt: Tensor, p2p_distance: Tensor, k=10):
+def normal_distance_between_point_clouds(p: Tensor, pgt: Tensor, p2p_distance: Tensor, idx_p: Tensor, idx_gt: Tensor, k=10) -> Tuple[Tensor, Tensor]:
     ''' calculate the normal distance between point clouds p and pgt\n
         p2p_distance is a matrix where p2p_distance[i,j]=|pi-pj|^2\n
         k is the number of neighbours used in order to estimate the normal to each point
@@ -89,15 +120,15 @@ def normal_distance_between_point_clouds(p: Tensor, pgt: Tensor, p2p_distance: T
     pgt_normals = compute_normals(pgt, p2p_distance, k=k)
 
     # size_p x 3
-    nn_normals = pgt_normals[torch.argmin(p2p_distance, 1)]
+    nn_normals = pgt_normals[idx_p]
     loss_1 = torch.mul(p_normals, nn_normals).sum(1).abs().sum()
-    nn_normals = p_normals[torch.argmin(p2p_distance, 0)]
+    nn_normals = p_normals[idx_gt]
     loss_2 = torch.mul(pgt_normals, nn_normals).sum(1).abs().sum()
 
     return loss_1, loss_2
 
 
-def compute_normals(pt: Tensor, p2p_distance: Tensor, k: int = 10):
+def compute_normals(pt: Tensor, p2p_distance: Tensor, k: int = 10) -> Tensor:
     # https://cs.nyu.edu/~panozzo/gp/04%20-%20Normal%20Estimation,%20Curves.pdf
     # for each point find closest k neighbourhood
     # for each neighbourhood find center of mass M
@@ -124,7 +155,7 @@ def compute_normals(pt: Tensor, p2p_distance: Tensor, k: int = 10):
 
 
 # ------------------------------------------------------------------------------------------------------
-def edge_loss(p2p_distance: Tensor, vertex_adjacency: Tensor,) -> Tensor:
+def edges_total_length(p2p_distance: Tensor, vertex_adjacency: Tensor,) -> Tensor:
     ''' compute the edge loss as denoted by L(V,E) =1/|E| * ∑(v,v′)∈E ‖v−v′‖^2\n
         vertex_adjacency can be many adjacency matrices stacked together in block diagonal format
     '''
@@ -138,7 +169,7 @@ def edge_loss(p2p_distance: Tensor, vertex_adjacency: Tensor,) -> Tensor:
     return masked_p2p_distance.sum() / normalize_factor
 
 
-def point2point_distance(pt0, pt1=None):
+def point2point_distance(pt0, pt1=None) -> Tensor:
     ''' calculate the |pi - qj|^2 between the 2 given point clouds\n
         if pt1 is None calculate the point to point distance inside pt0\n
         if both pt0 and pt1 are given assumes batched input aka 3D tensors
