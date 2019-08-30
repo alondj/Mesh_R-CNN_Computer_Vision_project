@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Optional
 
 import torch
 import torch.nn as nn
@@ -19,23 +19,33 @@ def mesh_loss(vertex_positions_pred: Tensor, mesh_faces_pred: Tensor, pred_adjac
               vertex_positions_gt: Tensor, mesh_faces_gt: Tensor, point_cloud_size: float = 10e3,
               num_neighbours_for_normal_loss: int = 10) -> Tuple[Tensor, Tensor, Tensor]:
     # edge loss
-    p2p_dist = point2point_distance(pt0=vertex_positions_pred)
-    edge_loss = edges_total_length(p2p_dist, pred_adjacency)
+    # works but we normalize by total number of edges in the batch
+    # instead of normalizing each graph by it's number of edges
+    p2p_dist = batched_point2point_distance(pt0=vertex_positions_pred)
+    edge_loss = total_edge_length(p2p_dist, pred_adjacency)
 
     # sample point clouds
+    # not vectorized actualy mesh_faces although a block diagonal matrix
+    # the values in mesh_faces (from cubify) are not unique per input sample
+    # so the mesh sampling assumes one sample worth of input
+    # I assume non trivial task
     point_cloud_pred = mesh_sampling(vertex_positions_pred,
                                      mesh_faces_pred, point_cloud_size)
     point_cloud_gt = mesh_sampling(vertex_positions_gt,
                                    mesh_faces_gt, point_cloud_size)
 
     # find distance between the points
-    p2p_dist = point2point_distance(point_cloud_pred, point_cloud_gt)
+    # vectorized
+    p2p_dist = batched_point2point_distance(point_cloud_pred, point_cloud_gt)
 
     # chamfer_distance
+    # vectorized
     chamfer_p, idx_p, chamfer_gt, idx_gt = chamfer_distance(p2p_dist)
     chamfer_loss = (chamfer_p+chamfer_gt)/point_cloud_size
 
     # normal_distance
+    # not vectorized
+    # trivial task I assume
     normal_dist_p, normal_dist_gt = normal_distance_between_point_clouds(point_cloud_pred, point_cloud_gt,
                                                                          p2p_dist, idx_p, idx_gt,
                                                                          k=num_neighbours_for_normal_loss)
@@ -97,6 +107,7 @@ def face_probas(vertex_positions: Tensor, mesh_faces: Tensor) -> Tensor:
 
 
 # ------------------------------------------------------------------------------------------------------
+# vectorized
 def chamfer_distance(p2p_distance: Tensor) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
     ''' compute the chamfer distance between 2 point clouds\n
         which is defined by the summed distance of each point in cloud A to it's nearest neighbour in cload B\n
@@ -135,18 +146,26 @@ def compute_normals(pt: Tensor, p2p_distance: Tensor, k: int = 10) -> Tensor:
     # for each neighbourhood compute scatter matrix Si= Yi.t() where Yi is xi-M
     # the normal is the eigen vector of the smallest eigenvalue of S
 
-    # num_points x K
-    _, nn_idxs = p2p_distance.topk(k, largest=False, sorted=False)
+    # unifrom behaviour always batched input/output
+    if pt.ndim == 2:
+        pt = pt.unsqueeze(0)
+        p2p_distance = p2p_distance.unsqueeze(0)
 
+    # batch x num_points x K
+    nn_idxs = p2p_distance.topk(k, dim=2, largest=False, sorted=False).indices
+
+    # batch x num_points x k x 3
     neighbourhoods = pt[nn_idxs]
 
-    # num_points x 3
+    # batch x num_points x 3
     Ms = neighbourhoods.mean(1)
 
     # broadcast Ms and compute scatter matrix
     Y = torch.sub(neighbourhoods, Ms.unsqueeze(1))
     S = Y.transpose(-1, -2).bmm(Y)
 
+    # find the normal as eigen vector with smallest eigen value
+    # aka the eigen vector which most different than the approximated plane
     eigen_values, eigen_vectors = torch.symeig(S, eigenvectors=True)
 
     normals = eigen_vectors[torch.arange(pt.shape[0]), eigen_values.argmin(1)]
@@ -155,7 +174,8 @@ def compute_normals(pt: Tensor, p2p_distance: Tensor, k: int = 10) -> Tensor:
 
 
 # ------------------------------------------------------------------------------------------------------
-def edges_total_length(p2p_distance: Tensor, vertex_adjacency: Tensor,) -> Tensor:
+# vectorized
+def total_edge_length(p2p_distance: Tensor, vertex_adjacency: Tensor,) -> Tensor:
     ''' compute the edge loss as denoted by L(V,E) =1/|E| * ∑(v,v′)∈E ‖v−v′‖^2\n
         vertex_adjacency can be many adjacency matrices stacked together in block diagonal format
     '''
@@ -169,32 +189,36 @@ def edges_total_length(p2p_distance: Tensor, vertex_adjacency: Tensor,) -> Tenso
     return masked_p2p_distance.sum() / normalize_factor
 
 
-def point2point_distance(pt0, pt1=None) -> Tensor:
+# vectorized
+def batched_point2point_distance(pt0: Tensor, pt1: Optional[Tensor] = None) -> Tensor:
     ''' calculate the |pi - qj|^2 between the 2 given point clouds\n
         if pt1 is None calculate the point to point distance inside pt0\n
-        if both pt0 and pt1 are given assumes batched input aka 3D tensors
-        returns matrix M such that M[i][j] = |pi - qj|^2
+        the operation is batched and if a batch dim will be added if given 2d input
+        returns matrix M such that M[i][j][k] = |pt0[i,j] - pt1[i,k]|^2
     '''
+    if pt0.ndim == 2:
+        pt0 = pt0.unsqueeze(0)
+
+    if pt1 is None:
+        xx = torch.bmm(pt0, pt0.transpose(2, 1))
+        rx = xx.diagonal(dim1=1, dim2=2).unsqueeze(1).expand(xx.shape)
+        return rx.transpose(2, 1) + rx - 2*xx
+
+    if pt1.ndim == 2:
+        pt1 = pt1.unsqueeze(0)
 
     # X @ Y [i,j] = <Xi,Yj>
-    if pt1 is None:
-        xx = pt0.mm(pt0.t())
 
-        rx = torch.diagonal(xx).expand_as(xx.t())
+    xx = torch.bmm(pt0, pt1.transpose(2, 1))
+    yy = torch.bmm(pt0, pt1.transpose(2, 1))
+    zz = torch.bmm(pt0, pt1.transpose(2, 1))
 
-        p2p_distance = rx.t() + rx - 2*xx
+    rx = xx.diagonal(dim1=1, dim2=2).unsqueeze(1).expand_as(zz.transpose(2, 1))
 
-        return p2p_distance
+    ry = yy.diagonal(dim1=1, dim2=2).unsqueeze(1).expand_as(zz)
+    P = (rx.transpose(2, 1) + ry - 2*zz)
 
-    xx = torch.bmm(pt0, pt0.transpose(2, 1))
-    yy = torch.bmm(pt1, pt1.transpose(2, 1))
-    xy = torch.bmm(pt0, pt1.transpose(2, 1))
-    rx = torch.diagonal(xx, dim1=-2, dim2=-1)
-    rx = rx.unsqueeze(1).expand_as(xy.transpose(2, 1))
-    ry = torch.diagonal(yy, dim1=-2, dim2=-1).unsqueeze(1).expand_as(xy)
-    p2p_distance = (rx.transpose(2, 1) + ry - 2*xy)
-
-    return p2p_distance
+    return P
 
 
 # losses of the backbone network
@@ -205,4 +229,8 @@ def mask_loss():
 
 
 def box_loss():
+    pass
+
+
+if __name__ == "__main__":
     pass
