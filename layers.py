@@ -6,6 +6,7 @@ from typing import Tuple, Optional, List
 
 from utils import conv_output, convT_output, to_block_diagonal, from_block_diagonal
 
+
 # data representation for graphs:
 # adjacency matrix: we create block diagonal matrix (possibly sparse in the future)
 # vertex features matrix: we concatenate over the vertex dim resulting in total_vertices x Num_features
@@ -44,7 +45,7 @@ class GraphConv(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        bound = 1.0 / torch.sqrt(self.w0.shape[0])
+        bound = 1.0/torch.sqrt(self.w0.shape[0])
         self.w0.data.uniform_(-bound, bound)
         self.w1.data.uniform_(-bound, bound)
 
@@ -91,7 +92,7 @@ class ResGraphConv(nn.Module):
             self.projection = None
 
     def forward(self, vertex_features: Tensor, vertex_adjacency: Tensor) -> Tensor:
-        # note that vertex_features is the concatination of all feature matrices of the batch
+         # note that vertex_features is the concatination of all feature matrices of the batch
         # along the vertex dimension (we stack them vertically)
 
         # note that vertex_adjacency is a block diagonal matrix containing all adjacency matrices of the batch
@@ -106,7 +107,7 @@ class ResGraphConv(nn.Module):
         # ∑VxOut=> ∑VxOut
         out = self.conv1(out, vertex_adjacency)
 
-        return skip + out
+        return skip+out
 
 
 class ResVertixRefineShapenet(nn.Module):
@@ -131,9 +132,9 @@ class ResVertixRefineShapenet(nn.Module):
 
         self.tanh = nn.Tanh()
 
-    def forward(self, vertices_per_sample: List[int], img_feature_maps: List[Tensor],
-                vertex_adjacency: Tensor, vertex_positions: Tensor,
-                vertex_features: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
+    def forward(self,vertices_per_sample: List[int], img_feature_maps: List[Tensor],
+                    vertex_adjacency: Tensor, vertex_positions: Tensor,
+                    vertex_features: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
 
         # note that vertex_features is the concatination of all feature matrices of the batch
         # along the vertex dimension (we stack them vertically)
@@ -159,7 +160,7 @@ class ResVertixRefineShapenet(nn.Module):
         to_concat = [vertex_positions, projected]
         if vertex_features != None:
             assert self.use_input_features
-            to_concat = [vertex_features] + to_concat
+            to_concat = [vertex_features]+to_concat
         else:
             assert not self.use_input_features
         vertex_features = torch.cat(to_concat, dim=2)
@@ -173,7 +174,7 @@ class ResVertixRefineShapenet(nn.Module):
         # new_positions is of shape ∑Vx3
         new_positions = self.graphConv(new_features, vertex_adjacency)
         new_positions = self.tanh(new_positions)
-        new_positions = vertex_positions + new_positions
+        new_positions = vertex_positions+new_positions
 
         return new_positions, new_features
 
@@ -198,9 +199,9 @@ class VertixRefineShapeNet(nn.Module):
         self.linear1 = nn.Linear(128, 3, bias=False)
         self.tanh = nn.Tanh()
 
-    def forward(self, vertices_per_sample: List[int], img_feature_maps: List[Tensor],
-                vertex_adjacency: Tensor, vertex_positions: Tensor,
-                vertex_features: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
+    def forward(self,vertices_per_sample: List[int], img_feature_maps: List[Tensor], 
+                    vertex_adjacency: Tensor, vertex_positions: Tensor, 
+                    vertex_features: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
 
         # note that vertex_features is the concatination of all feature matrices of the batch
         # along the vertex dimension (we stack them vertically)
@@ -225,7 +226,7 @@ class VertixRefineShapeNet(nn.Module):
         to_concat = [vertex_positions, projected]
         if vertex_features != None:
             assert self.use_input_features
-            to_concat = [vertex_features] + to_concat
+            to_concat = [vertex_features]+to_concat
         else:
             assert not self.use_input_features
         vertex_features = torch.cat(to_concat, dim=2)
@@ -245,7 +246,7 @@ class VertixRefineShapeNet(nn.Module):
         # ∑Vx3
         new_positions = self.linear1(new_features)
         new_positions = self.tanh(new_positions)
-        new_positions = vertex_positions + new_positions
+        new_positions = vertex_positions+new_positions
 
         return new_positions, new_features
 
@@ -292,7 +293,7 @@ class VertixRefinePix3D(nn.Module):
         to_concat = [vertex_positions, algined]
         if vertex_features != None:
             assert self.use_input_features
-            to_concat = [vertex_features] + to_concat
+            to_concat = [vertex_features]+to_concat
         else:
             assert not self.use_input_features
         vertex_features = torch.cat(to_concat, dim=2)
@@ -315,12 +316,12 @@ class VertixRefinePix3D(nn.Module):
         # ∑Vx3
         new_positions = self.linear(new_featues)
         new_positions = self.tanh(new_positions)
-        new_positions = vertex_positions + new_positions
+        new_positions = vertex_positions+new_positions
 
         return new_positions, new_featues
 
 
-# TODO the vertices/faces seem fishy need to verify
+#TODO the vertices/faces seem fishy need to verify
 # there is also the marching cube algorithm https://github.com/pmneila/PyMCubes
 # explained https://medium.com/zeg-ai/voxel-to-mesh-conversion-marching-cube-algorithm-43dbb0801359
 # we might want to compare between them
@@ -329,12 +330,11 @@ class Cubify(nn.Module):
         and outputing a list of 3D meshes.
         \n each occupied voxel is replaced with a cuboid triangle mesh with 8 vertices, 18 edges, and 12 faces.
     '''
-
     # I assume that z,y,x is the center of the cube so the vertices are at
     # bottom face z-0.5,y+-0.5,x+-0.5
     # top face z+0.5,y+-0.5,x+-0.5
 
-    # Cubify will generate a mesh for each grid given we can think of a mesh as a group of disjoint graphs
+    #Cubify will generate a mesh for each grid given we can think of a mesh as a group of disjoint graphs
 
     def __init__(self, threshold: float, output_device: torch.device):
         super(Cubify, self).__init__()
@@ -342,11 +342,12 @@ class Cubify(nn.Module):
         self.threshold = threshold
         self.out_device = output_device
 
-    def forward(self, voxel_probas: Tensor) -> Tuple[List[int], Tensor, Tensor, Tensor]:
+    def forward(self, voxel_probas: Tensor) -> Tuple[List[int],List[int],Tensor, Tensor,Tensor]:
         # output is vertices NxVx3 , faces NxFx3
         N, D, H, W = voxel_probas.shape
-        batched_vertex_positions, batched_faces, batched_adjacency_matrices = [], [], []
-        vertices_per_sample = []
+        batched_vertex_positions, batched_faces,batched_adjacency_matrices =[], [], []
+        vertices_per_sample,faces_per_sample=[],[]
+        
         # slow implementation just to know what I'm doing
         for n in range(N):
             vertices, faces = [], []
@@ -360,13 +361,13 @@ class Cubify(nn.Module):
                             # then the current voxel resides on the edge of the mesh
                             # so we add the 4 vertices and 2 traingle faces that are shared with
                             # the adjacent cell (they represent the border between the background and the object)
-                            if voxel_probas[n, z - 1, y, x] <= self.threshold:
+                            if voxel_probas[n, z-1, y, x] <= self.threshold:
                                 # we predicted there is no voxel at z-1 ,y ,x
                                 # add bottom faces
-                                v0, v1, v2, v3 = [(z - 0.5, y - 0.5, x - 0.5),
-                                                  (z - 0.5, y - 0.5, x + 0.5),
-                                                  (z - 0.5, y + 0.5, x - 0.5),
-                                                  (z - 0.5, y + 0.5, x + 0.5)]
+                                v0, v1, v2, v3 = [(z-0.5, y-0.5, x-0.5),
+                                                  (z-0.5, y-0.5, x+0.5),
+                                                  (z-0.5, y+0.5, x-0.5),
+                                                  (z-0.5, y+0.5, x+0.5)]
                                 vertices.extend([
                                     v0, v1, v2, v3
                                 ])
@@ -374,69 +375,69 @@ class Cubify(nn.Module):
                                     (v0, v1, v2),
                                     (v1, v2, v3)
                                 ])
-                            if voxel_probas[n, z + 1, y, x] <= self.threshold:
+                            if voxel_probas[n, z+1, y, x] <= self.threshold:
                                 # we predicted there is no voxel at z+1 ,y ,x
                                 # add top faces
                                 v0, v1, v2, v3 = [
-                                    (z + 0.5, y - 0.5, x - 0.5),
-                                    (z + 0.5, y - 0.5, x + 0.5),
-                                    (z + 0.5, y + 0.5, x - 0.5),
-                                    (z + 0.5, y + 0.5, x + 0.5),
+                                    (z+0.5, y-0.5, x-0.5),
+                                    (z+0.5, y-0.5, x+0.5),
+                                    (z+0.5, y+0.5, x-0.5),
+                                    (z+0.5, y+0.5, x+0.5),
                                 ]
                                 faces.extend([
                                     (v0, v1, v2),
                                     (v1, v2, v3)
                                 ])
-                            if voxel_probas[n, z, y - 1, x] <= self.threshold:
+                            if voxel_probas[n, z, y-1, x] <= self.threshold:
                                 # we predicted there is no voxel at z ,y-1 ,x
                                 # add back faces
                                 v0, v1, v2, v3 = [
-                                    (z + 0.5, y - 0.5, x - 0.5),
-                                    (z + 0.5, y - 0.5, x + 0.5),
-                                    (z - 0.5, y - 0.5, x - 0.5),
-                                    (z - 0.5, y - 0.5, x + 0.5),
+                                    (z+0.5, y-0.5, x-0.5),
+                                    (z+0.5, y-0.5, x+0.5),
+                                    (z-0.5, y-0.5, x-0.5),
+                                    (z-0.5, y-0.5, x+0.5),
                                 ]
                                 vertices.extend([v0, v1, v2, v3])
                                 faces.extend([
                                     (v0, v1, v2),
                                     (v1, v2, v3)
                                 ])
-                            if voxel_probas[n, z, y + 1, x] <= self.threshold:
+                            if voxel_probas[n, z, y+1, x] <= self.threshold:
                                 # we predicted there is no voxel at z ,y+1 ,x
                                 # add front faces
                                 v0, v1, v2, v3 = [
-                                    (z - 0.5, y + 0.5, x - 0.5),
-                                    (z - 0.5, y + 0.5, x + 0.5),
-                                    (z + 0.5, y + 0.5, x - 0.5),
-                                    (z + 0.5, y + 0.5, x + 0.5),
+                                    (z-0.5, y+0.5, x-0.5),
+                                    (z-0.5, y+0.5, x+0.5),
+                                    (z+0.5, y+0.5, x-0.5),
+                                    (z+0.5, y+0.5, x+0.5),
                                 ]
                                 vertices.extend([v0, v1, v2, v3])
                                 faces.extend([
                                     (v0, v1, v2),
                                     (v1, v2, v3)
                                 ])
-                            if voxel_probas[n, z, y, x - 1] <= self.threshold:
+                            if voxel_probas[n, z, y, x-1] <= self.threshold:
                                 # we predicted there is no voxel at z ,y ,x-1
                                 # add left faces
                                 v0, v1, v2, v3 = [
-                                    (z + 0.5, y - 0.5, x - 0.5),
-                                    (z - 0.5, y - 0.5, x - 0.5),
-                                    (z + 0.5, y + 0.5, x - 0.5),
-                                    (z - 0.5, y + 0.5, x - 0.5),
+                                    (z+0.5, y-0.5, x-0.5),
+                                    (z-0.5, y-0.5, x-0.5),
+                                    (z+0.5, y+0.5, x-0.5),
+                                    (z-0.5, y+0.5, x-0.5),
                                 ]
                                 vertices.extend([v0, v1, v2, v3])
                                 faces.extend([
                                     (v0, v1, v2),
                                     (v1, v2, v3)
                                 ])
-                            if voxel_probas[n, z, y, x + 1] <= self.threshold:
+                            if voxel_probas[n, z, y, x+1] <= self.threshold:
                                 # we predicted there is no voxel at z ,y ,x+1
                                 # add right faces
                                 v0, v1, v2, v3 = [
-                                    (z - 0.5, y - 0.5, x + 0.5),
-                                    (z + 0.5, y - 0.5, x + 0.5),
-                                    (z - 0.5, y + 0.5, x + 0.5),
-                                    (z + 0.5, y + 0.5, x + 0.5),
+                                    (z-0.5, y-0.5, x+0.5),
+                                    (z+0.5, y-0.5, x+0.5),
+                                    (z-0.5, y+0.5, x+0.5),
+                                    (z+0.5, y+0.5, x+0.5),
                                 ]
                                 vertices.extend([v0, v1, v2, v3])
                                 faces.extend([
@@ -448,15 +449,16 @@ class Cubify(nn.Module):
                                                                    faces)
             batched_vertex_positions.append(cannonic_vs)
             batched_faces.append(cannonic_fs)
-            batched_adjacency_matrices.append(
-                self.create_undirected_adjacency_matrix(cannonic_fs, cannonic_vs.shape[0]))
+            batched_adjacency_matrices.append(self.create_undirected_adjacency_matrix(cannonic_fs,cannonic_vs.shape[0]))
             vertices_per_sample.append(cannonic_vs.shape[0])
-
+            faces_per_sample.append(cannonic_fs.shape[0])
+            
+        
         vertex_positions = torch.cat(batched_vertex_positions)
         mesh_faces = torch.cat(batched_faces)
         adjacency_matrix = to_block_diagonal(batched_adjacency_matrices)
 
-        return torch.Tensor(vertices_per_sample), vertex_positions, adjacency_matrix, mesh_faces
+        return vertices_per_sample,faces_per_sample,vertex_positions,adjacency_matrix,mesh_faces
 
     def remove_shared_vertices(self, vertices: List[Point], faces: List[Face]) -> Tuple[Tensor, Tensor]:
         # for performence reasons in the construction phase we duplicate shared vertices
@@ -476,22 +478,21 @@ class Cubify(nn.Module):
         efficient_faces = [[vertex_indices[v] for v in f] for f in faces]
 
         mesh_vertices = torch.Tensor(cannonic_vertices, device=self.out_device)
-        mesh_faces = torch.Tensor(efficient_faces, dtype=torch.short, device=self.out_device)
+        mesh_faces = torch.Tensor(efficient_faces,dtype=torch.short, device=self.out_device)
 
         return mesh_vertices, mesh_faces
 
-    def create_undirected_adjacency_matrix(self, faces: Tensor, num_vertices: int) -> Tensor:
-        adjacency_matrix = torch.zeros(num_vertices, num_vertices)
-        for v0, v1, v2 in faces:
+    def create_undirected_adjacency_matrix(self,faces:Tensor,num_vertices:int)->Tensor:
+        adjacency_matrix=torch.zeros(num_vertices,num_vertices)
+        for v0,v1,v2 in faces:
             adjacency_matrix[v0, v1] = 1
             adjacency_matrix[v0, v2] = 1
             adjacency_matrix[v2, v0] = 1
             adjacency_matrix[v2, v1] = 1
             adjacency_matrix[v1, v0] = 1
             adjacency_matrix[v1, v2] = 1
-
+            
         return adjacency_matrix
-
 
 class VoxelBranch(nn.Sequential):
     ''' the VoxelBranch predicts a grid of voxel occupancy probabilities by applying a fully convolutional network
@@ -591,7 +592,6 @@ class VertexAlign(nn.Module):
     The layer projects a vertex of the mesh to the 2D image and use
     bilinear interpolation to get the corresponding feature.
     """
-
     # TODO image shape is hard coded
 
     def __init__(self):
@@ -617,7 +617,7 @@ class VertexAlign(nn.Module):
         # perform a projection of vertex_positions accross all given feature maps
 
         # TODO should be Y/ Z
-        #               X/ -Z
+        # TODO should be X/ -Z
         h = 248 * (vertex_positions[:, 1] / vertex_positions[:, 2]) + 111.5
         w = 248 * (vertex_positions[:, 0] / -vertex_positions[:, 2]) + 111.5
 
