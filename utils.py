@@ -3,6 +3,7 @@ import torch
 from torch import Tensor
 
 
+# ------------------------------------------------------------------------------------------------------
 def conv_output(h: int, w: int, kernel: int = 3, padding: int = 0, dilation: int = 1, stride: int = 1):
     '''calculates the feature map height and width given the convolution parameters
     '''
@@ -17,6 +18,7 @@ def _dim(h: int, k: int, p: int, s: int, d: int):
     return int((h+2*p-d*(k-1)-1)/s) + 1
 
 
+# ------------------------------------------------------------------------------------------------------
 def convT_output(h: int, w: int, kernel: int = 3, padding: int = 0, dilation: int = 1, stride: int = 1, output_padding: int = 0):
     '''calculates the feature map height and width given the transposed convolution parameters
     '''
@@ -39,6 +41,8 @@ def _tuple(n):
     return n, n
 
 
+# ------------------------------------------------------------------------------------------------------
+# TODO check if works correctly
 def to_block_diagonal(matrices, sparse=False) -> Tensor:
     ''' given multiple matrices of irregular shapes return one matrix which contains them all on the diagonal\n
         if requested the block matirx will be a sparse instead of dense
@@ -107,6 +111,17 @@ def from_block_diagonal(M: Tensor, shapes) -> List[Tensor]:
         sum_rows += shape[0]
 
     return ms
+
+# ------------------------------------------------------------------------------------------------------
+
+
+# return a dummy deterministic tensor of given shape
+def dummy(*dims):
+    s = 1
+    for d in dims:
+        s *= d
+
+    return torch.arange(s).float().reshape(*dims)
 
 
 if __name__ == "__main__":
