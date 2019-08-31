@@ -42,7 +42,8 @@ def _tuple(n):
 
 
 # ------------------------------------------------------------------------------------------------------
-# TODO check if works correctly
+# cannot be vectorized for irregular shapes
+
 def to_block_diagonal(matrices, sparse=False) -> Tensor:
     ''' given multiple matrices of irregular shapes return one matrix which contains them all on the diagonal\n
         if requested the block matirx will be a sparse instead of dense
@@ -60,7 +61,6 @@ def to_block_diagonal(matrices, sparse=False) -> Tensor:
     dtype = matrices[0].dtype
 
     if not sparse:
-        # TODO vectorize
         dense = torch.zeros(M, N, device=device, dtype=dtype)
         for idx, m in enumerate(matrices):
             st_r = torch.sum(ms[:idx])
@@ -102,7 +102,6 @@ def from_block_diagonal(M: Tensor, shapes) -> List[Tensor]:
     if M.is_sparse:
         M = M.to_dense()
 
-    # TODO vectorize
     for shape in shapes:
         m = M[sum_rows:sum_rows+shape[0], sum_rows:sum_rows+shape[1]]
         ms.append(m)
@@ -122,27 +121,3 @@ def dummy(*dims):
         s *= d
 
     return torch.arange(s).float().reshape(*dims)
-
-
-if __name__ == "__main__":
-    n_features = 10
-    m1 = torch.arange(25).reshape(5, 5)
-    m2 = torch.arange(6*6).reshape(6, 6)
-    m3 = torch.arange(5*n_features).reshape(5, n_features)
-    m4 = torch.arange(6*n_features).reshape(6, n_features)
-    m5 = torch.arange(n_features*n_features).reshape(n_features, n_features)
-
-    # M = to_block_diagonal([m1, m2], sparse=False)
-    # N = to_block_diagonal([m3, m4], sparse=False)
-    # sM = to_block_diagonal([m1, m2], sparse=True)
-    # sN = to_block_diagonal([m3, m4], sparse=True)
-    # print(M.shape, N.shape)
-    # print(sM.shape, sN.shape)
-
-    stacked_ms = torch.arange(3*5*5).reshape(3, 5, 5)
-
-    # TODO this is not ok we should not have the zero column in the middle
-    stacked = to_block_diagonal(
-        [torch.ones(3, 2).float(), torch.ones(3, 2).float()])
-
-    print(stacked)

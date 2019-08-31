@@ -14,35 +14,36 @@ def voxel_loss(voxel_prediction: Tensor, voxel_gts: Tensor) -> Tensor:
     return nn.functional.binary_cross_entropy(voxel_prediction, voxel_gts, reduction='mean')
 
 
-# TODO vectorize
-def mesh_loss(vertex_positions_pred: Tensor, mesh_faces_pred: Tensor, pred_adjacency: Tensor,
-              vertex_positions_gt: Tensor, mesh_faces_gt: Tensor, point_cloud_size: float = 10e3,
-              num_neighbours_for_normal_loss: int = 10) -> Tuple[Tensor, Tensor, Tensor]:
+def batched_mesh_loss(vertex_positions_pred: Tensor, mesh_faces_pred: Tensor, pred_adjacency: Tensor,
+                      vertices_per_sample_pred: List[int], faces_per_sample_pred: List[int],
+                      vertex_positions_gt: Tensor, mesh_faces_gt: Tensor,
+                      vertices_per_sample_gt: List[int], faces_per_sample_gt: List[int],
+                      point_cloud_size: float = 10e3,
+                      num_neighbours_for_normal_loss: int = 10) -> Tuple[Tensor, Tensor, Tensor]:
+
     # edge loss
     p2p_dist = batched_point2point_distance(vertex_positions_pred).squeeze(0)
     edge_loss = total_edge_length(p2p_dist, pred_adjacency)
 
-    # sample point clouds
-    point_cloud_pred = mesh_sampling(vertex_positions_pred,
-                                     mesh_faces_pred, point_cloud_size)
-    point_cloud_gt = mesh_sampling(vertex_positions_gt,
-                                   mesh_faces_gt, point_cloud_size)
+    # sample point clouds from the predictions and ground truthes
+    point_cloud_pred = batched_mesh_sampling(vertex_positions_pred, mesh_faces_pred,
+                                             vertices_per_sample_pred, faces_per_sample_pred,
+                                             point_cloud_size)
+    point_cloud_gt = batched_mesh_sampling(vertex_positions_gt, mesh_faces_gt,
+                                           vertices_per_sample_gt, faces_per_sample_gt,
+                                           point_cloud_size)
 
     # find distance between the points
-    # vectorized
     p2p_dist = batched_point2point_distance(point_cloud_pred, point_cloud_gt)
 
     # chamfer distance
-    # vectorized
     chamfer_p, idx_p, chamfer_gt, idx_gt = batched_chamfer_distance(p2p_dist)
     chamfer_loss = (chamfer_p+chamfer_gt)/point_cloud_size
 
     # normal_distance
-    # not vectorized
-    # trivial task I assume
-    normal_dist_p, normal_dist_gt = normal_distance_between_point_clouds(point_cloud_pred, point_cloud_gt,
-                                                                         p2p_dist, idx_p, idx_gt,
-                                                                         k=num_neighbours_for_normal_loss)
+    normal_dist_p, normal_dist_gt = batched_normal_distance(point_cloud_pred, point_cloud_gt,
+                                                            p2p_dist, idx_p, idx_gt,
+                                                            k=num_neighbours_for_normal_loss)
     normal_loss = -(normal_dist_p + normal_dist_gt) / point_cloud_size
 
     return chamfer_loss, normal_loss, edge_loss
@@ -50,7 +51,7 @@ def mesh_loss(vertex_positions_pred: Tensor, mesh_faces_pred: Tensor, pred_adjac
 
 # ------------------------------------------------------------------------------------------------------
 # uses a loop
-#  cannot be vectorized if we want to enusere each mesh gives the same number of points
+#  cannot be vectorized if we want to ensurere each mesh gives the same number of points
 def batched_mesh_sampling(vertex_positions: Tensor, mesh_faces: Tensor,
                           vertices_per_sample: List[int], faces_per_sample: List[int],
                           num_points: float = 10e3) -> Tensor:
@@ -60,16 +61,17 @@ def batched_mesh_sampling(vertex_positions: Tensor, mesh_faces: Tensor,
     point_clouds = [mesh_sampling(*sample, num_points=num_points)for sample in
                     zip(vertex_positions.split(vertices_per_sample), mesh_faces.split(faces_per_sample))]
 
-    return torch.cat(point_clouds)
+    return torch.stack(point_clouds)
 
 
 def mesh_sampling(vertex_positions: Tensor, mesh_faces: Tensor, num_points: float = 10e3) -> Tensor:
     # described originally here https://arxiv.org/pdf/1901.11461.pdf
     # given a mesh sample a point cloud to be used in the loss functions
-
+    f, d = mesh_faces.shape
+    v, p = vertex_positions.shape
+    num_points = int(num_points)
     probas = face_sampling_probabilities_by_surface_area(vertex_positions,
                                                          mesh_faces)
-
     device = vertex_positions.device
 
     face_indices = torch.multinomial(probas, num_points, replacement=True)
@@ -98,11 +100,17 @@ def mesh_sampling(vertex_positions: Tensor, mesh_faces: Tensor, num_points: floa
 
 def face_sampling_probabilities_by_surface_area(vertex_positions: Tensor, mesh_faces: Tensor) -> Tensor:
     # given triangle ABC the area is |AB x AC|/2
+    p, d = vertex_positions.shape
+    f, nv = mesh_faces.shape
+
+    # f x nv x d
     mesh_points = vertex_positions[mesh_faces]
 
-    ABs = mesh_points[:, 1]-mesh_points[:0]
-    ACs = mesh_points[:, 2]-mesh_points[:0]
+    # f x d
+    ABs = mesh_points[:, 1]-mesh_points[:, 0]
+    ACs = mesh_points[:, 2]-mesh_points[:, 0]
 
+    # f x d
     norm_vecs = ABs.cross(ACs, dim=1)
 
     # we can use the rectangle surface area (|AB x AC|) as the 2 factor will cancel out
@@ -128,7 +136,7 @@ def batched_chamfer_distance(p2p_distance: Tensor) -> Tuple[Tensor, Tensor, Tens
 
 
 # ------------------------------------------------------------------------------------------------------
-def normal_distance_between_point_clouds(p: Tensor, pgt: Tensor, p2p_distance: Tensor, idx_p: Tensor, idx_gt: Tensor, k=10) -> Tuple[Tensor, Tensor]:
+def batched_normal_distance(p: Tensor, pgt: Tensor, p2p_distance: Tensor, idx_p: Tensor, idx_gt: Tensor, k=10) -> Tuple[Tensor, Tensor]:
     ''' calculate the normal distance between point clouds p and pgt\n
         p2p_distance is a matrix where p2p_distance[i,j]=|pi-pj|^2\n
         k is the number of neighbours used in order to estimate the normal to each point
@@ -184,12 +192,22 @@ def compute_normals(pt: Tensor, p2p_distance: Tensor, k: int = 10) -> Tensor:
     # find the normal as eigen vector with smallest eigen value
     # aka the eigen vector which most different than the approximated plane
     # batch x points x 3 , batch x points x 3 x 3
-    _, eigen_vectors = torch.symeig(S, eigenvectors=True)
+    eigen_values, eigen_vectors = torch.symeig(S, eigenvectors=True)
 
     # batch x points
+    # TODO revisit
+    # this is what we want to do but in efficient way
+    # for now i assume that the eigen values are sorted
+    # so the one liner below is sufficient
+    # idealy we would like to do something like eigen_vectors[smallest_eigen_values]
     # smallest_eigen_values = eigen_values.argmin(2)
+    # normals = torch.empty(b, p, d)
+    # for i in range(b):
+    #     for j in range(p):
+    #         normals[i, j] = eigen_vectors[i, j, normals[i, j]]
 
     # batch x points x 3
+    # assumes smallest eigen value is the first need to revisit
     normals = eigen_vectors[:, :, 0]
 
     return normals

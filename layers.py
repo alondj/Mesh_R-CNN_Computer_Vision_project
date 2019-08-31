@@ -342,11 +342,12 @@ class Cubify(nn.Module):
         self.threshold = threshold
         self.out_device = output_device
 
-    def forward(self, voxel_probas: Tensor) -> Tuple[List[int],Tensor, Tensor,Tensor]:
+    def forward(self, voxel_probas: Tensor) -> Tuple[List[int],List[int],Tensor, Tensor,Tensor]:
         # output is vertices NxVx3 , faces NxFx3
         N, D, H, W = voxel_probas.shape
         batched_vertex_positions, batched_faces,batched_adjacency_matrices =[], [], []
-        vertices_per_sample=[]
+        vertices_per_sample,faces_per_sample=[],[]
+        
         # slow implementation just to know what I'm doing
         for n in range(N):
             vertices, faces = [], []
@@ -450,12 +451,14 @@ class Cubify(nn.Module):
             batched_faces.append(cannonic_fs)
             batched_adjacency_matrices.append(self.create_undirected_adjacency_matrix(cannonic_fs,cannonic_vs.shape[0]))
             vertices_per_sample.append(cannonic_vs.shape[0])
+            faces_per_sample.append(cannonic_fs.shape[0])
+            
         
         vertex_positions = torch.cat(batched_vertex_positions)
         mesh_faces = torch.cat(batched_faces)
         adjacency_matrix = to_block_diagonal(batched_adjacency_matrices)
 
-        return torch.Tensor(vertices_per_sample),vertex_positions,adjacency_matrix,mesh_faces
+        return vertices_per_sample,faces_per_sample,vertex_positions,adjacency_matrix,mesh_faces
 
     def remove_shared_vertices(self, vertices: List[Point], faces: List[Face]) -> Tuple[Tensor, Tensor]:
         # for performence reasons in the construction phase we duplicate shared vertices
@@ -614,7 +617,7 @@ class VertexAlign(nn.Module):
         # perform a projection of vertex_positions accross all given feature maps
 
         # TODO should be Y/ Z
-        #               X/ -Z
+        # TODO should be X/ -Z
         h = 248 * (vertex_positions[:, 1] / vertex_positions[:, 2]) + 111.5
         w = 248 * (vertex_positions[:, 0] / -vertex_positions[:, 2]) + 111.5
 
