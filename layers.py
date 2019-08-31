@@ -33,11 +33,11 @@ class GraphConv(nn.Module):
         f′i = ReLU(W0xfi +∑ j∈N(i) W1xfj)
     '''
 
-    def __init__(self, in_channels: int, out_channels: int):
+    def __init__(self, in_features: int, out_features: int):
         super(GraphConv, self).__init__()
-        self.w0 = torch.nn.Parameter(data=torch.empty(in_channels, out_channels),
+        self.w0 = torch.nn.Parameter(data=torch.empty(in_features, out_features),
                                      requires_grad=True)
-        self.w1 = torch.nn.Parameter(data=torch.empty(in_channels, out_channels),
+        self.w1 = torch.nn.Parameter(data=torch.empty(in_features, out_features),
                                      requires_grad=True)
 
         self.relu = nn.ReLU()
@@ -79,17 +79,17 @@ class ResGraphConv(nn.Module):
        and an additive skip connection with linear projection if input dimension D1 differs from output dimension D2
     '''
 
-    def __init__(self, in_channels: int, out_channels: int):
+    def __init__(self, in_features: int, out_features: int):
         super(ResGraphConv, self).__init__()
-        self.conv0 = GraphConv(in_channels, out_channels)
-        self.conv1 = GraphConv(out_channels, out_channels)
+        self.conv0 = GraphConv(in_features, out_features)
+        self.conv1 = GraphConv(out_features, out_features)
 
-        self.project = (in_channels == out_channels)
-
-        if self.project:
-            self.projection = nn.Linear(in_channels, out_channels, bias=False)
+        if in_features != out_features:
+            projection = nn.Linear(in_features, out_features, bias=False)
         else:
-            self.projection = None
+            projection = nn.Identity()
+
+        self.projection: nn.Module = projection
 
     def forward(self, vertex_features: Tensor, vertex_adjacency: Tensor) -> Tensor:
          # note that vertex_features is the concatination of all feature matrices of the batch
@@ -99,8 +99,7 @@ class ResGraphConv(nn.Module):
         # as block on the diagonal and all off diagonal blocks are zero blocks
 
         # ∑VxIn @ InxOut => ∑VxOut
-        skip = vertex_features if not self.project else self.projection(
-            vertex_features)
+        skip = self.projection(vertex_features)
 
         # ∑VxIn => ∑VxOut
         out = self.conv0(vertex_features, vertex_adjacency)
@@ -115,26 +114,31 @@ class ResVertixRefineShapenet(nn.Module):
         outputs an updated 3D mesh and vertex features
     '''
 
-    def __init__(self, use_input_features: bool = True):
+    def __init__(self, original_image_size: Tuple[int, int], use_input_features: bool = True,
+                 num_features: int = 128, alignment_size: int = 3840,
+                 ndims: int = 3):
         super(ResVertixRefineShapenet, self).__init__()
 
-        self.vertAlign = VertexAlign()
+        self.vertAlign = VertexAlign(original_image_size)
 
-        self.linear = nn.Linear(3840, 128, bias=False)
+        self.linear = nn.Linear(alignment_size, num_features, bias=False)
 
-        in_channels = 259 if use_input_features else 131
-        self.resGraphConv0 = ResGraphConv(in_channels, 128)
+        in_channels = num_features + ndims
+        if use_input_features:
+            in_channels += num_features
+
+        self.resGraphConv0 = ResGraphConv(in_channels, num_features)
         self.use_input_features = use_input_features
 
-        self.resGraphConv1 = ResGraphConv(128, 128)
-        self.resGraphConv2 = ResGraphConv(128, 128)
-        self.graphConv = GraphConv(128, 3)
+        self.resGraphConv1 = ResGraphConv(num_features, num_features)
+        self.resGraphConv2 = ResGraphConv(num_features, num_features)
+        self.graphConv = GraphConv(num_features, ndims)
 
         self.tanh = nn.Tanh()
 
-    def forward(self,vertices_per_sample: List[int], img_feature_maps: List[Tensor],
-                    vertex_adjacency: Tensor, vertex_positions: Tensor,
-                    vertex_features: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
+    def forward(self, vertices_per_sample: List[int], img_feature_maps: List[Tensor],
+                vertex_adjacency: Tensor, vertex_positions: Tensor,
+                vertex_features: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
 
         # note that vertex_features is the concatination of all feature matrices of the batch
         # along the vertex dimension (we stack them vertically)
@@ -184,24 +188,30 @@ class VertixRefineShapeNet(nn.Module):
         outputs an updated 3D mesh and vertex features
     '''
 
-    def __init__(self, use_input_features: bool = True):
+    def __init__(self, original_image_size: Tuple[int, int], use_input_features: bool = True,
+                 num_features: int = 128, alignment_size: int = 3840,
+                 ndims: int = 3):
         super(VertixRefineShapeNet, self).__init__()
-        self.vertAlign = VertexAlign()
+        self.vertAlign = VertexAlign(original_image_size)
 
-        self.linear0 = nn.Linear(3840, 128, bias=False)
+        self.linear0 = nn.Linear(alignment_size, num_features, bias=False)
 
-        in_channels = 259 if use_input_features else 131
-        self.graphConv0 = GraphConv(in_channels, 131)
+        in_channels = num_features + ndims
+        if use_input_features:
+            in_channels += num_features
+        self.graphConv0 = GraphConv(in_channels, num_features)
         self.use_input_features = use_input_features
 
-        self.graphConv1 = GraphConv(131, 128)
-        self.graphConv2 = GraphConv(131, 128)
-        self.linear1 = nn.Linear(128, 3, bias=False)
+        self.graphConv1 = GraphConv(num_features+ndims,
+                                    num_features)
+        self.graphConv2 = GraphConv(num_features+ndims,
+                                    num_features)
+        self.linear1 = nn.Linear(num_features, ndims, bias=False)
         self.tanh = nn.Tanh()
 
-    def forward(self,vertices_per_sample: List[int], img_feature_maps: List[Tensor], 
-                    vertex_adjacency: Tensor, vertex_positions: Tensor, 
-                    vertex_features: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
+    def forward(self, vertices_per_sample: List[int], img_feature_maps: List[Tensor],
+                vertex_adjacency: Tensor, vertex_positions: Tensor,
+                vertex_features: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
 
         # note that vertex_features is the concatination of all feature matrices of the batch
         # along the vertex dimension (we stack them vertically)
@@ -256,18 +266,26 @@ class VertixRefinePix3D(nn.Module):
         outputs an updated 3D mesh and vertex features
     '''
 
-    def __init__(self, use_input_features: bool = True):
-        super(VertixRefinePix3D, self).__init__()
-        self.vertAlign = VertexAlign()
+    def __init__(self, original_image_size: Tuple[int, int], use_input_features: bool = True,
+                 num_features: int = 128, alignment_size: int = 3840,
+                 ndims: int = 3):
 
-        in_channels = 387 if use_input_features else 259
-        self.graphConv0 = GraphConv(in_channels, 128)
+        super(VertixRefinePix3D, self).__init__()
+        self.vertAlign = VertexAlign(original_image_size)
+
+        in_channels = alignment_size + ndims
+        if use_input_features:
+            in_channels += num_features
+        self.graphConv0 = GraphConv(in_channels, num_features)
 
         self.use_input_features = use_input_features
 
-        self.graphConv1 = GraphConv(131, 128)
-        self.graphConv2 = GraphConv(131, 128)
-        self.linear = nn.Linear(131, 3, bias=False)
+        self.graphConv1 = GraphConv(num_features+ndims,
+                                    num_features)
+        self.graphConv2 = GraphConv(num_features+ndims,
+                                    num_features)
+        self.linear = nn.Linear(num_features+ndims,
+                                ndims, bias=False)
         self.tanh = nn.Tanh()
 
     def forward(self, vertices_per_sample: List[int], back_bone_features: Tensor, vertex_adjacency: Tensor,
@@ -321,7 +339,7 @@ class VertixRefinePix3D(nn.Module):
         return new_positions, new_featues
 
 
-#TODO the vertices/faces seem fishy need to verify
+# TODO the vertices/faces seem fishy need to verify
 # there is also the marching cube algorithm https://github.com/pmneila/PyMCubes
 # explained https://medium.com/zeg-ai/voxel-to-mesh-conversion-marching-cube-algorithm-43dbb0801359
 # we might want to compare between them
@@ -334,7 +352,7 @@ class Cubify(nn.Module):
     # bottom face z-0.5,y+-0.5,x+-0.5
     # top face z+0.5,y+-0.5,x+-0.5
 
-    #Cubify will generate a mesh for each grid given we can think of a mesh as a group of disjoint graphs
+    # Cubify will generate a mesh for each grid given we can think of a mesh as a group of disjoint graphs
 
     def __init__(self, threshold: float, output_device: torch.device):
         super(Cubify, self).__init__()
@@ -342,12 +360,12 @@ class Cubify(nn.Module):
         self.threshold = threshold
         self.out_device = output_device
 
-    def forward(self, voxel_probas: Tensor) -> Tuple[List[int],List[int],Tensor, Tensor,Tensor]:
+    def forward(self, voxel_probas: Tensor) -> Tuple[List[int], List[int], Tensor, Tensor, Tensor]:
         # output is vertices NxVx3 , faces NxFx3
         N, D, H, W = voxel_probas.shape
-        batched_vertex_positions, batched_faces,batched_adjacency_matrices =[], [], []
-        vertices_per_sample,faces_per_sample=[],[]
-        
+        batched_vertex_positions, batched_faces, batched_adjacency_matrices = [], [], []
+        vertices_per_sample, faces_per_sample = [], []
+
         # slow implementation just to know what I'm doing
         for n in range(N):
             vertices, faces = [], []
@@ -449,16 +467,16 @@ class Cubify(nn.Module):
                                                                    faces)
             batched_vertex_positions.append(cannonic_vs)
             batched_faces.append(cannonic_fs)
-            batched_adjacency_matrices.append(self.create_undirected_adjacency_matrix(cannonic_fs,cannonic_vs.shape[0]))
+            batched_adjacency_matrices.append(
+                self.create_undirected_adjacency_matrix(cannonic_fs, cannonic_vs.shape[0]))
             vertices_per_sample.append(cannonic_vs.shape[0])
             faces_per_sample.append(cannonic_fs.shape[0])
-            
-        
+
         vertex_positions = torch.cat(batched_vertex_positions)
         mesh_faces = torch.cat(batched_faces)
         adjacency_matrix = to_block_diagonal(batched_adjacency_matrices)
 
-        return vertices_per_sample,faces_per_sample,vertex_positions,adjacency_matrix,mesh_faces
+        return vertices_per_sample, faces_per_sample, vertex_positions, adjacency_matrix, mesh_faces
 
     def remove_shared_vertices(self, vertices: List[Point], faces: List[Face]) -> Tuple[Tensor, Tensor]:
         # for performence reasons in the construction phase we duplicate shared vertices
@@ -478,77 +496,87 @@ class Cubify(nn.Module):
         efficient_faces = [[vertex_indices[v] for v in f] for f in faces]
 
         mesh_vertices = torch.Tensor(cannonic_vertices, device=self.out_device)
-        mesh_faces = torch.Tensor(efficient_faces,dtype=torch.short, device=self.out_device)
+        mesh_faces = torch.Tensor(
+            efficient_faces, dtype=torch.short, device=self.out_device)
 
         return mesh_vertices, mesh_faces
 
-    def create_undirected_adjacency_matrix(self,faces:Tensor,num_vertices:int)->Tensor:
-        adjacency_matrix=torch.zeros(num_vertices,num_vertices)
-        for v0,v1,v2 in faces:
+    def create_undirected_adjacency_matrix(self, faces: Tensor, num_vertices: int) -> Tensor:
+        adjacency_matrix = torch.zeros(num_vertices, num_vertices)
+        for v0, v1, v2 in faces:
             adjacency_matrix[v0, v1] = 1
             adjacency_matrix[v0, v2] = 1
             adjacency_matrix[v2, v0] = 1
             adjacency_matrix[v2, v1] = 1
             adjacency_matrix[v1, v0] = 1
             adjacency_matrix[v1, v2] = 1
-            
+
         return adjacency_matrix
+
 
 class VoxelBranch(nn.Sequential):
     ''' the VoxelBranch predicts a grid of voxel occupancy probabilities by applying a fully convolutional network
         to the input feature map 
     '''
 
-    def __init__(self, in_channels: int, out_channels: int):
+    def __init__(self, in_channels: int, out_channels: int, hidden_channels: int = 256):
         super(VoxelBranch, self).__init__(
             # N x in_channels x V/2 x V/2
-            nn.Conv2d(in_channels, 256, kernel_size=3, padding=1),
+            nn.Conv2d(in_channels, hidden_channels, kernel_size=3, padding=1),
             # N x 256 x V/2 x V/2
-            nn.Conv2d(256, 256, kernel_size=3, padding=1),
+            nn.Conv2d(hidden_channels, hidden_channels,
+                      kernel_size=3, padding=1),
             # N x 256 x V/2 x V/2
-            nn.ConvTranspose2d(256, 256, kernel_size=2, stride=2),
+            nn.ConvTranspose2d(hidden_channels, hidden_channels,
+                               kernel_size=2, stride=2),
             # N x 256 x V x V
-            nn.Conv2d(256, out_channels, kernel_size=1)
+            nn.Conv2d(hidden_channels, out_channels, kernel_size=1)
             # N x out_channels x V x V
         )
 
 
 class FCN(nn.Module):
     ''' FCN is a fully convolutional network based on the VGG16 architecture emmitting 4 feature maps\n
-        given an input of shape NxCxHxW the 4 feature maps are of shapes:\n
-        Nx256xH/4xW/4 , Nx512xH/8xW/8 , Nx1024xH/16xW/16 , Nx2048xH/32xW/32
+        given an input of shape NxCxHxW and filters=f the 4 feature maps are of shapes:\n
+        Nx(4f)xH/4xW/4 , Nx(8f)xH/8xW/8 , Nx(16f)xH/16xW/16 , Nx(32f)xH/32xW/32
     '''
 
-    def __init__(self, in_channels: int):
+    def __init__(self, in_channels: int, filters: int = 64):
         super(FCN, self).__init__()
-        self.conv0_1 = nn.Conv2d(in_channels, 64, 3, stride=1, padding=1)
-        self.conv0_2 = nn.Conv2d(64, 64, 3, stride=1, padding=1)
+        self.conv0_1 = nn.Conv2d(in_channels, filters, 3, stride=1, padding=1)
+        self.conv0_2 = nn.Conv2d(filters, filters, 3, stride=1, padding=1)
 
         # cut h and w by half
-        self.conv1_1 = nn.Conv2d(64, 128, 3, stride=2, padding=1)
-        self.conv1_2 = nn.Conv2d(128, 128, 3, stride=1, padding=1)
-        self.conv1_3 = nn.Conv2d(128, 128, 3, stride=1, padding=1)
+        self.conv1_1 = nn.Conv2d(filters, 2*filters, 3, stride=2, padding=1)
+        self.conv1_2 = nn.Conv2d(2*filters, 2*filters, 3, stride=1, padding=1)
+        self.conv1_3 = nn.Conv2d(2*filters, 2*filters, 3, stride=1, padding=1)
 
         # cut h and w by half
-        self.conv2_1 = nn.Conv2d(128, 256, 3, stride=2, padding=1)
-        self.conv2_2 = nn.Conv2d(256, 256, 3, stride=1, padding=1)
-        self.conv2_3 = nn.Conv2d(256, 256, 3, stride=1, padding=1)
+        self.conv2_1 = nn.Conv2d(2*filters, 4*filters, 3, stride=2, padding=1)
+        self.conv2_2 = nn.Conv2d(4*filters, 4*filters, 3, stride=1, padding=1)
+        self.conv2_3 = nn.Conv2d(4*filters, 4*filters, 3, stride=1, padding=1)
 
         # cut h and w by half
-        self.conv3_1 = nn.Conv2d(256, 512, 3, stride=2, padding=1)
-        self.conv3_2 = nn.Conv2d(512, 512, 3, stride=1, padding=1)
-        self.conv3_3 = nn.Conv2d(512, 512, 3, stride=1, padding=1)
+        self.conv3_1 = nn.Conv2d(4*filters, 8*filters, 3, stride=2, padding=1)
+        self.conv3_2 = nn.Conv2d(8*filters, 8*filters, 3, stride=1, padding=1)
+        self.conv3_3 = nn.Conv2d(8*filters, 8*filters, 3, stride=1, padding=1)
 
         # cut h and w by half
-        self.conv4_1 = nn.Conv2d(512, 1024, 5, stride=2, padding=2)
-        self.conv4_2 = nn.Conv2d(1024, 1024, 3, stride=1, padding=1)
-        self.conv4_3 = nn.Conv2d(1024, 1024, 3, stride=1, padding=1)
+        self.conv4_1 = nn.Conv2d(8*filters, 16*filters, 5, stride=2, padding=2)
+        self.conv4_2 = nn.Conv2d(16*filters, 16*filters,
+                                 3, stride=1, padding=1)
+        self.conv4_3 = nn.Conv2d(16*filters, 16*filters,
+                                 3, stride=1, padding=1)
 
         # cut h and w by half
-        self.conv5_1 = nn.Conv2d(1024, 2048, 5, stride=2, padding=2)
-        self.conv5_2 = nn.Conv2d(2048, 2048, 3, stride=1, padding=1)
-        self.conv5_3 = nn.Conv2d(2048, 2048, 3, stride=1, padding=1)
-        self.conv5_4 = nn.Conv2d(2048, 2048, 3, stride=1, padding=1)
+        self.conv5_1 = nn.Conv2d(16*filters, 32*filters,
+                                 5, stride=2, padding=2)
+        self.conv5_2 = nn.Conv2d(32*filters, 32*filters,
+                                 3, stride=1, padding=1)
+        self.conv5_3 = nn.Conv2d(32*filters, 32*filters,
+                                 3, stride=1, padding=1)
+        self.conv5_4 = nn.Conv2d(32*filters, 32*filters,
+                                 3, stride=1, padding=1)
 
     def forward(self, img) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
         img = F.relu(self.conv0_1(img))
@@ -592,10 +620,14 @@ class VertexAlign(nn.Module):
     The layer projects a vertex of the mesh to the 2D image and use
     bilinear interpolation to get the corresponding feature.
     """
-    # TODO image shape is hard coded
 
-    def __init__(self):
+    def __init__(self, original_image_size: Tuple[int, int]):
+        '''
+        original_image_size is a tuple (h,w) of sizes of the original image fed into the network
+        '''
         super(VertexAlign, self).__init__()
+        assert len(original_image_size) == 2
+        self.h, self.w = original_image_size
 
     def forward(self, img_features: List[Tensor], vertex_positions: Tensor, vertices_per_mesh: List[int]) -> Tensor:
         # right now it's a possibly ugly hack we iterate over individual meshes
@@ -618,12 +650,13 @@ class VertexAlign(nn.Module):
 
         # TODO should be Y/ Z
         # TODO should be X/ -Z
+        # TODO magic numbers
         h = 248 * (vertex_positions[:, 1] / vertex_positions[:, 2]) + 111.5
         w = 248 * (vertex_positions[:, 0] / -vertex_positions[:, 2]) + 111.5
 
         # scale upto original image size
-        h = torch.clamp(h, min=0, max=223)
-        w = torch.clamp(w, min=0, max=223)
+        h = torch.clamp(h, min=0, max=self.h-1)
+        w = torch.clamp(w, min=0, max=self.w-1)
 
         feats = [self.project(img_feat, h, w)
                  for img_feat in img_features]
@@ -636,8 +669,8 @@ class VertexAlign(nn.Module):
         size_x, size_y = img_feat.shape[-2:]
 
         # scale to current feature map size
-        x = h / (224. / size_x)
-        y = w / (224. / size_y)
+        x = h / (float(self.h) / size_x)
+        y = w / (float(self.w) / size_y)
 
         x1, x2 = torch.floor(x).long(), torch.ceil(x).long()
         y1, y2 = torch.floor(y).long(), torch.ceil(y).long()
