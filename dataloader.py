@@ -1,7 +1,6 @@
 import json
 import matplotlib.image as mpimg
 from torch.utils.data import Dataset
-import torch
 
 
 class pix3dDataset(Dataset):
@@ -22,22 +21,22 @@ class pix3dDataset(Dataset):
         return len(self.imgs_src)
 
     def __getitem__(self, idx):
-        if torch.is_tensor(idx):
-            idx = idx.tolist()
+        if type(idx) != slice:
+            idx = slice(idx, idx + 1)
+        if type(idx) == slice:
+            img_src = self.imgs_src[idx]
+            model_src = self.models_src[idx]
 
-        img_src = [self.imgs_src[idx]]
-        model_src = [self.models_src[idx]]
+            imgs = []
+            models = []
+            for img_s, model_s in zip(img_src, model_src):
+                imgs.append(mpimg.imread(img_s))
+                models.append(model_s)
 
-        imgs = []
-        models = []
-        for img_s, model_s in zip(img_src, model_src):
-            imgs.append(mpimg.imread(img_s))
-            models.append(model_s)
-
-        return imgs, models
+            return imgs, models
 
 
 if __name__ == "__main__":
     pxd = pix3dDataset("dataset/pix3d/pix3d.json")
-    img, _ = pxd[0]
-    print(img)
+    img, _ = pxd[0:3]
+    print(len(img))
