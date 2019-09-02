@@ -82,7 +82,7 @@ def to_block_diagonal(matrices, sparse=False) -> Tensor:
                     j_coords.append(j)
 
         data = torch.cat(data)
-        return torch.sparse.FloatTensor(torch.LongTensor([i_coords, j_coords]), data, torch.Size([M, N]))
+        return torch.sparse.FloatTensor(torch.LongTensor([i_coords, j_coords]), data, torch.Size([M, N])).to(device)
 
 
 def from_block_diagonal(M: Tensor, shapes) -> List[Tensor]:
