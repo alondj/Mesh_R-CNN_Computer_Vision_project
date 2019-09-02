@@ -496,19 +496,16 @@ class Cubify(nn.Module):
 
         return mesh_vertices, mesh_faces
 
+    #TODO batch sparse to sparse diagonal
     def create_undirected_adjacency_matrix(self, faces: Tensor, num_vertices: int) -> Tensor:
-        adjacency_matrix = torch.zeros(
-            num_vertices, num_vertices, device=self.out_device)
+        values = []
+        id_i, id_j = [], []
         for v0, v1, v2 in faces:
-            adjacency_matrix[v0, v1] = 1
-            adjacency_matrix[v0, v2] = 1
-            adjacency_matrix[v2, v0] = 1
-            adjacency_matrix[v2, v1] = 1
-            adjacency_matrix[v1, v0] = 1
-            adjacency_matrix[v1, v2] = 1
-
-        return adjacency_matrix
-
+            values.extend([1,1,1,1,1,1])
+            id_i.extend([v0,v0,v2,v2,v1,v1])
+            id_j.extend([v1,v2,v0,v1,v0,v2])
+        
+        return torch.sparse.LongTensor(torch.LongTensor([id_i,id_j]),torch.LongTensor(values),torch.Size([num_vertices,num_vertices])).to(self.out_device)
 
 class VoxelBranch(nn.Sequential):
     ''' the VoxelBranch predicts a grid of voxel occupancy probabilities by applying a fully convolutional network
@@ -728,8 +725,7 @@ def pather_iter_3x3(B, C, H, W, device='cuda'):
 def check_cubify():
     cube = Cubify(0.5, 'cuda:0').to('cuda')
 
-    inp = torch.zeros(2, 48, 48, 48).to('cuda:0')
-    inp[0, 12, 12, 12] = 1
+    inp = torch.randn(2, 24, 24, 24).to('cuda:0')
     meshes = cube(inp)
 
 
@@ -752,4 +748,4 @@ def check_align():
 
 
 if __name__ == "__main__":
-    check_align()
+    check_cubify()
