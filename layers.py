@@ -15,8 +15,6 @@ from utils import conv_output, convT_output, to_block_diagonal, from_block_diago
 
 # TODO sparse adjacency matrices
 
-#TODO in cubify we have different orientation defintion
-
 
 Point = Tuple[float, float, float]
 Face = Tuple[Point, Point, Point]
@@ -375,7 +373,7 @@ class Cubify(nn.Module):
                             # the adjacent cell (they represent the border between the background and the object)
                             if z == 0 or voxel_probas[n, z-1, y, x] <= self.threshold:
                                 # we predicted there is no voxel at z-1 ,y ,x
-                                # add bottom faces
+                                # add back faces
                                 v0, v1, v2, v3 = [(z-0.5, y-0.5, x-0.5),
                                                   (z-0.5, y-0.5, x+0.5),
                                                   (z-0.5, y+0.5, x-0.5),
@@ -389,7 +387,7 @@ class Cubify(nn.Module):
                                 ])
                             if z == C-1 or voxel_probas[n, z+1, y, x] <= self.threshold:
                                 # we predicted there is no voxel at z+1 ,y ,x
-                                # add top faces
+                                # add front faces
                                 v0, v1, v2, v3 = [
                                     (z+0.5, y-0.5, x-0.5),
                                     (z+0.5, y-0.5, x+0.5),
@@ -403,7 +401,7 @@ class Cubify(nn.Module):
                                 ])
                             if y == 0 or voxel_probas[n, z, y-1, x] <= self.threshold:
                                 # we predicted there is no voxel at z ,y-1 ,x
-                                # add back faces
+                                # add top faces
                                 v0, v1, v2, v3 = [
                                     (z+0.5, y-0.5, x-0.5),
                                     (z+0.5, y-0.5, x+0.5),
@@ -463,14 +461,14 @@ class Cubify(nn.Module):
             batched_vertex_positions.append(cannonic_vs)
             batched_faces.append(cannonic_fs)
             batched_adjacency_matrices.append(self.create_undirected_adjacency_matrix(cannonic_fs,
-                                                                                cannonic_vs.shape[0]))
+                                                                                      cannonic_vs.shape[0]))
             vertices_per_sample.append(cannonic_vs.shape[0])
             faces_per_sample.append(cannonic_fs.shape[0])
 
         vertex_positions = torch.cat(batched_vertex_positions)
         mesh_faces = torch.cat(batched_faces)
         adjacency_matrix = to_block_diagonal(batched_adjacency_matrices,
-                                                sparse=False)
+                                             sparse=False)
 
         return vertices_per_sample, faces_per_sample, vertex_positions, adjacency_matrix, mesh_faces
 
@@ -500,7 +498,7 @@ class Cubify(nn.Module):
 
     def create_undirected_adjacency_matrix(self, faces: Tensor, num_vertices: int) -> Tensor:
         adjacency_matrix = torch.zeros(
-            num_vertices, num_vertices, dtype=torch.bool, device=self.out_device)
+            num_vertices, num_vertices, device=self.out_device)
         for v0, v1, v2 in faces:
             adjacency_matrix[v0, v1] = 1
             adjacency_matrix[v0, v2] = 1
@@ -533,6 +531,8 @@ class VoxelBranch(nn.Sequential):
         )
 
 
+# TODO this model is just for testing the real implementation will be either a resnet50 for ShapeNet
+# or mask R-CNN for Pix3D
 class FCN(nn.Module):
     ''' FCN is a fully convolutional network based on the VGG16 architecture emmitting 4 feature maps\n
         given an input of shape NxCxHxW and filters=f the 4 feature maps are of shapes:\n
@@ -705,7 +705,7 @@ class VertexAlign(nn.Module):
         return output
 
 
-def patch_iter(B, C, H, W, device='cuda'):
+def pather_iter_3x3(B, C, H, W, device='cuda'):
     x = dummy(B, C, H, W).to(device)
     kh, kw, kd = 3, 3, 3  # kernel size
     dh, dw, dd = 1, 1, 1  # stride
@@ -714,7 +714,6 @@ def patch_iter(B, C, H, W, device='cuda'):
     # create all 3x3x3 cubes centered around each point in the grid
     patches = x.unfold(1, kd, dd).unfold(2, kh, dh).unfold(3, kw, dw)
     patches = patches.contiguous().view(B, C*H*W, kd*kh*kw)
-    print(patches.shape)
     for batch in patches:
         for patch in batch:
             center = kh*kw+kw+1
@@ -735,21 +734,22 @@ def check_cubify():
 
 
 def check_align():
-    feature_extractor=FCN(3)
-    img=torch.randn(1,3,137,137)
-    f_maps=feature_extractor(img)
-    align=VertexAlign((137,137))
-    pos=torch.randint(0,137,(100,3)).float()
-    vert_per_m=[100]
+    feature_extractor = FCN(3)
+    img = torch.randn(1, 3, 137, 137)
+    f_maps = feature_extractor(img)
+    align = VertexAlign((137, 137))
+    pos = torch.randint(0, 137, (100, 3)).float()
+    vert_per_m = [100]
 
-    c=align(f_maps,pos,vert_per_m)
-    assert c.shape == torch.Size([100,3840])
+    c = align(f_maps, pos, vert_per_m)
+    assert c.shape == torch.Size([100, 3840])
 
-    f_map=torch.randn(1,256,224,224)
-    align=VertexAlign((224,224))
-    c=align([f_map],pos,vert_per_m)
+    f_map = torch.randn(1, 256, 224, 224)
+    align = VertexAlign((224, 224))
+    c = align([f_map], pos, vert_per_m)
 
-    assert c.shape == torch.Size([100,256])
+    assert c.shape == torch.Size([100, 256])
+
 
 if __name__ == "__main__":
     check_align()

@@ -273,4 +273,10 @@ def box_loss():
 
 
 if __name__ == "__main__":
-    pass
+    a = dummy(2, 2, 3, 3)
+
+    mask = torch.zeros(2, 2, 3, dtype=torch.bool)
+    mask[:, :, 1] = 1
+    print(a)
+    print(mask)
+    print(a[mask.unsqueeze(-1).expand_as(a)].reshape(2, 2, 3))
