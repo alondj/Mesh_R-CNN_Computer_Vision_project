@@ -25,8 +25,8 @@ class pix3dDataset(Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        img_src = self.imgs_src[idx]
-        model_src = self.models_src[idx]
+        img_src = [self.imgs_src[idx]]
+        model_src = [self.models_src[idx]]
 
         imgs = []
         models = []
@@ -39,3 +39,5 @@ class pix3dDataset(Dataset):
 
 if __name__ == "__main__":
     pxd = pix3dDataset("dataset/pix3d/pix3d.json")
+    img, _ = pxd[0]
+    print(img)
