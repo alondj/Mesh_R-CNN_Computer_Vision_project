@@ -3,9 +3,8 @@ from torch import Tensor
 import torch.nn as nn
 import torch.nn.functional as F
 from typing import Tuple, Optional, List
-import timeit
+import datetime
 from utils import conv_output, convT_output, to_block_diagonal, from_block_diagonal, dummy
-
 
 # data representation for graphs:
 # adjacency matrix: we create block diagonal matrix (possibly sparse in the future)
@@ -351,12 +350,15 @@ class Cubify(nn.Module):
         assert 0.0 <= threshold <= 1.0
         self.threshold = threshold
         self.out_device = torch.device(output_device)
+        self.pos_class = torch.Tensor if self.out_device == 'cpu' else torch.cuda.FloatTensor
+        self.idx_class = torch.LongTensor if self.out_device == 'cpu' else torch.cuda.LongTensor
 
     def forward(self, voxel_probas: Tensor) -> Tuple[List[int], List[int], Tensor, Tensor, Tensor]:
         # output is vertices Vx3 , faces Fx3
         N, C, H, W = voxel_probas.shape
-        batched_vertex_positions, batched_faces, batched_adjacency_matrices = [], [], []
+        batched_vertex_positions, batched_faces, batched_adjacency_matrices = [], [], ([],[])
         vertices_per_sample, faces_per_sample = [], []
+        offset=0
 
         # slow implementation just to know what I'm doing
         for n in range(N):
@@ -460,15 +462,32 @@ class Cubify(nn.Module):
                                                                    faces)
             batched_vertex_positions.append(cannonic_vs)
             batched_faces.append(cannonic_fs)
-            batched_adjacency_matrices.append(self.create_undirected_adjacency_matrix(cannonic_fs,
-                                                                                      cannonic_vs.shape[0]))
+            adj_i,adj_j=self.create_undirected_adjacency_matrix(cannonic_fs,offset)
+            batched_adjacency_matrices[0].extend(adj_i)
+            batched_adjacency_matrices[1].extend(adj_j)
             vertices_per_sample.append(cannonic_vs.shape[0])
             faces_per_sample.append(cannonic_fs.shape[0])
+            offset+=cannonic_vs.shape[0]
 
+        time_stemp = datetime.datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
+        print(f"processed grid now merging vertices {time_stemp}")
         vertex_positions = torch.cat(batched_vertex_positions)
+        time_stemp = datetime.datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
+        print(f"merged vertices now merging faces {time_stemp}")
         mesh_faces = torch.cat(batched_faces)
-        adjacency_matrix = to_block_diagonal(batched_adjacency_matrices,
-                                             sparse=False)
+        time_stemp = datetime.datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
+        print(f"merged faces now merging index {time_stemp}")
+        adjacency_matrix = self.merge_index(batched_adjacency_matrices)
+        time_stemp = datetime.datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
+        print(f" index merged {time_stemp}")
+
+        print(vertices_per_sample)
+        print(vertex_positions.shape)
+        
+        print(faces_per_sample)
+        print(mesh_faces.shape)
+
+    
 
         return vertices_per_sample, faces_per_sample, vertex_positions, adjacency_matrix, mesh_faces
 
@@ -483,30 +502,42 @@ class Cubify(nn.Module):
 
         # in this stage we output tensor representation of vertices positions and faces
         # where the faces is represented as a shortTensor 16 bits per v_idx is plenty
-
+        time_stemp = datetime.datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
+        print(f"creating mesh {time_stemp}")
         cannonic_vertices = list(dict.fromkeys(vertices))
         vertex_indices = {v: i for i, v in enumerate(cannonic_vertices)}
 
         efficient_faces = [[vertex_indices[v] for v in f] for f in faces]
 
-        pos_class = torch.Tensor if self.out_device == 'cpu' else torch.cuda.FloatTensor
-        idx_class = torch.LongTensor if self.out_device == 'cpu' else torch.cuda.LongTensor
-        mesh_vertices = pos_class(cannonic_vertices, device=self.out_device)
-        mesh_faces = idx_class(efficient_faces, device=self.out_device)
+        mesh_vertices = self.pos_class(cannonic_vertices, device=self.out_device)
+        mesh_faces = self.idx_class(efficient_faces, device=self.out_device)
 
+        time_stemp = datetime.datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
+        print(f"mesh created {time_stemp}")
         return mesh_vertices, mesh_faces
 
-    #TODO batch sparse to sparse diagonal
-    def create_undirected_adjacency_matrix(self, faces: Tensor, num_vertices: int) -> Tensor:
-        values = []
+    def create_undirected_adjacency_matrix(self, faces: Tensor,offset:int) -> List:
+        time_stemp = datetime.datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
+        print(f"creating adj index {time_stemp}")
         id_i, id_j = [], []
         for v0, v1, v2 in faces:
-            values.extend([1,1,1,1,1,1])
-            id_i.extend([v0,v0,v2,v2,v1,v1])
-            id_j.extend([v1,v2,v0,v1,v0,v2])
+            mv0=v0+offset
+            mv1=v1+offset
+            mv2=v2+offset
+            id_i.extend([mv0,mv0,mv2,mv2,mv1,mv1])
+            id_j.extend([mv1,mv2,mv0,mv1,mv2,mv0])
         
-        return torch.sparse.LongTensor(torch.LongTensor([id_i,id_j]),torch.LongTensor(values),torch.Size([num_vertices,num_vertices])).to(self.out_device)
-
+        time_stemp = datetime.datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
+        print(f"adj index created {time_stemp}")
+        return id_i,id_j
+        
+    def merge_index(self, idxs):
+        idx_i,idx_j=idxs
+        time_stemp = datetime.datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
+        print(f"separated index {time_stemp}")
+        print(f"index size {len(idx_i)}")
+        return self.idx_class([idx_i,idx_j],device=self.out_device)
+        
 class VoxelBranch(nn.Sequential):
     ''' the VoxelBranch predicts a grid of voxel occupancy probabilities by applying a fully convolutional network
         to the input feature map
@@ -707,12 +738,17 @@ def pather_iter_3x3(B, C, H, W, device='cuda'):
     kh, kw, kd = 3, 3, 3  # kernel size
     dh, dw, dd = 1, 1, 1  # stride
     # pad the input by 1 accross the C H W dims
+    print(x)
     x = F.pad(x, (1, 1, 1, 1, 1, 1))
     # create all 3x3x3 cubes centered around each point in the grid
     patches = x.unfold(1, kd, dd).unfold(2, kh, dh).unfold(3, kw, dw)
     patches = patches.contiguous().view(B, C*H*W, kd*kh*kw)
     for batch in patches:
-        for patch in batch:
+        for idx,patch in enumerate(batch):
+            #grid coords
+            z=idx // (H*W)
+            y= (idx -z*H*W) // W
+            x= (idx -z*H*W) % W
             center = kh*kw+kw+1
             left = center-1
             right = center+1
@@ -725,7 +761,7 @@ def pather_iter_3x3(B, C, H, W, device='cuda'):
 def check_cubify():
     cube = Cubify(0.5, 'cuda:0').to('cuda')
 
-    inp = torch.randn(2, 24, 24, 24).to('cuda:0')
+    inp = torch.randn(1, 48,48,48).to('cuda:0')
     meshes = cube(inp)
 
 
@@ -748,4 +784,5 @@ def check_align():
 
 
 if __name__ == "__main__":
-    check_cubify()
+    # check_cubify()
+    pather_iter_3x3(1,4,3,3)
