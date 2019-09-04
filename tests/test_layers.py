@@ -9,7 +9,7 @@ def tesst_cubify():
     cube = Cubify(0.5, 'cuda:0').to('cuda')
 
     inp = torch.randn(1, 48, 48, 48).to('cuda:0')
-    meshes = cube(inp)
+    _ = cube(inp)
 
 
 def test_align():
