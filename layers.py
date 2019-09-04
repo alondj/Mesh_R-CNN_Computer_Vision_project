@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from typing import Tuple, Optional, List
 import datetime
+import math
 from utils import conv_output, convT_output, to_block_diagonal, from_block_diagonal, dummy
 
 # data representation for graphs:
@@ -37,7 +38,7 @@ class GraphConv(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        bound = 1.0/torch.sqrt(self.w0.shape[0])
+        bound = 1.0/math.sqrt(self.w0.size(0))
         self.w0.data.uniform_(-bound, bound)
         self.w1.data.uniform_(-bound, bound)
 
@@ -154,12 +155,12 @@ class ResVertixRefineShapenet(nn.Module):
         # ∑Vx259 if there are initial vertex_features
         # and ∑Vx131 otherwise
         to_concat = [vertex_positions, projected]
-        if vertex_features != None:
+        if not (vertex_features is None):
             assert self.use_input_features
             to_concat = [vertex_features]+to_concat
         else:
             assert not self.use_input_features
-        vertex_features = torch.cat(to_concat, dim=2)
+        vertex_features = torch.cat(to_concat, dim=1)
 
         # transforms input features to 128 features
         new_features = self.resGraphConv0(vertex_features, vertex_adjacency)
@@ -221,27 +222,27 @@ class VertixRefineShapeNet(nn.Module):
         aligned_vertices = self.vertAlign(img_feature_maps, vertex_positions,
                                           vertices_per_sample)
         # ∑Vx128
-        projected = self.linear(aligned_vertices)
+        projected = self.linear0(aligned_vertices)
 
         # ∑Vx259 if there are initial vertex_features
         # and ∑Vx131 otherwise
         to_concat = [vertex_positions, projected]
-        if vertex_features != None:
+        if not (vertex_features is None):
             assert self.use_input_features
             to_concat = [vertex_features]+to_concat
         else:
             assert not self.use_input_features
-        vertex_features = torch.cat(to_concat, dim=2)
+        vertex_features = torch.cat(to_concat, dim=1)
 
         # transforms input features to 128 features
         new_features = self.graphConv0(vertex_features, vertex_adjacency)
 
         # ∑Vx131
-        new_features = torch.cat([vertex_positions, new_features], dim=2)
+        new_features = torch.cat([vertex_positions, new_features], dim=1)
         # ∑Vx128
         new_features = self.graphConv1(new_features, vertex_adjacency)
         # ∑Vx131
-        new_features = torch.cat([vertex_positions, new_features], dim=2)
+        new_features = torch.cat([vertex_positions, new_features], dim=1)
         # ∑Vx128
         new_features = self.graphConv2(new_features, vertex_adjacency)
 
@@ -301,30 +302,29 @@ class VertixRefinePix3D(nn.Module):
         # ∑Vx387 if there are initial vertex_features
         # and ∑Vx259 otherwise
         to_concat = [vertex_positions, algined]
-        if vertex_features != None:
+        if not (vertex_features is None):
             assert self.use_input_features
             to_concat = [vertex_features]+to_concat
         else:
             assert not self.use_input_features
-        vertex_features = torch.cat(to_concat, dim=2)
+        vertex_features = torch.cat(to_concat, dim=1)
 
         # tramsform to input features to 128 features
         new_featues = self.graphConv0(vertex_features, vertex_adjacency)
         # ∑Vx131
-        new_featues = torch.cat([vertex_positions, new_featues], dim=2)
+        new_featues = torch.cat([vertex_positions, new_featues], dim=1)
 
         # ∑Vx128
         new_featues = self.graphConv1(new_featues, vertex_adjacency)
         # ∑Vx131
-        new_featues = torch.cat([vertex_positions, new_featues], dim=2)
+        new_featues = torch.cat([vertex_positions, new_featues], dim=1)
         # ∑Vx128
         new_featues = self.graphConv2(new_featues, vertex_adjacency)
 
         # ∑Vx131
-        new_positions = torch.cat([vertex_positions, new_featues], dim=2)
-
+        new_positions = torch.cat([vertex_positions, new_featues], dim=1)
         # ∑Vx3
-        new_positions = self.linear(new_featues)
+        new_positions = self.linear(new_positions)
         new_positions = self.tanh(new_positions)
         new_positions = vertex_positions+new_positions
 
@@ -536,7 +536,16 @@ class Cubify(nn.Module):
         time_stemp = datetime.datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
         print(f"separated index {time_stemp}")
         print(f"index size {len(idx_i)}")
-        return self.idx_class([idx_i,idx_j],device=self.out_device)
+        out=torch.empty(2,len(idx_i))
+        for i in range(len(idx_i)):
+            # out[0,i]=i
+            print("0")
+        for j in range(len(idx_j)):
+            # out[1,j] = j
+            print("1")
+        time_stemp = datetime.datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
+        print(f"merge_index done {time_stemp}")
+        return out
         
 class VoxelBranch(nn.Sequential):
     ''' the VoxelBranch predicts a grid of voxel occupancy probabilities by applying a fully convolutional network
@@ -733,30 +742,44 @@ class VertexAlign(nn.Module):
         return output
 
 
-def pather_iter_3x3(B, C, H, W, device='cuda'):
-    x = dummy(B, C, H, W).to(device)
-    kh, kw, kd = 3, 3, 3  # kernel size
-    dh, dw, dd = 1, 1, 1  # stride
-    # pad the input by 1 accross the C H W dims
-    print(x)
-    x = F.pad(x, (1, 1, 1, 1, 1, 1))
-    # create all 3x3x3 cubes centered around each point in the grid
-    patches = x.unfold(1, kd, dd).unfold(2, kh, dh).unfold(3, kw, dw)
-    patches = patches.contiguous().view(B, C*H*W, kd*kh*kw)
-    for batch in patches:
-        for idx,patch in enumerate(batch):
-            #grid coords
-            z=idx // (H*W)
-            y= (idx -z*H*W) // W
-            x= (idx -z*H*W) % W
-            center = kh*kw+kw+1
-            left = center-1
-            right = center+1
-            up = center-kw
-            down = center+kw
-            top = center+kh*kw
-            bottom = center-kw*kw
 
+def pather_iter_3x3_cube(B, C, H, W, device='cuda'):
+    #make sure all elements will be processed only once
+    assert C %3 ==0 and H%3 == 0 and W%3==0
+    data = dummy(B, C, H, W).to(device).to(torch.long)
+    # print(x)
+    kh, kw, kd = 3, 3, 3  # kernel size
+    sh, sw, sd = 3, 3, 3  # stride
+    # print(data)
+
+    # create all 3x3x3 cubes centered around each point in the grid
+    patches = data.unfold(1, kd, sd).unfold(2, kh, sh).unfold(3, kw, sw)
+    patches = patches.contiguous().view(-1, kd*kh*kw)
+    numbers=dict()
+    for idx,patch in enumerate(patches):
+        #grid coords
+        # x*height*depth + y*depth + z
+        b=idx // (C*H*W//27)
+        batch_correction = b*C*H*W//27
+        z = 1 + 3*((idx-batch_correction)//(H*W//9))
+        z_correction = (z//3)*(H*W)//9
+        y = 1 + 3*((idx-batch_correction-z_correction)//(W//3))
+        x = 1 + 3*((idx-batch_correction-z_correction)%(W//3))
+        print(f"center coords {(b, z,y,x)}")
+        # values
+        center = kh*kw+kw+1
+        left = center-1
+        right = center+1
+        up = center-kw
+        down = center+kw
+        top = center+kh*kw
+        bottom = center-kw*kw
+
+        for n in patch:
+            numbers[n.item()]=numbers.get(n.item(),0)+1
+    
+    for i in range(B*C*H*W):
+        assert numbers[i]==1
 
 def check_cubify():
     cube = Cubify(0.5, 'cuda:0').to('cuda')
@@ -764,25 +787,191 @@ def check_cubify():
     inp = torch.randn(1, 48,48,48).to('cuda:0')
     meshes = cube(inp)
 
-
 def check_align():
     feature_extractor = FCN(3)
-    img = torch.randn(1, 3, 137, 137)
+    #check multiple graphs with multiple feature maps sizes
+    img = torch.randn(2, 3, 137, 137)
     f_maps = feature_extractor(img)
     align = VertexAlign((137, 137))
     pos = torch.randint(0, 137, (100, 3)).float()
-    vert_per_m = [100]
-
+    vert_per_m = [49,51]
     c = align(f_maps, pos, vert_per_m)
     assert c.shape == torch.Size([100, 3840])
 
-    f_map = torch.randn(1, 256, 224, 224)
+    #check multiple graphs with one feature_map size
+    f_map = torch.randn(2, 256, 224, 224)
     align = VertexAlign((224, 224))
     c = align([f_map], pos, vert_per_m)
-
     assert c.shape == torch.Size([100, 256])
+
+def check_graphConv():
+    conv=GraphConv(3,6)
+    conv.w0=nn.Parameter(torch.ones(*conv.w0.shape))
+    conv.w1 = nn.Parameter(torch.ones(*conv.w1.shape))
+
+    in_f = torch.arange(9).reshape(3,3).float()
+
+    adj=torch.Tensor([[0,1,0],[1,0,1],[0,1,0]])
+    
+    out_f = conv(in_f,adj)
+
+    assert out_f.shape == torch.Size([3,6])
+    assert torch.allclose(out_f,torch.Tensor([15, 36, 33]).view(3,1).expand(3, 6))
+
+def check_resGraphConv():
+    #without projection
+    conv = ResGraphConv(3, 3)
+
+    in_f = torch.arange(9).reshape(3,3).float()
+
+    adj=torch.Tensor([[0,1,0],[1,0,1],[0,1,0]])
+    
+    out_f = conv(in_f,adj)
+
+    assert out_f.shape == torch.Size([3,3])
+
+    #with projection
+    conv = ResGraphConv(3, 10)
+
+    in_f = torch.arange(9).reshape(3, 3).float()
+
+    adj = torch.Tensor([[0, 1, 0], [1, 0, 1], [0, 1, 0]])
+
+    out_f = conv(in_f, adj)
+
+    assert out_f.shape == torch.Size([3, 10])
+
+def check_voxelBranch():
+    branch = VoxelBranch(10,22)
+    inp=torch.randn(2,10,64,64)
+
+    out=branch(inp)
+
+    assert out.shape == torch.Size([2,22,128,128])
+
+def check_FCN():
+    filters=32
+    fcn=FCN(3,filters=filters)
+
+    H=64
+    x=torch.randn(2,3,H,H)
+
+    outs=fcn(x)
+
+    assert len(outs) == 4
+
+    for i,out in enumerate(outs):
+        mul = 2**(i+2)
+        b,c,h,w=2,mul*filters,H//mul,H//mul
+
+        assert out.shape == torch.Size([b,c,h,w])
+
+
+def check_resVertixRefineShapenet():
+    refine0=ResVertixRefineShapenet((224,224),alignment_size=256,use_input_features=False)
+
+    vertices_per_sample=[49,51]
+    vertex_adjacency=torch.zeros(100,100)
+    img_feature_maps = torch.randn(2, 256, 224, 224)
+
+    #circle adjacency
+    for i in range(49):
+        vertex_adjacency[i,(i+1)%49]=1
+        vertex_adjacency[(i-1)%49,i]=1
+    for i in range(49,100):
+        vertex_adjacency[i,49+(i+1)%49]=1
+        vertex_adjacency[49 + (i+1)%49,i]=1
+
+    vertex_positions= torch.randn(100,3)
+
+    new_pos,new_featues=refine0(vertices_per_sample,[img_feature_maps],vertex_adjacency,
+                vertex_positions,vertex_features=None)
+
+    assert new_pos.shape == torch.Size([100,3])
+    assert new_featues.shape == torch.Size([100,128])
+
+    refine1=ResVertixRefineShapenet((224,224),alignment_size=256,use_input_features=True)
+
+    new_pos, new_new_features = refine1(vertices_per_sample, [img_feature_maps], vertex_adjacency,
+                                   vertex_positions, vertex_features=new_featues)
+    assert new_pos.shape == torch.Size([100, 3])
+    assert new_new_features.shape == torch.Size([100, 128])
+    
+
+def check_vertixRefineShapenet():
+    refine0 = VertixRefineShapeNet(
+        (224, 224), alignment_size=256, use_input_features=False)
+
+    vertices_per_sample = [49, 51]
+    vertex_adjacency = torch.zeros(100, 100)
+    img_feature_maps = torch.randn(2, 256, 224, 224)
+
+    #circle adjacency
+    for i in range(49):
+        vertex_adjacency[i, (i+1) % 49] = 1
+        vertex_adjacency[(i-1) % 49, i] = 1
+    for i in range(49, 100):
+        vertex_adjacency[i, 49+(i+1) % 49] = 1
+        vertex_adjacency[49 + (i+1) % 49, i] = 1
+
+    vertex_positions = torch.randn(100, 3)
+
+    new_pos, new_featues = refine0(vertices_per_sample, [img_feature_maps], vertex_adjacency,
+                                   vertex_positions, vertex_features=None)
+
+    assert new_pos.shape == torch.Size([100, 3])
+    assert new_featues.shape == torch.Size([100, 128])
+
+    refine1 = VertixRefineShapeNet(
+        (224, 224), alignment_size=256, use_input_features=True)
+
+    new_pos, new_new_features = refine1(vertices_per_sample, [img_feature_maps], vertex_adjacency,
+                                        vertex_positions, vertex_features=new_featues)
+    assert new_pos.shape == torch.Size([100, 3])
+    assert new_new_features.shape == torch.Size([100, 128])
+
+
+def check_vertixRefinePix3D():
+    refine0 = VertixRefinePix3D(
+        (224, 224), alignment_size=256, use_input_features=False)
+
+    vertices_per_sample = [49, 51]
+    vertex_adjacency = torch.zeros(100, 100)
+    img_feature_maps = torch.randn(2, 256, 224, 224)
+
+    #circle adjacency
+    for i in range(49):
+        vertex_adjacency[i, (i+1) % 49] = 1
+        vertex_adjacency[(i-1) % 49, i] = 1
+    for i in range(49, 100):
+        vertex_adjacency[i, 49+(i+1) % 49] = 1
+        vertex_adjacency[49 + (i+1) % 49, i] = 1
+
+    vertex_positions = torch.randn(100, 3)
+
+    new_pos, new_featues = refine0(vertices_per_sample, img_feature_maps, vertex_adjacency,
+                                   vertex_positions, vertex_features=None)
+
+    assert new_pos.shape == torch.Size([100, 3])
+    assert new_featues.shape == torch.Size([100, 128])
+
+    refine1 = VertixRefinePix3D(
+        (224, 224), alignment_size=256, use_input_features=True)
+
+    new_pos, new_new_features = refine1(vertices_per_sample, img_feature_maps, vertex_adjacency,
+                                        vertex_positions, vertex_features=new_featues)
+    assert new_pos.shape == torch.Size([100, 3])
+    assert new_new_features.shape == torch.Size([100, 128])
 
 
 if __name__ == "__main__":
+    # pather_iter_3x3_cube(1,3*2,3*2,3*2)
     # check_cubify()
-    pather_iter_3x3(1,4,3,3)
+    check_graphConv()
+    check_resGraphConv()
+    check_voxelBranch()
+    check_FCN()
+    check_align()
+    check_vertixRefineShapenet()
+    check_resVertixRefineShapenet()
+    check_vertixRefinePix3D()
