@@ -249,8 +249,8 @@ def batched_point2point_distance(pt0: Tensor, pt1: Optional[Tensor] = None) -> T
 
     # X @ Y [i,j] = <Xi,Yj>
 
-    xx = torch.bmm(pt0, pt1.transpose(2, 1))
-    yy = torch.bmm(pt0, pt1.transpose(2, 1))
+    xx = torch.bmm(pt0, pt0.transpose(2, 1))
+    yy = torch.bmm(pt1, pt1.transpose(2, 1))
     zz = torch.bmm(pt0, pt1.transpose(2, 1))
 
     rx = xx.diagonal(dim1=1, dim2=2).unsqueeze(1).expand_as(zz.transpose(2, 1))
@@ -272,5 +272,9 @@ def box_loss():
     pass
 
 
-if __name__ == "__main__":
+def test_chamfer_distance():
     pass
+
+
+if __name__ == "__main__":
+    test_chamfer_distance()
