@@ -1,21 +1,31 @@
 import json
 import matplotlib.image as mpimg
 from torch.utils.data import Dataset
-
+import scipy.io as sci
+import numpy as np
 
 class pix3dDataset(Dataset):
 
     def __init__(self, dataset_path):
         with open(dataset_path) as json_file:
             dataset = json.load(json_file)
-            self.models_src = []
+            self.models_vox_src = []
             self.imgs_src = []
+            self.pointcloud = []
 
             for p in dataset:
-                img_src = f"dataset/pix3d/{p['img']}"
-                model3d_src = f"dataset/pix3d/{p['model']}"
-                self.imgs_src.append(img_src)
-                self.models_src.append(model3d_src)
+                if p["img"].find("chair") != -1 or p["img"].find("sofa") != -1 or p["img"].find("table") != -1:
+                    img_src = f"dataset/pix3d/{p['img']}"
+                    model3d_src = f"dataset/pix3d/{p['voxel']}"
+
+                    s = p['voxel']
+                    beginning = s.find("voxel.mat")
+                    s = s[0: beginning]
+                    pointcloud_src = f"dataset/pix3d/pointclouds/{s}pcl_1024.npy"
+
+                    self.imgs_src.append(img_src)
+                    self.models_vox_src.append(model3d_src)
+                    self.pointcloud.append(pointcloud_src)
 
     def __len__(self):
         return len(self.imgs_src)
@@ -25,18 +35,23 @@ class pix3dDataset(Dataset):
             idx = slice(idx, idx + 1)
         if type(idx) == slice:
             img_src = self.imgs_src[idx]
-            model_src = self.models_src[idx]
+            model_src = self.models_vox_src[idx]
+            pointcloud_src = self.pointcloud[idx]
 
             imgs = []
             models = []
-            for img_s, model_s in zip(img_src, model_src):
-                imgs.append(mpimg.imread(img_s))
-                models.append(model_s)
+            clouds = []
 
-            return imgs, models
+            for img_s, model_s, pc_src in zip(img_src, model_src, pointcloud_src):
+                imgs.append(mpimg.imread(img_s))
+                models.append(sci.loadmat(model_s))
+                clouds.append(np.load(pc_src))
+
+            return imgs, models, clouds
 
 
 if __name__ == "__main__":
     pxd = pix3dDataset("dataset/pix3d/pix3d.json")
-    img, _ = pxd[0:3]
-    print(len(img))
+    img, voxs, clouds = pxd[0:3]
+    print(clouds[0])
+
