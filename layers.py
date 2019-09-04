@@ -519,17 +519,19 @@ class Cubify(nn.Module):
     def create_undirected_adjacency_matrix(self, faces: Tensor,offset:int) -> List:
         time_stemp = datetime.datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
         print(f"creating adj index {time_stemp}")
-        id_i, id_j = [], []
-        for v0, v1, v2 in faces:
-            mv0=v0+offset
-            mv1=v1+offset
-            mv2=v2+offset
-            id_i.extend([mv0,mv0,mv2,mv2,mv1,mv1])
-            id_j.extend([mv1,mv2,mv0,mv1,mv2,mv0])
+        faces_t=faces.t()
+
+        #get all directed edges
+        idx_i,idx_j=torch.cat([faces_t[:2],faces_t[1:],faces_t[::2]],dim=1)+offset
+
+        #duplicate to get undirected edges
+        idx_i, idx_j = torch.cat([idx_i, idx_j], dim=0), torch.cat([idx_j, idx_i], dim=0)
         
         time_stemp = datetime.datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
         print(f"adj index created {time_stemp}")
-        return id_i,id_j
+
+        return idx_i,idx_j
+        
         
     def merge_index(self, idxs):
         idx_i,idx_j=idxs
