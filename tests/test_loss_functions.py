@@ -1,5 +1,5 @@
 import torch
-from loss_functions import batched_point2point_distance, total_edge_length
+from loss_functions import batched_point2point_distance, total_edge_length, batched_chamfer_distance
 from utils import dummy
 
 
@@ -58,3 +58,26 @@ def test_edge_length():
     expected = (p2p[0, 1]+p2p[1, 0])/2
 
     assert torch.allclose(expected, total_edge_length(p2p, adj))
+
+
+def test_chamfer_distance():
+    pt0 = dummy(1, 10, 3)
+    pt1 = dummy(1, 7, 3)+1
+
+    p2p = batched_point2point_distance(pt0, pt1)
+    l0, idx0, l1, idx1 = batched_chamfer_distance(p2p)
+
+    assert idx0.shape == torch.Size([1, 10])
+    assert idx1.shape == torch.Size([1, 7])
+    assert l0.item() == 300
+    assert l1.item() == 21
+
+    pt0 = dummy(1, 10, 3).expand(2, 10, 3)
+    pt1 = (dummy(1, 7, 3)+1).expand(2, 7, 3)
+    p2p = batched_point2point_distance(pt0, pt1)
+
+    l0, idx0, l1, idx1 = batched_chamfer_distance(p2p)
+    assert idx0.shape == torch.Size([2, 10])
+    assert idx1.shape == torch.Size([2, 7])
+    assert l0.item() == 600
+    assert l1.item() == 42

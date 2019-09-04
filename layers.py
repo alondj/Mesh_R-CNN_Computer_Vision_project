@@ -340,6 +340,10 @@ class Cubify(nn.Module):
         and outputing a list of 3D meshes.
         \n each occupied voxel is replaced with a cuboid triangle mesh with 8 vertices, 18 edges, and 12 faces.
     '''
+    remove_shared_vertices_time=[]
+    create_undirected_adjacency_matrix_time=[]
+    merge_index_time=[]
+    iter_time=[]
     # I assume that z,y,x is the center of the cube so the vertices are at
     # bottom face z-0.5,y+-0.5,x+-0.5
     # top face z+0.5,y+-0.5,x+-0.5
@@ -355,14 +359,18 @@ class Cubify(nn.Module):
 
     def forward(self, voxel_probas: Tensor) -> Tuple[List[int], List[int], Tensor, Tensor, Tensor]:
         # output is vertices Vx3 , faces Fx3
+        assert voxel_probas.ndim == 4
         N, C, H, W = voxel_probas.shape
         batched_vertex_positions, batched_faces, batched_adjacency_matrices = [], [], ([],[])
         vertices_per_sample, faces_per_sample = [], []
         offset=0
 
+        start = datetime.datetime.now()
         # slow implementation just to know what I'm doing
         for n in range(N):
             vertices, faces = [], []
+            iter_start=datetime.datetime.now()
+            #TODO the problem is literlly this for loop
             for z in range(C):
                 for y in range(H):
                     for x in range(W):
@@ -458,6 +466,8 @@ class Cubify(nn.Module):
                                     (v1, v2, v3)
                                 ])
 
+            iter_end=datetime.datetime.now()
+            self.iter_time.append(iter_end-iter_start)
             cannonic_vs, cannonic_fs = self.remove_shared_vertices(vertices,
                                                                    faces)
             batched_vertex_positions.append(cannonic_vs)
@@ -469,30 +479,22 @@ class Cubify(nn.Module):
             faces_per_sample.append(cannonic_fs.shape[0])
             offset+=cannonic_vs.shape[0]
 
-        time_stemp = datetime.datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
-        print(f"processed grid now merging vertices {time_stemp}")
         vertex_positions = torch.cat(batched_vertex_positions)
-        time_stemp = datetime.datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
-        print(f"merged vertices now merging faces {time_stemp}")
         mesh_faces = torch.cat(batched_faces)
-        time_stemp = datetime.datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
-        print(f"merged faces now merging index {time_stemp}")
-        index = self.merge_index(batched_adjacency_matrices)
-        time_stemp = datetime.datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
-        print(f" index merged {time_stemp}")
+        edge_index = self.merge_index(batched_adjacency_matrices)
 
-        print(vertices_per_sample)
-        print(vertex_positions.shape)
-        
-        print(faces_per_sample)
-        print(mesh_faces.shape)
+        fin = datetime.datetime.now()
 
-        print(vertex_positions.device)
-        print(index.device)
-        print(mesh_faces.device)
-    
+        delta=fin-start
 
-        return vertices_per_sample, faces_per_sample, vertex_positions, index, mesh_faces
+        self.exec_time=delta
+
+        assert sum(vertices_per_sample) == vertex_positions.shape[0]
+        assert sum(faces_per_sample) == mesh_faces.shape[0]
+
+        self.summary(N)
+
+        return vertices_per_sample, faces_per_sample, vertex_positions, edge_index, mesh_faces
 
     def remove_shared_vertices(self, vertices: List[Point], faces: List[Face]) -> Tuple[Tensor, Tensor]:
         # for performence reasons in the construction phase we duplicate shared vertices
@@ -505,8 +507,7 @@ class Cubify(nn.Module):
 
         # in this stage we output tensor representation of vertices positions and faces
         # where the faces is represented as a shortTensor 16 bits per v_idx is plenty
-        time_stemp = datetime.datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
-        print(f"creating mesh {time_stemp}")
+        start = datetime.datetime.now()
         cannonic_vertices = list(dict.fromkeys(vertices))
         vertex_indices = {v: i for i, v in enumerate(cannonic_vertices)}
 
@@ -515,13 +516,13 @@ class Cubify(nn.Module):
         mesh_vertices = self.pos_class(cannonic_vertices, device=self.out_device)
         mesh_faces = self.idx_class(efficient_faces, device=self.out_device)
 
-        time_stemp = datetime.datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
-        print(f"mesh created {time_stemp}")
+        fin = datetime.datetime.now()
+        self.remove_shared_vertices_time.extend([fin-start])
         return mesh_vertices, mesh_faces
 
     def create_undirected_adjacency_matrix(self, faces: Tensor,offset:int) -> List:
-        time_stemp = datetime.datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
-        print(f"creating adj index {time_stemp}")
+        start = datetime.datetime.now()
+        
         faces_t=faces.t()
 
         #get all directed edges
@@ -530,24 +531,58 @@ class Cubify(nn.Module):
         #duplicate to get undirected edges
         idx_i, idx_j = torch.cat([idx_i, idx_j], dim=0), torch.cat([idx_j, idx_i], dim=0)
         
-        time_stemp = datetime.datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
-        print(f"adj index created {time_stemp}")
+        fin = datetime.datetime.now()
+
+        self.create_undirected_adjacency_matrix_time.extend([fin-start])
 
         return idx_i,idx_j
         
     def merge_index(self, idxs):
         idx_i,idx_j=idxs
-        time_stemp = datetime.datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
-        print(f"separated index {time_stemp}")
+        start = datetime.datetime.now()
         #we have a list of lists of i indices and a list of lists of j indices
         #just reduce to i indices and j indices
         idx_i=torch.cat(idx_i,dim=0)
         idx_j=torch.cat(idx_j,dim=0)
-        time_stemp = datetime.datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
-        print(f"merge_index done {time_stemp}")
-        print(len(idx_i))
+
+        fin = datetime.datetime.now()
+
         assert len(idx_i) == len(idx_j)
+
+        self.merge_index_time.extend([fin-start])
+
         return torch.stack([idx_i,idx_j])
+
+    def summary(self,b_size):
+        total_remove_shared_time=self.remove_shared_vertices_time[0]
+        total_remove_shared_time=sum(self.remove_shared_vertices_time[1:],total_remove_shared_time)
+                
+        total_adj_creation_time=self.create_undirected_adjacency_matrix_time[0]
+        total_adj_creation_time=sum(self.create_undirected_adjacency_matrix_time[1:],total_adj_creation_time)
+
+        total_merge_time=self.merge_index_time[0]
+        total_merge_time=sum(self.merge_index_time[1:],total_merge_time)
+
+        total_iter_time = self.iter_time[0]
+        total_iter_time = sum(self.iter_time[1:], total_iter_time)
+
+        assert len(self.iter_time)==b_size
+        assert len(self.remove_shared_vertices_time) == b_size
+        assert len(self.create_undirected_adjacency_matrix_time) == b_size
+        assert len(self.merge_index_time) == 1
+
+
+        loop_time = self.exec_time - (total_adj_creation_time+total_merge_time+total_merge_time)
+
+
+        print(f"total {self.exec_time}")
+        print(f"loop time {loop_time}")
+        print(f"total iter time {total_iter_time}")
+        print(f"avg iter time {total_iter_time/b_size}")
+        print(f"face and pos creation {total_remove_shared_time}")
+        print(f"adj creation {total_adj_creation_time}")
+        print(f"total merge time {total_merge_time}")
+
         
 class VoxelBranch(nn.Sequential):
     ''' the VoxelBranch predicts a grid of voxel occupancy probabilities by applying a fully convolutional network
@@ -787,7 +822,7 @@ def pather_iter_3x3_cube(B, C, H, W, device='cuda'):
 def tesst_cubify():
     cube = Cubify(0.5, 'cuda:0').to('cuda')
 
-    inp = torch.randn(1, 48, 48, 48).to('cuda:0')
+    inp = torch.randn(4, 48, 48, 48).to('cuda:0')
     _ = cube(inp)
 
 

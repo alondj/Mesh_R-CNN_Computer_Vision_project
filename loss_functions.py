@@ -127,11 +127,10 @@ def batched_chamfer_distance(p2p_distance: Tensor) -> Tuple[Tensor, Tensor, Tens
         which is defined by the summed distance of each point in cloud A to it's nearest neighbour in cload B\n
         and vice versa
     '''
-    mins, idx1 = torch.min(p2p_distance, 1)
+    mins, idx1 = torch.min(p2p_distance, 2)
     loss_1 = torch.sum(mins)
-    mins, idx2 = torch.min(p2p_distance, 2)
+    mins, idx2 = torch.min(p2p_distance, 1)
     loss_2 = torch.sum(mins)
-
     return loss_1, idx1, loss_2, idx2
 
 
@@ -141,18 +140,19 @@ def batched_normal_distance(p: Tensor, pgt: Tensor, p2p_distance: Tensor, idx_p:
         p2p_distance is a matrix where p2p_distance[i,j]=|pi-pj|^2\n
         k is the number of neighbours used in order to estimate the normal to each point
     '''
+    b_size = p.shape[0]
     # batch x size_p x 3 , batch x size_pgt x 3
     p_normals = compute_normals(p, p2p_distance, k=k)
     pgt_normals = compute_normals(pgt, p2p_distance, k=k)
 
     # batch x size_p x 3
     # expand the batch_idx and broadcast with idx_p of shape batch x size_p
-    nn_normals = pgt_normals[torch.arange(-1, 1), idx_p]
+    nn_normals = pgt_normals[torch.arange(b_size).view(-1, 1), idx_p]
     loss_1 = torch.mul(p_normals, nn_normals).sum(2).abs().sum()
 
     # batch x size_pgt x 3
     # expand the batch_idx and broadcast with idx_gt of shape batch x size_pgt
-    nn_normals = p_normals[torch.arange(-1, 1), idx_gt]
+    nn_normals = p_normals[torch.arange(b_size).view(-1, 1), idx_gt]
     loss_2 = torch.mul(pgt_normals, nn_normals).sum(2).abs().sum()
 
     return loss_1, loss_2
@@ -272,9 +272,5 @@ def box_loss():
     pass
 
 
-def test_chamfer_distance():
-    pass
-
-
 if __name__ == "__main__":
-    test_chamfer_distance()
+    pass
