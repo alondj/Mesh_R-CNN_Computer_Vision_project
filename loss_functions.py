@@ -143,7 +143,7 @@ def batched_normal_distance(p: Tensor, pgt: Tensor, p2p_distance: Tensor, idx_p:
     b_size = p.shape[0]
     # batch x size_p x 3 , batch x size_pgt x 3
     p_normals = compute_normals(p, p2p_distance, k=k)
-    pgt_normals = compute_normals(pgt, p2p_distance, k=k)
+    pgt_normals = compute_normals(pgt, p2p_distance.transpose(2, 1), k=k)
 
     # batch x size_p x 3
     # expand the batch_idx and broadcast with idx_p of shape batch x size_p

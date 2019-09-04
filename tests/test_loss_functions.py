@@ -1,5 +1,6 @@
 import torch
-from loss_functions import batched_point2point_distance, total_edge_length, batched_chamfer_distance
+from loss_functions import batched_point2point_distance, total_edge_length, batched_chamfer_distance, \
+    face_sampling_probabilities_by_surface_area, mesh_sampling
 from utils import dummy
 
 
@@ -81,3 +82,53 @@ def test_chamfer_distance():
     assert idx1.shape == torch.Size([2, 7])
     assert l0.item() == 600
     assert l1.item() == 42
+
+
+def test_face_probas():
+    pos = torch.Tensor([[0, 0, 0],
+                        [1, 0, 0],
+                        [1, 1, 1],  # 2
+                        [0, 0, 2],
+                        [0, 2, 0],
+                        [0, 1, 5],  # 5
+                        [2, 2, 2],
+                        [2, 7, 0],
+                        [2, 3, 5],  # 8
+                        [2, 7, 8],
+                        [0, 3, 2]])
+    faces = torch.LongTensor([[1, 2, 8],
+                              [3, 4, 5],
+                              [0, 1, 7],
+                              [6, 9, 10],
+                              ])
+
+    probas = face_sampling_probabilities_by_surface_area(pos, faces)
+
+    areas = torch.Tensor([1.22474, 4., 3.5, 8.3666])
+    expected_probas = areas / areas.sum()
+
+    assert probas.size(0) == faces.shape[0]
+    assert torch.allclose(expected_probas, probas)
+
+
+def test_sampling():
+    pos = torch.Tensor([[0, 0, 0],
+                        [1, 0, 0],
+                        [1, 1, 1],  # 2
+                        [0, 0, 2],
+                        [0, 2, 0],
+                        [0, 1, 5],  # 5
+                        [2, 2, 2],
+                        [2, 7, 0],
+                        [2, 3, 5],  # 8
+                        [2, 7, 8],
+                        [0, 3, 2]])
+    faces = torch.LongTensor([[1, 2, 8],
+                              [3, 4, 5],
+                              [0, 1, 7],
+                              [6, 9, 10],
+                              ])
+
+    pt = mesh_sampling(pos, faces, num_points=2000)
+
+    assert pt.shape == torch.Size([2000, 3])
