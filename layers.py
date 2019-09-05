@@ -5,16 +5,12 @@ import torch.nn.functional as F
 from typing import Tuple, Optional, List
 import datetime
 import math
-from utils import conv_output, convT_output, to_block_diagonal, from_block_diagonal, dummy
+from utils import aggregate_neighbours, dummy
 
 # data representation for graphs:
 # adjacency matrix: we create block diagonal matrix (possibly sparse in the future)
 # vertex features matrix: we concatenate over the vertex dim resulting in total_vertices x Num_features
 # this representation allows us to batch graph operations
-
-
-# TODO sparse adjacency matrices right now we return the edge index with is not an aadj matrix
-
 
 Point = Tuple[float, float, float]
 Face = Tuple[Point, Point, Point]
@@ -59,7 +55,7 @@ class GraphConv(nn.Module):
         # use the adjacency matrix as a mask
         # note a vertex is not connected to itself
         # ∑Vx∑V @ ∑VxOut => ∑VxOut
-        neighbours = torch.mm(vertex_adjacency, w1_features)
+        neighbours = aggregate_neighbours(vertex_adjacency,w1_features)
 
         # aggregate features of neighbours
         new_features = w0_features + neighbours
@@ -828,8 +824,6 @@ def tesst_cubify():
     _ = cube(inp)
 
 
-
-
 if __name__ == "__main__":
     # pather_iter_3x3_cube(1,3*2,3*2,3*2)
-    tesst_cubify()
+    pass

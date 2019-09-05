@@ -56,9 +56,12 @@ def test_edge_length():
     adj[[0, 1, 2], [1, 0, 1]] = 1
     adj[1, 2] = 1
 
+    edg_index = adj.nonzero()
+    edg_index = torch.stack([edg_index[:, 0], edg_index[:, 1]])
+
     expected = (p2p[0, 1]+p2p[1, 0])/2
 
-    assert torch.allclose(expected, total_edge_length(p2p, adj))
+    assert torch.allclose(expected, total_edge_length(p2p, edg_index))
 
 
 def test_chamfer_distance():

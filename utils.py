@@ -1,3 +1,4 @@
+from itertools import repeat
 from typing import List, Tuple
 import torch
 from torch import Tensor
@@ -42,77 +43,59 @@ def _tuple(n):
 
 
 # ------------------------------------------------------------------------------------------------------
-# cannot be vectorized for irregular shapes
+# utils to multiply sparse adjacency matrices with dense matrices
+# note that we do not need the sparse values as they are binary
+# based on torch-scatter
 
-def to_block_diagonal(matrices, sparse=False) -> Tensor:
-    ''' given multiple matrices of irregular shapes return one matrix which contains them all on the diagonal\n
-        if requested the block matirx will be a sparse instead of dense
-    '''
-    ms = torch.LongTensor([m.shape[0] for m in matrices])
-    ns = torch.LongTensor([m.shape[1] for m in matrices])
-
-    # we do not transpose or reorder in order to have a smaller matrix
-    # maybe later if necessary
-    M = torch.sum(ms)
-    columns = ns+torch.cumsum(ms, 0)-ms
-    N = torch.max(columns)
-
-    device = matrices[0].device
-    dtype = matrices[0].dtype
-
-    if not sparse:
-        dense = torch.zeros(M, N, device=device, dtype=dtype)
-        for idx, m in enumerate(matrices):
-            st_r = torch.sum(ms[:idx])
-            c_end = columns[idx]
-            dense[st_r:st_r+m.shape[0], st_r:c_end] = m
-        return dense
-    else:
-        i_coords = []
-        j_coords = []
-        data = []
-        # occupied indices in the block matrix
-        for idx, m in enumerate(matrices):
-            st_r = torch.sum(ms[:idx])
-            c_end = columns[idx]
-            data.append(m.flatten())
-            for i in range(st_r, st_r+m.shape[0]):
-                for j in range(st_r, c_end):
-                    i_coords.append(i)
-                    j_coords.append(j)
-
-        data = torch.cat(data)
-        return torch.sparse.FloatTensor(torch.LongTensor([i_coords, j_coords]), data, torch.Size([M, N])).to(device)
+def aggregate_neighbours(index, matrix):
+    row, col = index
+    m, n = matrix.shape
+    out = matrix[col]
+    src, out, index, dim = gen_scatter_params(out, row, dim=0, dim_size=m)
+    return out.scatter_add_(dim, index, src)
 
 
-def from_block_diagonal(M: Tensor, shapes) -> List[Tensor]:
-    ''' given a block diagonal matrix sparse or dense extracts the matrices denoted by the given shapes\n
+def maybe_dim_size(index, dim_size=None):
+    if dim_size is not None:
+        return dim_size
+    return index.max().item() + 1 if index.numel() > 0 else 0
 
-        for eg. given m1,m2 with shapes s1 and s2\n
-                M=to_block_diagonal(m1,m2)
-                a,b=from_block_diagonal(M,[s1,s2])
-                a and b will have the same values as m1,m2
-    '''
-    sum_rows = 0
-    ms = []
 
-    if not isinstance(shapes, list):
-        shapes = [shapes]
+def gen_scatter_params(src, index, dim=-1, out=None, dim_size=None, fill_value=0):
+    dim = range(src.dim())[dim]  # Get real dim value.
 
-    if M.is_sparse:
-        M = M.to_dense()
+    # Automatically expand index tensor to the right dimensions.
+    if index.dim() == 1:
+        index_size = list(repeat(1, src.dim()))
+        index_size[dim] = src.size(dim)
+        if index.numel() > 0:
+            index = index.view(index_size).expand_as(src)
+        else:  # PyTorch has a bug when view is used on zero-element tensors.
+            index = src.new_empty(index_size, dtype=torch.long)
 
-    for shape in shapes:
-        m = M[sum_rows:sum_rows+shape[0], sum_rows:sum_rows+shape[1]]
-        ms.append(m)
-        assert m.dtype == M.dtype
-        assert m.device == M.device
-        sum_rows += shape[0]
+    # Broadcasting capabilties: Expand dimensions to match.
+    if src.dim() != index.dim():
+        raise ValueError(
+            ('Number of dimensions of src and index tensor do not match, '
+             'got {} and {}').format(src.dim(), index.dim()))
 
-    return ms
+    expand_size = []
+    for s, i in zip(src.size(), index.size()):
+        expand_size += [-1 if s == i and s != 1 and i != 1 else max(i, s)]
+    src = src.expand(expand_size)
+    index = index.expand_as(src)
+
+    # Generate output tensor if not given.
+    if out is None:
+        out_size = list(src.size())
+        dim_size = maybe_dim_size(index, dim_size)
+        out_size[dim] = dim_size
+        out = src.new_full(out_size, fill_value, device=src.device)
+
+    return src, out, index, dim
+
 
 # ------------------------------------------------------------------------------------------------------
-
 
 # return a dummy deterministic tensor of given shape
 def dummy(*dims):

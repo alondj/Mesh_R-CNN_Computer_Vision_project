@@ -4,9 +4,24 @@ import torch.nn as nn
 from layers import Cubify, FCN, GraphConv, ResGraphConv, VoxelBranch,\
     VertexAlign, ResVertixRefineShapenet, VertixRefineShapeNet, VertixRefinePix3D
 
+from utils import aggregate_neighbours
+
+
+def test_aggregate():
+    a = torch.Tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+    edge_index = torch.LongTensor([[0, 0, 1, 2],
+                                   [1, 2, 1, 0]])
+
+    out = aggregate_neighbours(edge_index, a)
+    expected = torch.Tensor([[11., 13., 15.],
+                             [4.,  5.,  6.],
+                             [1.,  2.,  3.]])
+
+    assert torch.allclose(expected, out)
+
 
 def tesst_cubify():
-    cube = Cubify(0.5, 'cuda:0').to('cuda')
+    cube = Cubify(0.5).to('cuda')
 
     inp = torch.randn(1, 48, 48, 48).to('cuda:0')
     _ = cube(inp)
@@ -39,7 +54,10 @@ def test_graphConv():
 
     adj = torch.Tensor([[0, 1, 0], [1, 0, 1], [0, 1, 0]])
 
-    out_f = conv(in_f, adj)
+    edge_index = adj.nonzero()
+    edge_index = torch.stack([edge_index[:, 0], edge_index[:, 1]])
+    assert edge_index.shape == torch.Size([2, 4])
+    out_f = conv(in_f, edge_index)
 
     assert out_f.shape == torch.Size([3, 6])
     assert torch.allclose(out_f, torch.Tensor(
@@ -54,7 +72,10 @@ def test_resGraphConv():
 
     adj = torch.Tensor([[0, 1, 0], [1, 0, 1], [0, 1, 0]])
 
-    out_f = conv(in_f, adj)
+    edge_index = adj.nonzero()
+    edge_index = torch.stack([edge_index[:, 0], edge_index[:, 1]])
+    assert edge_index.shape == torch.Size([2, 4])
+    out_f = conv(in_f, edge_index)
 
     assert out_f.shape == torch.Size([3, 3])
 
@@ -64,8 +85,10 @@ def test_resGraphConv():
     in_f = torch.arange(9).reshape(3, 3).float()
 
     adj = torch.Tensor([[0, 1, 0], [1, 0, 1], [0, 1, 0]])
-
-    out_f = conv(in_f, adj)
+    edge_index = adj.nonzero()
+    edge_index = torch.stack([edge_index[:, 0], edge_index[:, 1]])
+    assert edge_index.shape == torch.Size([2, 4])
+    out_f = conv(in_f, edge_index)
 
     assert out_f.shape == torch.Size([3, 10])
 
@@ -113,9 +136,12 @@ def test_resVertixRefineShapenet():
         vertex_adjacency[i, 49+(i+1) % 49] = 1
         vertex_adjacency[49 + (i+1) % 49, i] = 1
 
+    edge_index = vertex_adjacency.nonzero()
+    edge_index = torch.stack([edge_index[:, 0], edge_index[:, 1]])
+
     vertex_positions = torch.randn(100, 3)
 
-    new_pos, new_featues = refine0(vertices_per_sample, [img_feature_maps], vertex_adjacency,
+    new_pos, new_featues = refine0(vertices_per_sample, [img_feature_maps], edge_index,
                                    vertex_positions, vertex_features=None)
 
     assert new_pos.shape == torch.Size([100, 3])
@@ -124,7 +150,7 @@ def test_resVertixRefineShapenet():
     refine1 = ResVertixRefineShapenet(
         (224, 224), alignment_size=256, use_input_features=True)
 
-    new_pos, new_new_features = refine1(vertices_per_sample, [img_feature_maps], vertex_adjacency,
+    new_pos, new_new_features = refine1(vertices_per_sample, [img_feature_maps], edge_index,
                                         vertex_positions, vertex_features=new_featues)
     assert new_pos.shape == torch.Size([100, 3])
     assert new_new_features.shape == torch.Size([100, 128])
@@ -146,9 +172,12 @@ def test_vertixRefineShapenet():
         vertex_adjacency[i, 49+(i+1) % 49] = 1
         vertex_adjacency[49 + (i+1) % 49, i] = 1
 
+    edge_index = vertex_adjacency.nonzero()
+    edge_index = torch.stack([edge_index[:, 0], edge_index[:, 1]])
+
     vertex_positions = torch.randn(100, 3)
 
-    new_pos, new_featues = refine0(vertices_per_sample, [img_feature_maps], vertex_adjacency,
+    new_pos, new_featues = refine0(vertices_per_sample, [img_feature_maps], edge_index,
                                    vertex_positions, vertex_features=None)
 
     assert new_pos.shape == torch.Size([100, 3])
@@ -157,7 +186,7 @@ def test_vertixRefineShapenet():
     refine1 = VertixRefineShapeNet(
         (224, 224), alignment_size=256, use_input_features=True)
 
-    new_pos, new_new_features = refine1(vertices_per_sample, [img_feature_maps], vertex_adjacency,
+    new_pos, new_new_features = refine1(vertices_per_sample, [img_feature_maps], edge_index,
                                         vertex_positions, vertex_features=new_featues)
     assert new_pos.shape == torch.Size([100, 3])
     assert new_new_features.shape == torch.Size([100, 128])
@@ -179,9 +208,12 @@ def test_vertixRefinePix3D():
         vertex_adjacency[i, 49+(i+1) % 49] = 1
         vertex_adjacency[49 + (i+1) % 49, i] = 1
 
+    edge_index = vertex_adjacency.nonzero()
+    edge_index = torch.stack([edge_index[:, 0], edge_index[:, 1]])
+
     vertex_positions = torch.randn(100, 3)
 
-    new_pos, new_featues = refine0(vertices_per_sample, img_feature_maps, vertex_adjacency,
+    new_pos, new_featues = refine0(vertices_per_sample, img_feature_maps, edge_index,
                                    vertex_positions, vertex_features=None)
 
     assert new_pos.shape == torch.Size([100, 3])
@@ -190,7 +222,7 @@ def test_vertixRefinePix3D():
     refine1 = VertixRefinePix3D(
         (224, 224), alignment_size=256, use_input_features=True)
 
-    new_pos, new_new_features = refine1(vertices_per_sample, img_feature_maps, vertex_adjacency,
+    new_pos, new_new_features = refine1(vertices_per_sample, img_feature_maps, edge_index,
                                         vertex_positions, vertex_features=new_featues)
     assert new_pos.shape == torch.Size([100, 3])
     assert new_new_features.shape == torch.Size([100, 128])

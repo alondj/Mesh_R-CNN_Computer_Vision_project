@@ -219,10 +219,11 @@ def total_edge_length(p2p_distance: Tensor, vertex_adjacency: Tensor,) -> Tensor
         vertex_adjacency can be many adjacency matrices stacked together in block diagonal format
     '''
     # we mask only (v,v′)∈E
-    masked_p2p_distance = torch.mul(vertex_adjacency, p2p_distance)
+    masked_p2p_distance = p2p_distance[vertex_adjacency[0],
+                                       vertex_adjacency[1]]
 
     # normalize by the number of edges
-    normalize_factor = torch.nonzero(masked_p2p_distance).shape[0]
+    normalize_factor = masked_p2p_distance.shape[0]
 
     # we count each edge twice so when we normalize it cancels out 2*s /2|E|
     return masked_p2p_distance.sum() / normalize_factor
