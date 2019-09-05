@@ -20,14 +20,16 @@ class ShapeNetModel(nn.Module):
 
         refineClass = ResVertixRefineShapenet if residual else VertixRefineShapeNet
 
-        self.refineStages = [refineClass(image_shape, alignment_size=alignmenet_channels,
-                                         use_input_features=False,
-                                         num_features=vertex_feature_dim)]
+        stages = [refineClass(image_shape, alignment_size=alignmenet_channels,
+                              use_input_features=False,
+                              num_features=vertex_feature_dim)]
 
         for _ in range(num_refinement_stages-1):
-            self.refineStages.append(refineClass(image_shape, alignment_size=alignmenet_channels,
-                                                 num_features=vertex_feature_dim,
-                                                 use_input_features=True))
+            stages.append(refineClass(image_shape, alignment_size=alignmenet_channels,
+                                      num_features=vertex_feature_dim,
+                                      use_input_features=True))
+
+        self.refineStages = nn.ModuleList(stages)
 
     def forward(self, img: torch.Tensor) -> dict:
         img_feature_maps = self.feature_extractor(img)
@@ -75,14 +77,16 @@ class Pix3DModel(nn.Module):
         self.voxelBranch = VoxelBranch(*voxelBranchChannels)
         self.cubify = Cubify(cubify_threshold)
 
-        self.refineStages = [VertixRefinePix3D(image_input_size, alignment_size=alignmenet_channels,
-                                               use_input_features=False,
-                                               num_features=vertex_feature_dim)]
+        stages = [VertixRefinePix3D(image_input_size, alignment_size=alignmenet_channels,
+                                    use_input_features=False,
+                                    num_features=vertex_feature_dim)]
 
         for _ in range(num_refinement_stages-1):
-            self.refineStages.append(VertixRefinePix3D(image_input_size, alignment_size=alignmenet_channels,
-                                                       num_features=vertex_feature_dim,
-                                                       use_input_features=True))
+            stages.append(VertixRefinePix3D(image_input_size, alignment_size=alignmenet_channels,
+                                            num_features=vertex_feature_dim,
+                                            use_input_features=True))
+
+        self.refineStages = nn.ModuleList(stages)
 
     def forward(self, image: torch.Tensor) -> dict:
         # TODO for now assume feature extractor handles
