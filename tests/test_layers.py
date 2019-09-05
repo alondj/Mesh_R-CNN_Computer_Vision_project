@@ -1,4 +1,4 @@
-
+import pytest
 import torch
 import torch.nn as nn
 from layers import Cubify, FCN, GraphConv, ResGraphConv, VoxelBranch,\
@@ -6,53 +6,61 @@ from layers import Cubify, FCN, GraphConv, ResGraphConv, VoxelBranch,\
 
 from utils import aggregate_neighbours
 
+devices = ['cpu']
+if torch.cuda.is_available():
+    devices.append('cuda')
 
-def test_aggregate():
-    a = torch.Tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+
+@pytest.mark.parametrize('device', devices)
+def test_aggregate(device):
+    a = torch.Tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9]]).to(device)
     edge_index = torch.LongTensor([[0, 0, 1, 2],
-                                   [1, 2, 1, 0]])
+                                   [1, 2, 1, 0]]).to(device)
 
     out = aggregate_neighbours(edge_index, a)
     expected = torch.Tensor([[11., 13., 15.],
                              [4.,  5.,  6.],
-                             [1.,  2.,  3.]])
+                             [1.,  2.,  3.]]).to(device)
 
     assert torch.allclose(expected, out)
 
 
-def tesst_cubify():
-    cube = Cubify(0.5).to('cuda')
+@pytest.mark.parametrize('device', devices)
+def tesst_cubify(device):
+    cube = Cubify(0.5).to(device)
 
-    inp = torch.randn(1, 48, 48, 48).to('cuda:0')
+    inp = torch.randn(1, 48, 48, 48).to(device)
     _ = cube(inp)
 
 
-def test_align():
-    feature_extractor = FCN(3)
+@pytest.mark.parametrize('device', devices)
+def test_align(device):
+    feature_extractor = FCN(3).to(device)
     # check multiple graphs with multiple feature maps sizes
-    img = torch.randn(2, 3, 137, 137)
+    img = torch.randn(2, 3, 137, 137).to(device)
     f_maps = feature_extractor(img)
     align = VertexAlign((137, 137))
-    pos = torch.randint(0, 137, (100, 3)).float()
+    pos = torch.randint(0, 137, (100, 3)).float().to(device)
     vert_per_m = [49, 51]
     c = align(f_maps, pos, vert_per_m)
     assert c.shape == torch.Size([100, 3840])
 
     # check multiple graphs with one feature_map size
-    f_map = torch.randn(2, 256, 224, 224)
+    f_map = torch.randn(2, 256, 224, 224).to(device)
     align = VertexAlign((224, 224))
     c = align([f_map], pos, vert_per_m)
     assert c.shape == torch.Size([100, 256])
 
 
-def test_graphConv():
-    conv = GraphConv(3, 6)
-    conv.w0 = nn.Parameter(torch.ones(*conv.w0.shape))
-    conv.w1 = nn.Parameter(torch.ones(*conv.w1.shape))
+@pytest.mark.parametrize('device', devices)
+def test_graphConv(device):
+    conv = GraphConv(3, 6).to(device)
+    conv.w0 = nn.Parameter(torch.ones(*conv.w0.shape).to(device))
+    conv.w1 = nn.Parameter(torch.ones(*conv.w1.shape).to(device))
 
-    in_f = torch.arange(9).reshape(3, 3).float()
+    in_f = torch.arange(9).reshape(3, 3).float().to(device)
 
-    adj = torch.Tensor([[0, 1, 0], [1, 0, 1], [0, 1, 0]])
+    adj = torch.Tensor([[0, 1, 0], [1, 0, 1], [0, 1, 0]]).to(device)
 
     edge_index = adj.nonzero()
     edge_index = torch.stack([edge_index[:, 0], edge_index[:, 1]])
@@ -61,16 +69,17 @@ def test_graphConv():
 
     assert out_f.shape == torch.Size([3, 6])
     assert torch.allclose(out_f, torch.Tensor(
-        [15, 36, 33]).view(3, 1).expand(3, 6))
+        [15, 36, 33]).view(3, 1).expand(3, 6).to(device))
 
 
-def test_resGraphConv():
+@pytest.mark.parametrize('device', devices)
+def test_resGraphConv(device):
     # without projection
-    conv = ResGraphConv(3, 3)
+    conv = ResGraphConv(3, 3).to(device)
 
-    in_f = torch.arange(9).reshape(3, 3).float()
+    in_f = torch.arange(9).reshape(3, 3).float().to(device)
 
-    adj = torch.Tensor([[0, 1, 0], [1, 0, 1], [0, 1, 0]])
+    adj = torch.Tensor([[0, 1, 0], [1, 0, 1], [0, 1, 0]]).to(device)
 
     edge_index = adj.nonzero()
     edge_index = torch.stack([edge_index[:, 0], edge_index[:, 1]])
@@ -80,11 +89,11 @@ def test_resGraphConv():
     assert out_f.shape == torch.Size([3, 3])
 
     # with projection
-    conv = ResGraphConv(3, 10)
+    conv = ResGraphConv(3, 10).to(device)
 
-    in_f = torch.arange(9).reshape(3, 3).float()
+    in_f = torch.arange(9).reshape(3, 3).float().to(device)
 
-    adj = torch.Tensor([[0, 1, 0], [1, 0, 1], [0, 1, 0]])
+    adj = torch.Tensor([[0, 1, 0], [1, 0, 1], [0, 1, 0]]).to(device)
     edge_index = adj.nonzero()
     edge_index = torch.stack([edge_index[:, 0], edge_index[:, 1]])
     assert edge_index.shape == torch.Size([2, 4])
@@ -93,21 +102,23 @@ def test_resGraphConv():
     assert out_f.shape == torch.Size([3, 10])
 
 
-def test_voxelBranch():
-    branch = VoxelBranch(10, 22)
-    inp = torch.randn(2, 10, 64, 64)
+@pytest.mark.parametrize('device', devices)
+def test_voxelBranch(device):
+    branch = VoxelBranch(10, 22).to(device)
+    inp = torch.randn(2, 10, 64, 64).to(device)
 
     out = branch(inp)
 
     assert out.shape == torch.Size([2, 22, 128, 128])
 
 
-def test_FCN():
+@pytest.mark.parametrize('device', devices)
+def test_FCN(device):
     filters = 32
-    fcn = FCN(3, filters=filters)
+    fcn = FCN(3, filters=filters).to(device)
 
     H = 64
-    x = torch.randn(2, 3, H, H)
+    x = torch.randn(2, 3, H, H).to(device)
 
     outs = fcn(x)
 
@@ -120,13 +131,14 @@ def test_FCN():
         assert out.shape == torch.Size([b, c, h, w])
 
 
-def test_resVertixRefineShapenet():
+@pytest.mark.parametrize('device', devices)
+def test_resVertixRefineShapenet(device):
     refine0 = ResVertixRefineShapenet(
-        (224, 224), alignment_size=256, use_input_features=False)
+        (224, 224), alignment_size=256, use_input_features=False).to(device)
 
     vertices_per_sample = [49, 51]
-    vertex_adjacency = torch.zeros(100, 100)
-    img_feature_maps = torch.randn(2, 256, 224, 224)
+    vertex_adjacency = torch.zeros(100, 100).to(device)
+    img_feature_maps = torch.randn(2, 256, 224, 224).to(device)
 
     # circle adjacency
     for i in range(49):
@@ -139,7 +151,7 @@ def test_resVertixRefineShapenet():
     edge_index = vertex_adjacency.nonzero()
     edge_index = torch.stack([edge_index[:, 0], edge_index[:, 1]])
 
-    vertex_positions = torch.randn(100, 3)
+    vertex_positions = torch.randn(100, 3).to(device)
 
     new_pos, new_featues = refine0(vertices_per_sample, [img_feature_maps], edge_index,
                                    vertex_positions, vertex_features=None)
@@ -148,7 +160,7 @@ def test_resVertixRefineShapenet():
     assert new_featues.shape == torch.Size([100, 128])
 
     refine1 = ResVertixRefineShapenet(
-        (224, 224), alignment_size=256, use_input_features=True)
+        (224, 224), alignment_size=256, use_input_features=True).to(device)
 
     new_pos, new_new_features = refine1(vertices_per_sample, [img_feature_maps], edge_index,
                                         vertex_positions, vertex_features=new_featues)
@@ -156,13 +168,14 @@ def test_resVertixRefineShapenet():
     assert new_new_features.shape == torch.Size([100, 128])
 
 
-def test_vertixRefineShapenet():
+@pytest.mark.parametrize('device', devices)
+def test_vertixRefineShapenet(device):
     refine0 = VertixRefineShapeNet(
-        (224, 224), alignment_size=256, use_input_features=False)
+        (224, 224), alignment_size=256, use_input_features=False).to(device)
 
     vertices_per_sample = [49, 51]
-    vertex_adjacency = torch.zeros(100, 100)
-    img_feature_maps = torch.randn(2, 256, 224, 224)
+    vertex_adjacency = torch.zeros(100, 100).to(device)
+    img_feature_maps = torch.randn(2, 256, 224, 224).to(device)
 
     # circle adjacency
     for i in range(49):
@@ -175,7 +188,7 @@ def test_vertixRefineShapenet():
     edge_index = vertex_adjacency.nonzero()
     edge_index = torch.stack([edge_index[:, 0], edge_index[:, 1]])
 
-    vertex_positions = torch.randn(100, 3)
+    vertex_positions = torch.randn(100, 3).to(device)
 
     new_pos, new_featues = refine0(vertices_per_sample, [img_feature_maps], edge_index,
                                    vertex_positions, vertex_features=None)
@@ -184,7 +197,7 @@ def test_vertixRefineShapenet():
     assert new_featues.shape == torch.Size([100, 128])
 
     refine1 = VertixRefineShapeNet(
-        (224, 224), alignment_size=256, use_input_features=True)
+        (224, 224), alignment_size=256, use_input_features=True).to(device)
 
     new_pos, new_new_features = refine1(vertices_per_sample, [img_feature_maps], edge_index,
                                         vertex_positions, vertex_features=new_featues)
@@ -192,13 +205,14 @@ def test_vertixRefineShapenet():
     assert new_new_features.shape == torch.Size([100, 128])
 
 
-def test_vertixRefinePix3D():
+@pytest.mark.parametrize('device', devices)
+def test_vertixRefinePix3D(device):
     refine0 = VertixRefinePix3D(
-        (224, 224), alignment_size=256, use_input_features=False)
+        (224, 224), alignment_size=256, use_input_features=False).to(device)
 
     vertices_per_sample = [49, 51]
-    vertex_adjacency = torch.zeros(100, 100)
-    img_feature_maps = torch.randn(2, 256, 224, 224)
+    vertex_adjacency = torch.zeros(100, 100).to(device)
+    img_feature_maps = torch.randn(2, 256, 224, 224).to(device)
 
     # circle adjacency
     for i in range(49):
@@ -211,7 +225,7 @@ def test_vertixRefinePix3D():
     edge_index = vertex_adjacency.nonzero()
     edge_index = torch.stack([edge_index[:, 0], edge_index[:, 1]])
 
-    vertex_positions = torch.randn(100, 3)
+    vertex_positions = torch.randn(100, 3).to(device)
 
     new_pos, new_featues = refine0(vertices_per_sample, img_feature_maps, edge_index,
                                    vertex_positions, vertex_features=None)
@@ -220,7 +234,7 @@ def test_vertixRefinePix3D():
     assert new_featues.shape == torch.Size([100, 128])
 
     refine1 = VertixRefinePix3D(
-        (224, 224), alignment_size=256, use_input_features=True)
+        (224, 224), alignment_size=256, use_input_features=True).to(device)
 
     new_pos, new_new_features = refine1(vertices_per_sample, img_feature_maps, edge_index,
                                         vertex_positions, vertex_features=new_featues)
