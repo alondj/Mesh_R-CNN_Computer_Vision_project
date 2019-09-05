@@ -13,7 +13,7 @@ from utils import conv_output, convT_output, to_block_diagonal, from_block_diago
 # this representation allows us to batch graph operations
 
 
-# TODO sparse adjacency matrices
+# TODO sparse adjacency matrices right now we return the edge index with is not an aadj matrix
 
 
 Point = Tuple[float, float, float]
@@ -129,7 +129,7 @@ class ResVertixRefineShapenet(nn.Module):
 
         self.tanh = nn.Tanh()
 
-    def forward(self, vertices_per_sample: List[int], img_feature_maps: List[Tensor],
+    def forward(self, vertice_index: List[int], img_feature_maps: List[Tensor],
                 vertex_adjacency: Tensor, vertex_positions: Tensor,
                 vertex_features: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
 
@@ -147,7 +147,7 @@ class ResVertixRefineShapenet(nn.Module):
         # project the 3D mesh to the 2D feature planes and pool new features
         # ∑Vx3840
         aligned_vertices = self.vertAlign(img_feature_maps, vertex_positions,
-                                          vertices_per_sample)
+                                          vertice_index)
 
         # ∑Vx128
         projected = self.linear(aligned_vertices)
@@ -202,7 +202,7 @@ class VertixRefineShapeNet(nn.Module):
         self.linear1 = nn.Linear(num_features, ndims, bias=False)
         self.tanh = nn.Tanh()
 
-    def forward(self, vertices_per_sample: List[int], img_feature_maps: List[Tensor],
+    def forward(self, vertice_index: List[int], img_feature_maps: List[Tensor],
                 vertex_adjacency: Tensor, vertex_positions: Tensor,
                 vertex_features: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
 
@@ -220,7 +220,7 @@ class VertixRefineShapeNet(nn.Module):
         # project the 3D mesh to the 2D feature planes and pool new features
         # ∑Vx3840
         aligned_vertices = self.vertAlign(img_feature_maps, vertex_positions,
-                                          vertices_per_sample)
+                                          vertice_index)
         # ∑Vx128
         projected = self.linear0(aligned_vertices)
 
@@ -281,7 +281,7 @@ class VertixRefinePix3D(nn.Module):
                                 ndims, bias=False)
         self.tanh = nn.Tanh()
 
-    def forward(self, vertices_per_sample: List[int], back_bone_features: Tensor, vertex_adjacency: Tensor,
+    def forward(self, vertice_index: List[int], back_bone_features: Tensor, vertex_adjacency: Tensor,
                 vertex_positions: Tensor, vertex_features: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
 
         # note that vertex_features is the concatination of all feature matrices of the batch
@@ -297,7 +297,7 @@ class VertixRefinePix3D(nn.Module):
 
         # project the 3D mesh to the 2D feature planes and pool new features
         algined = self.vertAlign([back_bone_features], vertex_positions,
-                                 vertices_per_sample)
+                                 vertice_index)
 
         # ∑Vx387 if there are initial vertex_features
         # and ∑Vx259 otherwise
@@ -331,7 +331,6 @@ class VertixRefinePix3D(nn.Module):
         return new_positions, new_featues
 
 
-# TODO this implementation is both slow and terribly memory inefficient
 # there is also the marching cube algorithm https://github.com/pmneila/PyMCubes
 # explained https://medium.com/zeg-ai/voxel-to-mesh-conversion-marching-cube-algorithm-43dbb0801359
 # we might want to compare between them
@@ -349,20 +348,18 @@ class Cubify(nn.Module):
     # top face z+0.5,y+-0.5,x+-0.5
 
     # Cubify will generate a mesh for each grid given we can think of a mesh as a group of disjoint graphs
-    def __init__(self, threshold: float, output_device: torch.device):
+    def __init__(self, threshold: float):
         super(Cubify, self).__init__()
         assert 0.0 <= threshold <= 1.0
         self.threshold = threshold
-        self.out_device = torch.device(output_device)
-        self.pos_class = torch.Tensor if self.out_device == 'cpu' else torch.cuda.FloatTensor
-        self.idx_class = torch.LongTensor if self.out_device == 'cpu' else torch.cuda.LongTensor
 
     def forward(self, voxel_probas: Tensor) -> Tuple[List[int], List[int], Tensor, Tensor, Tensor]:
         # output is vertices Vx3 , faces Fx3
         assert voxel_probas.ndim == 4
+        out_device=voxel_probas.device
         N, C, H, W = voxel_probas.shape
         batched_vertex_positions, batched_faces, batched_adjacency_matrices = [], [], ([],[])
-        vertices_per_sample, faces_per_sample = [], []
+        vertice_index, faces_index = [], []
         offset=0
 
         start = datetime.datetime.now()
@@ -468,16 +465,15 @@ class Cubify(nn.Module):
 
             iter_end=datetime.datetime.now()
             self.iter_time.append(iter_end-iter_start)
-            cannonic_vs, cannonic_fs = self.remove_shared_vertices(vertices,
-                                                                   faces)
-            batched_vertex_positions.append(cannonic_vs)
-            batched_faces.append(cannonic_fs)
-            adj_i,adj_j=self.create_undirected_adjacency_matrix(cannonic_fs,offset)
+            vertices, faces = self.remove_shared_vertices(vertices,faces,out_device)
+            batched_vertex_positions.append(vertices)
+            batched_faces.append(faces)
+            adj_i,adj_j=self.create_undirected_adjacency_matrix(faces,offset)
             batched_adjacency_matrices[0].append(adj_i)
             batched_adjacency_matrices[1].append(adj_j)
-            vertices_per_sample.append(cannonic_vs.shape[0])
-            faces_per_sample.append(cannonic_fs.shape[0])
-            offset+=cannonic_vs.shape[0]
+            vertice_index.append(vertices.shape[0])
+            faces_index.append(faces.shape[0])
+            offset+=vertices.shape[0]
 
         vertex_positions = torch.cat(batched_vertex_positions)
         mesh_faces = torch.cat(batched_faces)
@@ -489,14 +485,17 @@ class Cubify(nn.Module):
 
         self.exec_time=delta
 
-        assert sum(vertices_per_sample) == vertex_positions.shape[0]
-        assert sum(faces_per_sample) == mesh_faces.shape[0]
+        assert sum(vertice_index) == vertex_positions.shape[0]
+        assert sum(faces_index) == mesh_faces.shape[0]
+        assert mesh_faces.is_cuda
+        assert edge_index.is_cuda
+        assert vertex_positions.is_cuda
 
         self.summary(N)
 
-        return vertices_per_sample, faces_per_sample, vertex_positions, edge_index, mesh_faces
+        return vertice_index, faces_index, vertex_positions, edge_index, mesh_faces
 
-    def remove_shared_vertices(self, vertices: List[Point], faces: List[Face]) -> Tuple[Tensor, Tensor]:
+    def remove_shared_vertices(self, vertices: List[Point], faces: List[Face],out_device:torch.device) -> Tuple[Tensor, Tensor]:
         # for performence reasons in the construction phase we duplicate shared vertices
         # and also we save the vertices coordinates explicitly inside the faces (each face is a tuple of 3 3D coordinates)
 
@@ -513,8 +512,11 @@ class Cubify(nn.Module):
 
         efficient_faces = [[vertex_indices[v] for v in f] for f in faces]
 
-        mesh_vertices = self.pos_class(cannonic_vertices, device=self.out_device)
-        mesh_faces = self.idx_class(efficient_faces, device=self.out_device)
+        pos_class = torch.Tensor if out_device == 'cpu' else torch.cuda.FloatTensor
+        idx_class = torch.LongTensor if out_device == 'cpu' else torch.cuda.LongTensor
+
+        mesh_vertices = pos_class(cannonic_vertices,device=out_device)
+        mesh_faces = idx_class(efficient_faces,device=out_device)
 
         fin = datetime.datetime.now()
         self.remove_shared_vertices_time.extend([fin-start])
@@ -820,14 +822,14 @@ def pather_iter_3x3_cube(B, C, H, W, device='cuda'):
 
 
 def tesst_cubify():
-    cube = Cubify(0.5, 'cuda:0').to('cuda')
+    cube = Cubify(0.5).to('cuda')
 
-    inp = torch.randn(4, 48, 48, 48).to('cuda:0')
+    inp = torch.randn(1, 48, 48, 48).to('cuda:0')
     _ = cube(inp)
+
 
 
 
 if __name__ == "__main__":
     # pather_iter_3x3_cube(1,3*2,3*2,3*2)
     tesst_cubify()
-    pass

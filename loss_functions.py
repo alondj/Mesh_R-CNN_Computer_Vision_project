@@ -3,7 +3,8 @@ from typing import Tuple, Optional, List
 import torch
 import torch.nn as nn
 from torch import Tensor
-from utils import dummy
+
+
 # TODO maybe later we will use custom kernels for all of these ops
 
 
@@ -114,7 +115,7 @@ def face_sampling_probabilities_by_surface_area(vertex_positions: Tensor, mesh_f
     norm_vecs = ABs.cross(ACs, dim=1)
 
     # we can use the rectangle surface area (|AB x AC|) as the 2 factor will cancel out
-    surface_areas = norm_vecs.mm(norm_vecs.t()).diagonal().sqrt()
+    surface_areas = norm_vecs.norm(p=2, dim=1).abs() / 2
 
     probas = surface_areas / surface_areas.sum()
 
@@ -148,14 +149,14 @@ def batched_normal_distance(p: Tensor, pgt: Tensor, p2p_distance: Tensor, idx_p:
     # batch x size_p x 3
     # expand the batch_idx and broadcast with idx_p of shape batch x size_p
     nn_normals = pgt_normals[torch.arange(b_size).view(-1, 1), idx_p]
-    loss_1 = torch.mul(p_normals, nn_normals).sum(2).abs().sum()
+    loss_0 = torch.mul(p_normals, nn_normals).sum(2).abs().sum()
 
     # batch x size_pgt x 3
     # expand the batch_idx and broadcast with idx_gt of shape batch x size_pgt
     nn_normals = p_normals[torch.arange(b_size).view(-1, 1), idx_gt]
-    loss_2 = torch.mul(pgt_normals, nn_normals).sum(2).abs().sum()
+    loss_1 = torch.mul(pgt_normals, nn_normals).sum(2).abs().sum()
 
-    return loss_1, loss_2
+    return loss_0, loss_1
 
 
 def compute_normals(pt: Tensor, p2p_distance: Tensor, k: int = 10) -> Tensor:
@@ -165,7 +166,7 @@ def compute_normals(pt: Tensor, p2p_distance: Tensor, k: int = 10) -> Tensor:
     # use pca to find the vector with least correlativity aka corresponds to smallest eigen value
     # as it's the best approximation of the normal to the plane approximated by the neighbourhood
 
-    b, p, d = torch.shape
+    b, p, d = pt.shape
 
     # pt batch x num_points x 3
     # p2p_distance batch x num_points x num_points
@@ -185,7 +186,6 @@ def compute_normals(pt: Tensor, p2p_distance: Tensor, k: int = 10) -> Tensor:
     # broadcast Ms and compute scatter matrix
     # Y is batch x points x k 3
     Y = torch.sub(neighbourhoods, Ms.unsqueeze(2))
-
     # batch x points x 3 x 3
     S = torch.matmul(Y.transpose(-2, -1), Y)
 
@@ -193,7 +193,6 @@ def compute_normals(pt: Tensor, p2p_distance: Tensor, k: int = 10) -> Tensor:
     # aka the eigen vector which most different than the approximated plane
     # batch x points x 3 , batch x points x 3 x 3
     eigen_values, eigen_vectors = torch.symeig(S, eigenvectors=True)
-
     # batch x points
     # TODO revisit
     # this is what we want to do but in efficient way
@@ -209,7 +208,6 @@ def compute_normals(pt: Tensor, p2p_distance: Tensor, k: int = 10) -> Tensor:
     # batch x points x 3
     # assumes smallest eigen value is the first need to revisit
     normals = eigen_vectors[:, :, 0]
-
     return normals
 
 
