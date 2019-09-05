@@ -8,10 +8,10 @@ import math
 from utils import aggregate_neighbours, dummy
 
 # data representation for graphs:
-# adjacency matrix: we create block diagonal matrix (possibly sparse in the future)
+# adjacency matrix: we just save occupied indices in coo format
 # vertex features matrix: we concatenate over the vertex dim resulting in total_vertices x Num_features
 # this representation allows us to batch graph operations
-
+# mesh_faces: a matrix of relevant vertex indices
 Point = Tuple[float, float, float]
 Face = Tuple[Point, Point, Point]
 

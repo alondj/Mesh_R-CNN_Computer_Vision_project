@@ -193,21 +193,14 @@ def compute_normals(pt: Tensor, p2p_distance: Tensor, k: int = 10) -> Tensor:
     # aka the eigen vector which most different than the approximated plane
     # batch x points x 3 , batch x points x 3 x 3
     eigen_values, eigen_vectors = torch.symeig(S, eigenvectors=True)
-    # batch x points
-    # TODO revisit
-    # this is what we want to do but in efficient way
-    # for now i assume that the eigen values are sorted
-    # so the one liner below is sufficient
-    # idealy we would like to do something like eigen_vectors[smallest_eigen_values]
-    # smallest_eigen_values = eigen_values.argmin(2)
-    # normals = torch.empty(b, p, d)
-    # for i in range(b):
-    #     for j in range(p):
-    #         normals[i, j] = eigen_vectors[i, j, normals[i, j]]
+    # b x points
+    smallest_eigen_values = eigen_values.argmin(2)
 
     # batch x points x 3
-    # assumes smallest eigen value is the first need to revisit
-    normals = eigen_vectors[:, :, 0]
+    normals = eigen_vectors[torch.arange(b).view(b, 1),
+                            torch.arange(p).view(1, p).expand(b, p),
+                            smallest_eigen_values]
+
     return normals
 
 
@@ -268,8 +261,4 @@ def mask_loss():
 
 
 def box_loss():
-    pass
-
-
-if __name__ == "__main__":
     pass
