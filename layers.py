@@ -590,84 +590,6 @@ class VoxelBranch(nn.Sequential):
             # N x out_channels x V x V
         )
 
-
-# TODO this model is just for testing the real implementation will be either a resnet50 for ShapeNet
-# or mask R-CNN for Pix3D
-class FCN(nn.Module):
-    ''' FCN is a fully convolutional network based on the VGG16 architecture emmitting 4 feature maps\n
-        given an input of shape NxCxHxW and filters=f the 4 feature maps are of shapes:\n
-        Nx(4f)xH/4xW/4 , Nx(8f)xH/8xW/8 , Nx(16f)xH/16xW/16 , Nx(32f)xH/32xW/32
-    '''
-
-    def __init__(self, in_channels: int, filters: int = 64):
-        super(FCN, self).__init__()
-        self.conv0_1 = nn.Conv2d(in_channels, filters, 3, stride=1, padding=1)
-        self.conv0_2 = nn.Conv2d(filters, filters, 3, stride=1, padding=1)
-
-        # cut h and w by half
-        self.conv1_1 = nn.Conv2d(filters, 2*filters, 3, stride=2, padding=1)
-        self.conv1_2 = nn.Conv2d(2*filters, 2*filters, 3, stride=1, padding=1)
-        self.conv1_3 = nn.Conv2d(2*filters, 2*filters, 3, stride=1, padding=1)
-
-        # cut h and w by half
-        self.conv2_1 = nn.Conv2d(2*filters, 4*filters, 3, stride=2, padding=1)
-        self.conv2_2 = nn.Conv2d(4*filters, 4*filters, 3, stride=1, padding=1)
-        self.conv2_3 = nn.Conv2d(4*filters, 4*filters, 3, stride=1, padding=1)
-
-        # cut h and w by half
-        self.conv3_1 = nn.Conv2d(4*filters, 8*filters, 3, stride=2, padding=1)
-        self.conv3_2 = nn.Conv2d(8*filters, 8*filters, 3, stride=1, padding=1)
-        self.conv3_3 = nn.Conv2d(8*filters, 8*filters, 3, stride=1, padding=1)
-
-        # cut h and w by half
-        self.conv4_1 = nn.Conv2d(8*filters, 16*filters, 5, stride=2, padding=2)
-        self.conv4_2 = nn.Conv2d(16*filters, 16*filters,
-                                 3, stride=1, padding=1)
-        self.conv4_3 = nn.Conv2d(16*filters, 16*filters,
-                                 3, stride=1, padding=1)
-
-        # cut h and w by half
-        self.conv5_1 = nn.Conv2d(16*filters, 32*filters,
-                                 5, stride=2, padding=2)
-        self.conv5_2 = nn.Conv2d(32*filters, 32*filters,
-                                 3, stride=1, padding=1)
-        self.conv5_3 = nn.Conv2d(32*filters, 32*filters,
-                                 3, stride=1, padding=1)
-        self.conv5_4 = nn.Conv2d(32*filters, 32*filters,
-                                 3, stride=1, padding=1)
-
-    def forward(self, img) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
-        img = F.relu(self.conv0_1(img))
-        img = F.relu(self.conv0_2(img))
-
-        img = F.relu(self.conv1_1(img))
-        img = F.relu(self.conv1_2(img))
-        img = F.relu(self.conv1_3(img))
-
-        img = F.relu(self.conv2_1(img))
-        img = F.relu(self.conv2_2(img))
-        img = F.relu(self.conv2_3(img))
-        img0 = img
-
-        img = F.relu(self.conv3_1(img))
-        img = F.relu(self.conv3_2(img))
-        img = F.relu(self.conv3_3(img))
-        img1 = img
-
-        img = F.relu(self.conv4_1(img))
-        img = F.relu(self.conv4_2(img))
-        img = F.relu(self.conv4_3(img))
-        img2 = img
-
-        img = F.relu(self.conv5_1(img))
-        img = F.relu(self.conv5_2(img))
-        img = F.relu(self.conv5_3(img))
-        img = F.relu(self.conv5_4(img))
-        img3 = img
-
-        return img0, img1, img2, img3
-
-
 class VertexAlign(nn.Module):
     # explained in the article http://openaccess.thecvf.com/content_ECCV_2018/papers/Nanyang_Wang_Pixel2Mesh_Generating_3D_ECCV_2018_paper.pdf
     # as perceptual feature pooling https://github.com/Tong-ZHAO/Pixel2Mesh-Pytorch
@@ -776,14 +698,16 @@ def pather_iter_3x3_cube(B, C, H, W, device='cuda'):
     data = dummy(B, C, H, W).to(device).to(torch.long)
     # print(x)
     kh, kw, kd = 3, 3, 3  # kernel size
-    sh, sw, sd = 3, 3, 3  # stride
-    # print(data)
-
+    sh, sw, sd = kh-1,kw-1,kd-1  # stride
+    padded=F.pad(data,(0,1))
+    print(data)
+    print()
     # create all 3x3x3 cubes centered around each point in the grid
-    patches = data.unfold(1, kd, sd).unfold(2, kh, sh).unfold(3, kw, sw)
-    patches = patches.contiguous().view(-1, kd*kh*kw)
-    numbers=dict()
+    patches = padded.unfold(1, kd, sd).unfold(2, kh, sh).unfold(3, kw, sw)
+    print(patches.shape)
+    patches = patches.contiguous().view(-1, kd,kh,kw)
     for idx,patch in enumerate(patches):
+        # print(patch)
         #grid coords
         # x*height*depth + y*depth + z
         b=idx // (C*H*W//27)
@@ -792,22 +716,9 @@ def pather_iter_3x3_cube(B, C, H, W, device='cuda'):
         z_correction = (z//3)*(H*W)//9
         y = 1 + 3*((idx-batch_correction-z_correction)//(W//3))
         x = 1 + 3*((idx-batch_correction-z_correction)%(W//3))
-        print(f"center coords {(b, z,y,x)}")
-        # values
-        center = kh*kw+kw+1
-        left = center-1
-        right = center+1
-        up = center-kw
-        down = center+kw
-        top = center+kh*kw
-        bottom = center-kw*kw
 
-        for n in patch:
-            numbers[n.item()]=numbers.get(n.item(),0)+1
-    
-    for i in range(B*C*H*W):
-        assert numbers[i]==1
-
+        
+          
 
 def tesst_cubify():
     cube = Cubify(0.5).to('cuda')
@@ -819,5 +730,6 @@ def tesst_cubify():
 
 
 if __name__ == "__main__":
-    # pather_iter_3x3_cube(1,3*2,3*2,3*2)
-    tesst_cubify()
+    pather_iter_3x3_cube(1,3*1,3*2,3*2)
+    # tesst_cubify()
+

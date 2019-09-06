@@ -1,8 +1,9 @@
 import pytest
 import torch
 import torch.nn as nn
-from layers import Cubify, FCN, GraphConv, ResGraphConv, VoxelBranch,\
+from layers import Cubify, GraphConv, ResGraphConv, VoxelBranch,\
     VertexAlign, ResVertixRefineShapenet, VertixRefineShapeNet, VertixRefinePix3D
+from models import ShapeNetFeatureExtractor
 
 from utils import aggregate_neighbours
 
@@ -35,7 +36,7 @@ def tesst_cubify(device):
 
 @pytest.mark.parametrize('device', devices)
 def test_align(device):
-    feature_extractor = FCN(3).to(device)
+    feature_extractor = ShapeNetFeatureExtractor(3).to(device)
     # check multiple graphs with multiple feature maps sizes
     img = torch.randn(2, 3, 137, 137).to(device)
     f_maps = feature_extractor(img)
@@ -113,14 +114,15 @@ def test_voxelBranch(device):
 
 
 @pytest.mark.parametrize('device', devices)
-def test_FCN(device):
+def test_ShapeNetFeatureExtractor(device):
     filters = 32
-    fcn = FCN(3, filters=filters).to(device)
+    feature_extractor = ShapeNetFeatureExtractor(
+        3, filters=filters).to(device)
 
     H = 64
     x = torch.randn(2, 3, H, H).to(device)
 
-    outs = fcn(x)
+    outs = feature_extractor(x)
 
     assert len(outs) == 4
 
