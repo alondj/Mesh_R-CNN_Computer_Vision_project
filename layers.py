@@ -337,7 +337,6 @@ class Cubify(nn.Module):
     '''
     remove_shared_vertices_time=[]
     create_undirected_adjacency_matrix_time=[]
-    merge_index_time=[]
     iter_time=[]
     # I assume that z,y,x is the center of the cube so the vertices are at
     # bottom face z-0.5,y+-0.5,x+-0.5
@@ -351,6 +350,7 @@ class Cubify(nn.Module):
 
     def forward(self, voxel_probas: Tensor) -> Tuple[List[int], List[int], Tensor, Tensor, Tensor]:
         # output is vertices Vx3 , faces Fx3
+        self.reset_stats()
         assert voxel_probas.ndim == 4
         out_device=voxel_probas.device
         N, C, H, W = voxel_probas.shape
@@ -471,9 +471,15 @@ class Cubify(nn.Module):
             faces_index.append(faces.shape[0])
             offset+=vertices.shape[0]
 
+        #merge all meshes
         vertex_positions = torch.cat(batched_vertex_positions)
         mesh_faces = torch.cat(batched_faces)
-        edge_index = self.merge_index(batched_adjacency_matrices)
+        #we have a list of lists of i indices and a list of lists of j indices
+        #just reduce to i indices and j indices
+        idx_i,idx_j=batched_adjacency_matrices
+        idx_i = torch.cat(idx_i, dim=0)
+        idx_j = torch.cat(idx_j, dim=0)
+        edge_index=torch.stack([idx_i,idx_j])
 
         fin = datetime.datetime.now()
 
@@ -483,9 +489,6 @@ class Cubify(nn.Module):
 
         assert sum(vertice_index) == vertex_positions.shape[0]
         assert sum(faces_index) == mesh_faces.shape[0]
-        assert mesh_faces.is_cuda
-        assert edge_index.is_cuda
-        assert vertex_positions.is_cuda
 
         self.summary(N)
 
@@ -508,8 +511,8 @@ class Cubify(nn.Module):
 
         efficient_faces = [[vertex_indices[v] for v in f] for f in faces]
 
-        pos_class = torch.Tensor if out_device == 'cpu' else torch.cuda.FloatTensor
-        idx_class = torch.LongTensor if out_device == 'cpu' else torch.cuda.LongTensor
+        pos_class = torch.Tensor if out_device == torch.device('cpu') else torch.cuda.FloatTensor
+        idx_class = torch.LongTensor if out_device == torch.device('cpu') else torch.cuda.LongTensor
 
         mesh_vertices = pos_class(cannonic_vertices,device=out_device)
         mesh_faces = idx_class(efficient_faces,device=out_device)
@@ -535,22 +538,6 @@ class Cubify(nn.Module):
 
         return idx_i,idx_j
         
-    def merge_index(self, idxs):
-        idx_i,idx_j=idxs
-        start = datetime.datetime.now()
-        #we have a list of lists of i indices and a list of lists of j indices
-        #just reduce to i indices and j indices
-        idx_i=torch.cat(idx_i,dim=0)
-        idx_j=torch.cat(idx_j,dim=0)
-
-        fin = datetime.datetime.now()
-
-        assert len(idx_i) == len(idx_j)
-
-        self.merge_index_time.extend([fin-start])
-
-        return torch.stack([idx_i,idx_j])
-
     def summary(self,b_size):
         total_remove_shared_time=self.remove_shared_vertices_time[0]
         total_remove_shared_time=sum(self.remove_shared_vertices_time[1:],total_remove_shared_time)
@@ -558,8 +545,6 @@ class Cubify(nn.Module):
         total_adj_creation_time=self.create_undirected_adjacency_matrix_time[0]
         total_adj_creation_time=sum(self.create_undirected_adjacency_matrix_time[1:],total_adj_creation_time)
 
-        total_merge_time=self.merge_index_time[0]
-        total_merge_time=sum(self.merge_index_time[1:],total_merge_time)
 
         total_iter_time = self.iter_time[0]
         total_iter_time = sum(self.iter_time[1:], total_iter_time)
@@ -567,10 +552,9 @@ class Cubify(nn.Module):
         assert len(self.iter_time)==b_size
         assert len(self.remove_shared_vertices_time) == b_size
         assert len(self.create_undirected_adjacency_matrix_time) == b_size
-        assert len(self.merge_index_time) == 1
+        
 
-
-        loop_time = self.exec_time - (total_adj_creation_time+total_merge_time+total_merge_time)
+        loop_time = self.exec_time - (total_adj_creation_time+total_remove_shared_time)
 
 
         print(f"total {self.exec_time}")
@@ -578,9 +562,13 @@ class Cubify(nn.Module):
         print(f"total iter time {total_iter_time}")
         print(f"avg iter time {total_iter_time/b_size}")
         print(f"face and pos creation {total_remove_shared_time}")
-        print(f"adj creation {total_adj_creation_time}")
-        print(f"total merge time {total_merge_time}")
+        print(f"adj creation {total_adj_creation_time}\n")
 
+    def reset_stats(self):
+        self.remove_shared_vertices_time = []
+        self.create_undirected_adjacency_matrix_time = []
+        self.merge_index_time = []
+        self.iter_time = []
         
 class VoxelBranch(nn.Sequential):
     ''' the VoxelBranch predicts a grid of voxel occupancy probabilities by applying a fully convolutional network
@@ -708,11 +696,11 @@ class VertexAlign(nn.Module):
         vertices = vertex_positions.split(vertices_per_mesh)
 
         feats = []
-
         for idx, positions in enumerate(vertices):
             sample_maps = [f_map[idx] for f_map in img_features]
             feats.append(self.single_projection(sample_maps, positions))
 
+        # ∑V x ∑ image channels
         return torch.cat(feats, dim=0)
 
     def single_projection(self, img_features: List[Tensor], vertex_positions: Tensor) -> Tensor:
@@ -721,7 +709,8 @@ class VertexAlign(nn.Module):
         # dimentions are addresed in order as Z,Y,X or d,h,w
         # Y/ Z
         # X/ -Z
-        # TODO magic numbers
+        # TODO magic numbers i think those relate to camerea intrinsics
+        # ∑V
         h = 248 * (vertex_positions[:, 1] / vertex_positions[:, 0]) + 111.5
         w = 248 * (vertex_positions[:, 2] / -vertex_positions[:, 0]) + 111.5
 
@@ -732,6 +721,7 @@ class VertexAlign(nn.Module):
         feats = [self.project(img_feat, h, w)
                  for img_feat in img_features]
 
+        # ∑V x ∑image channels
         output = torch.cat(feats, 1)
 
         return output
@@ -740,6 +730,7 @@ class VertexAlign(nn.Module):
         size_y, size_x = img_feat.shape[-2:]
 
         # scale to current feature map size
+        # ∑V
         x = w / (float(self.w) / size_x)
         y = h / (float(self.h) / size_y)
 
@@ -749,6 +740,7 @@ class VertexAlign(nn.Module):
         x2 = torch.clamp(x2, max=size_x - 1)
         y2 = torch.clamp(y2, max=size_y - 1)
 
+        # C x ∑V x  ∑V
         Q11 = img_feat[:, y1, x1].clone()
         Q12 = img_feat[:, y2, x1].clone()
         Q21 = img_feat[:, y1, x2].clone()
@@ -772,10 +764,10 @@ class VertexAlign(nn.Module):
         Q22 = torch.mul(weights.float().view(-1, 1),
                         torch.transpose(Q22, 0, 1))
 
+        # ∑V x C
         output = Q11 + Q21 + Q12 + Q22
 
         return output
-
 
 
 def pather_iter_3x3_cube(B, C, H, W, device='cuda'):
@@ -820,10 +812,12 @@ def pather_iter_3x3_cube(B, C, H, W, device='cuda'):
 def tesst_cubify():
     cube = Cubify(0.5).to('cuda')
 
-    inp = torch.randn(1, 48, 48, 48).to('cuda:0')
+    inp = torch.randn(2, 48, 48, 48).to('cuda:0')
     _ = cube(inp)
+
+    _ = cube.to('cpu')(inp.to('cpu'))
 
 
 if __name__ == "__main__":
     # pather_iter_3x3_cube(1,3*2,3*2,3*2)
-    pass
+    tesst_cubify()

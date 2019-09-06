@@ -4,11 +4,8 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-
-# TODO maybe later we will use custom kernels for all of these ops
-
-
 # losses of of mesh prediction network
+
 
 def voxel_loss(voxel_prediction: Tensor, voxel_gts: Tensor) -> Tensor:
     # minimize binary cross entropy between predicted voxel occupancy probabilities and true voxel occupancies.
@@ -51,8 +48,7 @@ def batched_mesh_loss(vertex_positions_pred: Tensor, mesh_faces_pred: Tensor, pr
 
 
 # ------------------------------------------------------------------------------------------------------
-# uses a loop
-#  cannot be vectorized if we want to ensurere each mesh gives the same number of points
+#  can be vectorized if necessary
 def batched_mesh_sampling(vertex_positions: Tensor, mesh_faces: Tensor,
                           vertices_per_sample: List[int], faces_per_sample: List[int],
                           num_points: float = 10e3) -> Tensor:
@@ -71,8 +67,8 @@ def mesh_sampling(vertex_positions: Tensor, mesh_faces: Tensor, num_points: floa
     f, d = mesh_faces.shape
     v, p = vertex_positions.shape
     num_points = int(num_points)
-    probas = face_sampling_probabilities_by_surface_area(vertex_positions,
-                                                         mesh_faces)
+    areas = surface_areas(vertex_positions, mesh_faces)
+    probas = areas/areas.sum()
     device = vertex_positions.device
 
     face_indices = torch.multinomial(probas, num_points, replacement=True)
@@ -99,7 +95,7 @@ def mesh_sampling(vertex_positions: Tensor, mesh_faces: Tensor, num_points: floa
     return point_cloud
 
 
-def face_sampling_probabilities_by_surface_area(vertex_positions: Tensor, mesh_faces: Tensor) -> Tensor:
+def surface_areas(vertex_positions: Tensor, mesh_faces: Tensor) -> Tensor:
     # given triangle ABC the area is |AB x AC|/2
     p, d = vertex_positions.shape
     f, nv = mesh_faces.shape
@@ -112,14 +108,13 @@ def face_sampling_probabilities_by_surface_area(vertex_positions: Tensor, mesh_f
     ACs = mesh_points[:, 2]-mesh_points[:, 0]
 
     # f x d
+    # AB x AC
     norm_vecs = ABs.cross(ACs, dim=1)
 
-    # we can use the rectangle surface area (|AB x AC|) as the 2 factor will cancel out
-    surface_areas = norm_vecs.norm(p=2, dim=1).abs() / 2
+    # |AB x AC|/2
+    areas = norm_vecs.norm(p=2, dim=1) / 2
 
-    probas = surface_areas / surface_areas.sum()
-
-    return probas
+    return areas
 
 
 # ------------------------------------------------------------------------------------------------------

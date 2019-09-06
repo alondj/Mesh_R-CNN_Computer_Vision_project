@@ -6,6 +6,8 @@ from layers import VoxelBranch, Cubify, VertixRefinePix3D, VertixRefineShapeNet,
 from typing import Tuple
 
 
+# TODO add backbone feature extractors
+
 class ShapeNetModel(nn.Module):
     def __init__(self, feature_extractor: nn.Module, residual: bool = True,
                  cubify_threshold: float = 0.2, image_shape: Tuple[int, int] = (137, 137),

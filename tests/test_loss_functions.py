@@ -1,7 +1,7 @@
 import pytest
 import torch
 from loss_functions import batched_point2point_distance, total_edge_length, batched_chamfer_distance, \
-    face_sampling_probabilities_by_surface_area, mesh_sampling
+    surface_areas, mesh_sampling
 from utils import dummy
 
 devices = ['cpu']
@@ -24,10 +24,10 @@ def test_p2p_distance(device):
                              [144*3, 81*3, 36*3, 9*3, 0]]).to(device)
 
     # check l2 norm
-    assert torch.allclose(
-        expected, batched_point2point_distance(a, a).squeeze())
+    assert torch.allclose(expected,
+                          batched_point2point_distance(a, a).squeeze())
 
-    assert torch.allclose(expected, p2p)
+    assert torch.allclose(expected, p2p, rtol=1e-5)
 
     p2p = batched_point2point_distance(a, a+1).squeeze()
     # check shape
@@ -114,7 +114,8 @@ def test_face_probas(device):
                               [6, 9, 10],
                               ]).to(device)
 
-    probas = face_sampling_probabilities_by_surface_area(pos, faces)
+    surface_area = surface_areas(pos, faces)
+    probas = surface_area/surface_area.sum()
 
     areas = torch.Tensor([1.22474, 4., 3.5, 8.3666]).to(device)
     expected_probas = areas / areas.sum()
