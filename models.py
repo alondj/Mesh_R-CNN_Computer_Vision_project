@@ -1,3 +1,5 @@
+from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
+from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 import torch
 from torch import Tensor
 import torch.nn as nn
@@ -5,9 +7,11 @@ import torch.nn.functional as F
 from layers import VoxelBranch, Cubify, VertixRefinePix3D, VertixRefineShapeNet,\
     ResVertixRefineShapenet
 from typing import Tuple
-from torchvision.models import resnet50
-
-# TODO add backbone feature extractors
+# FasterRCNN, GeneralizedRCNN, RoIHeads
+from torchvision.models.detection import maskrcnn_resnet50_fpn, MaskRCNN
+from torchvision.models.detection.backbone_utils import resnet_fpn_backbone
+from torchvision.ops import MultiScaleRoIAlign, RoIAlign
+from collections import OrderedDict
 
 
 class ShapeNetModel(nn.Module):
@@ -63,7 +67,7 @@ class ShapeNetModel(nn.Module):
         output['vertice_index'] = vertice_index
         output['faces'] = mesh_faces
         output['voxels'] = voxelGrid
-        output['feature_maps'] = img_feature_maps
+        output['backbone'] = img_feature_maps
 
         return output
 
@@ -93,11 +97,8 @@ class Pix3DModel(nn.Module):
         self.refineStages = nn.ModuleList(stages)
 
     def forward(self, image: Tensor) -> dict:
-        # TODO for now assume feature extractor handles
-        # classification segmentation and masking and return a dictionary with results
-        features = self.feature_extractor(image)
+        backbone_out, roiAlign = self.feature_extractor(image)
 
-        roiAlign = features['roiAlign']
         voxelGrid = self.voxelBranch(roiAlign)
 
         vertice_index, faces_index, vertex_positions0, edge_index, mesh_faces = self.cubify(
@@ -120,7 +121,8 @@ class Pix3DModel(nn.Module):
         output['vertice_index'] = vertice_index
         output['faces'] = mesh_faces
         output['voxels'] = voxelGrid
-        output.update(features)
+        output['backbone'] = backbone_out
+        output['roi_input'] = roiAlign
 
         return output
 
@@ -198,3 +200,56 @@ class ShapeNetFeatureExtractor(nn.Module):
         img3 = img
 
         return img0, img1, img2, img3
+
+
+class Pix3DMask_RCNN(MaskRCNN):
+    def __init__(self, num_classes: int, **MaskRCNN_kwargs):
+        backbone = resnet_fpn_backbone('resnet50', False)
+        super(Pix3DMask_RCNN, self).__init__(
+            backbone, num_classes=num_classes, **MaskRCNN_kwargs)
+
+        # TODO the output shape of this layer is
+        # output(Tensor[K, C, output_size[0], output_size[1]])
+        # how will it work with the voxel branch?
+        self.mesh_ROI = MultiScaleRoIAlign(featmap_names=[0, 1, 2, 3],
+                                           output_size=12,
+                                           sampling_ratio=1)
+
+    def forward(self, images, targets=None):
+        """
+        Arguments:
+            images (list[Tensor]): images to be processed
+            targets (list[Dict[Tensor]]): ground-truth boxes present in the image (optional)
+
+        Returns:
+            result (list[BoxList] or dict[Tensor]): the output from the model.
+                During training, it returns a dict[Tensor] which contains the losses.
+                During testing, it returns list[BoxList] contains additional fields
+                like `scores`, `labels` and `mask` (for Mask R-CNN models).
+
+        """
+        if self.training and targets is None:
+            raise ValueError("In training mode, targets should be passed")
+        original_image_sizes = [img.shape[-2:] for img in images]
+        images, targets = self.transform(images, targets)
+        features = self.backbone(images.tensors)
+        if isinstance(features, torch.Tensor):
+            features = OrderedDict([(0, features)])
+        proposals, proposal_losses = self.rpn(images, features, targets)
+
+        pix3d_input = self.mesh_ROI(features, proposals, images.image_sizes)
+
+        detections, detector_losses = self.roi_heads(
+            features, proposals, images.image_sizes, targets)
+
+        detections = self.transform.postprocess(
+            detections, images.image_sizes, original_image_sizes)
+
+        losses = {}
+        losses.update(detector_losses)
+        losses.update(proposal_losses)
+
+        if self.training:
+            return losses, pix3d_input
+
+        return detections, pix3d_input

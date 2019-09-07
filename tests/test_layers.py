@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from layers import Cubify, GraphConv, ResGraphConv, VoxelBranch,\
     VertexAlign, ResVertixRefineShapenet, VertixRefineShapeNet, VertixRefinePix3D
-from models import ShapeNetFeatureExtractor
+from models import ShapeNetFeatureExtractor, Pix3DMask_RCNN
 
 from utils import aggregate_neighbours
 
