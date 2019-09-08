@@ -203,9 +203,6 @@ class ShapeNetFeatureExtractor(nn.Module):
         return img0, img1, img2, img3
 
 
-url = 'https://download.pytorch.org/models/maskrcnn_resnet50_fpn_coco-bf2d0c1e.pth'
-
-
 class Pix3DMask_RCNN(MaskRCNN):
     def __init__(self, num_classes: int, **MaskRCNN_kwargs):
         backbone = resnet_fpn_backbone('resnet50', False)
@@ -260,6 +257,7 @@ class Pix3DMask_RCNN(MaskRCNN):
 
 
 def pretrained_MaskRcnn(num_classes=100, pretrained=True):
+    url = 'https://download.pytorch.org/models/maskrcnn_resnet50_fpn_coco-bf2d0c1e.pth'
     model = Pix3DMask_RCNN(91)
     if pretrained:
         state_dict = load_url(url, progress=True)

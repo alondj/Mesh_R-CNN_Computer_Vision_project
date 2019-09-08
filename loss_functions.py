@@ -246,14 +246,3 @@ def batched_point2point_distance(pt0: Tensor, pt1: Optional[Tensor] = None) -> T
     P = (rx.transpose(2, 1) + ry - 2*zz)
 
     return P
-
-
-# losses of the backbone network
-
-
-def mask_loss():
-    pass
-
-
-def box_loss():
-    pass

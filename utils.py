@@ -47,7 +47,7 @@ def _tuple(n):
 # note that we do not need the sparse values as they are binary
 # based on torch-scatter
 
-def aggregate_neighbours(index, matrix):
+def aggregate_neighbours(index: Tensor, matrix: Tensor) -> Tensor:
     row, col = index
     m, n = matrix.shape
     out = matrix[col]

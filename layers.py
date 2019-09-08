@@ -353,6 +353,8 @@ class Cubify(nn.Module):
         self.reset_stats()
         assert voxel_probas.ndim == 4
         out_device=voxel_probas.device
+        #TODO for now let it compute on cput as it's faster
+        voxel_probas=voxel_probas.to('cpu')
         N, C, H, W = voxel_probas.shape
         batched_vertex_positions, batched_faces, batched_adjacency_matrices = [], [], ([],[])
         vertice_index, faces_index = [], []
@@ -491,7 +493,9 @@ class Cubify(nn.Module):
         assert sum(faces_index) == mesh_faces.shape[0]
 
         self.summary(N)
-
+        print(((vertex_positions.nelement()*vertex_positions.element_size()) +
+              (mesh_faces.nelement()*mesh_faces.element_size())+
+              (edge_index.nelement()*edge_index.element_size()))/(32*1e6))
         return vertice_index, faces_index, vertex_positions, edge_index, mesh_faces
 
     def remove_shared_vertices(self, vertices: List[Point], faces: List[Face],out_device:torch.device) -> Tuple[Tensor, Tensor]:
@@ -691,45 +695,16 @@ class VertexAlign(nn.Module):
 
         return output
 
-
-def pather_iter_3x3_cube(B, C, H, W, device='cuda'):
-    #make sure all elements will be processed only once
-    assert C %3 ==0 and H%3 == 0 and W%3==0
-    data = dummy(B, C, H, W).to(device).to(torch.long)
-    # print(x)
-    kh, kw, kd = 3, 3, 3  # kernel size
-    sh, sw, sd = kh-1,kw-1,kd-1  # stride
-    padded=F.pad(data,(0,1))
-    print(data)
-    print()
-    # create all 3x3x3 cubes centered around each point in the grid
-    patches = padded.unfold(1, kd, sd).unfold(2, kh, sh).unfold(3, kw, sw)
-    print(patches.shape)
-    patches = patches.contiguous().view(-1, kd,kh,kw)
-    for idx,patch in enumerate(patches):
-        # print(patch)
-        #grid coords
-        # x*height*depth + y*depth + z
-        b=idx // (C*H*W//27)
-        batch_correction = b*C*H*W//27
-        z = 1 + 3*((idx-batch_correction)//(H*W//9))
-        z_correction = (z//3)*(H*W)//9
-        y = 1 + 3*((idx-batch_correction-z_correction)//(W//3))
-        x = 1 + 3*((idx-batch_correction-z_correction)%(W//3))
-
-        
+       
           
 
 def tesst_cubify():
-    cube = Cubify(0.5).to('cuda')
+    cube = Cubify(0.2)
 
-    inp = torch.randn(2, 48, 48, 48).to('cuda:0')
+    inp = torch.randn(32, 48, 48, 48)
     _ = cube(inp)
-
-    _ = cube.to('cpu')(inp.to('cpu'))
 
 
 if __name__ == "__main__":
-    pather_iter_3x3_cube(1,3*1,3*2,3*2)
-    # tesst_cubify()
+    tesst_cubify()
 
