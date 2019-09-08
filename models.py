@@ -7,11 +7,12 @@ import torch.nn.functional as F
 from layers import VoxelBranch, Cubify, VertixRefinePix3D, VertixRefineShapeNet,\
     ResVertixRefineShapenet
 from typing import Tuple
-# FasterRCNN, GeneralizedRCNN, RoIHeads
+# MaskRCNN FasterRCNN, GeneralizedRCNN, RoIHeads MultiScaleRoIAlign RoIAlign
 from torchvision.models.detection import maskrcnn_resnet50_fpn, MaskRCNN
 from torchvision.models.detection.backbone_utils import resnet_fpn_backbone
 from torchvision.ops import MultiScaleRoIAlign, RoIAlign
 from collections import OrderedDict
+from torch.utils.model_zoo import load_url
 
 
 class ShapeNetModel(nn.Module):
@@ -202,6 +203,9 @@ class ShapeNetFeatureExtractor(nn.Module):
         return img0, img1, img2, img3
 
 
+url = 'https://download.pytorch.org/models/maskrcnn_resnet50_fpn_coco-bf2d0c1e.pth'
+
+
 class Pix3DMask_RCNN(MaskRCNN):
     def __init__(self, num_classes: int, **MaskRCNN_kwargs):
         backbone = resnet_fpn_backbone('resnet50', False)
@@ -211,6 +215,7 @@ class Pix3DMask_RCNN(MaskRCNN):
         # TODO the output shape of this layer is
         # output(Tensor[K, C, output_size[0], output_size[1]])
         # how will it work with the voxel branch?
+        # this layer has no parameters which is nice
         self.mesh_ROI = MultiScaleRoIAlign(featmap_names=[0, 1, 2, 3],
                                            output_size=12,
                                            sampling_ratio=1)
@@ -238,7 +243,6 @@ class Pix3DMask_RCNN(MaskRCNN):
         proposals, proposal_losses = self.rpn(images, features, targets)
 
         pix3d_input = self.mesh_ROI(features, proposals, images.image_sizes)
-
         detections, detector_losses = self.roi_heads(
             features, proposals, images.image_sizes, targets)
 
@@ -253,3 +257,29 @@ class Pix3DMask_RCNN(MaskRCNN):
             return losses, pix3d_input
 
         return detections, pix3d_input
+
+
+def pretrained_MaskRcnn(num_classes=100, pretrained=True):
+    model = Pix3DMask_RCNN(91)
+    if pretrained:
+        state_dict = load_url(url, progress=True)
+        model.load_state_dict(state_dict)
+
+    # get the number of input features for the classifier
+    in_features = model.roi_heads.box_predictor.cls_score.in_features
+    # replace the pre-trained head with a new one
+    model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
+
+    # now get the number of input features for the mask classifier
+    in_features_mask = model.roi_heads.mask_predictor.conv5_mask.in_channels
+    hidden_layer = 256
+    # and replace the mask predictor with a new one
+    model.roi_heads.mask_predictor = MaskRCNNPredictor(in_features_mask,
+                                                       hidden_layer,
+                                                       num_classes)
+    print("done")
+    return model
+
+
+if __name__ == "__main__":
+    model = pretrained_MaskRcnn()
