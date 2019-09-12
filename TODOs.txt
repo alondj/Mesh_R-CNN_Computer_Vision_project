@@ -1,11 +1,10 @@
 #TODOs
-1. num_samples of datasets should be for both datasets //DONE
-2. train/test splits //DONE maybe should be a static allocation?
+2. train/test splits  maybe should be a static allocation?
 3. add the json/whatever config of shapeNet
-3. have ground truths for the backbone networks aka ground truths for mask_rcnn and vgg16
+3. have ground truths for the backbone networks aka ground truths for mask_rcnn and resnet50
    things like classes bounding boxes masks etc
-4. pix3D has weird shapes need to see if it works
-5. finish evaluate.py
+4. pix3D has weird shapes need to see if it works with the backbone etc
+5. finish evaluate.py and train.py
 
 6. realy important write scripts to download datasets and preprocess data
    both for pix3D and shapeNet

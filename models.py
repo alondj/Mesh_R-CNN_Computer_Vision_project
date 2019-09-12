@@ -1,22 +1,25 @@
-from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
-from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
+from collections import OrderedDict
+from typing import Dict, List, Optional, Tuple
+
 import torch
-from torch import Tensor
 import torch.nn as nn
 import torch.nn.functional as F
-from layers import VoxelBranch, Cubify, VertixRefinePix3D, VertixRefineShapeNet,\
-    ResVertixRefineShapenet
-from typing import Tuple, List, Optional, Dict
-# MaskRCNN FasterRCNN, GeneralizedRCNN, RoIHeads MultiScaleRoIAlign RoIAlign
-from torchvision.models.detection import maskrcnn_resnet50_fpn, MaskRCNN
-from torchvision.models.detection.mask_rcnn import model_urls as mask_urls
-from torchvision.models.detection.backbone_utils import resnet_fpn_backbone
-from torchvision.models import ResNet, resnet50
-from torchvision.models.resnet import Bottleneck, model_urls as res_urls
-from torchvision.ops import MultiScaleRoIAlign, RoIAlign
-from collections import OrderedDict
+from torch import Tensor
 from torch.utils.model_zoo import load_url
+from torchvision.models import ResNet
+# MaskRCNN FasterRCNN, GeneralizedRCNN, RoIHeads MultiScaleRoIAlign RoIAlign
+from torchvision.models.detection import MaskRCNN
+from torchvision.models.detection.backbone_utils import resnet_fpn_backbone
+from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.models.detection.image_list import ImageList
+from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
+from torchvision.models.detection.mask_rcnn import model_urls as mask_urls
+from torchvision.models.resnet import Bottleneck
+from torchvision.models.resnet import model_urls as res_urls
+from torchvision.ops import MultiScaleRoIAlign, RoIAlign
+
+from layers import (Cubify, ResVertixRefineShapenet, VertixRefinePix3D,
+                    VertixRefineShapeNet, VoxelBranch)
 
 
 class ShapeNetModel(nn.Module):
@@ -82,14 +85,8 @@ class ShapeNetModel(nn.Module):
 
 
 class ShapeNetResNet50(ResNet):
-    def __init__(self, loss_function, block, layers, num_classes=1000, zero_init_residual=False,
-                 groups=1, width_per_group=64, replace_stride_with_dilation=None,
-                 norm_layer=None):
-        super(ShapeNetResNet50, self).__init__(block, layers, num_classes=1000,
-                                               zero_init_residual=False,
-                                               groups=1, width_per_group=64,
-                                               replace_stride_with_dilation=None,
-                                               norm_layer=None)
+    def __init__(self, loss_function, *res_args, **res_kwargs):
+        super(ShapeNetResNet50, self).__init__(*res_args, **res_kwargs)
         self.loss = loss_function
 
     def forward(self, x: Tensor, targets: Optional[Tensor] = None):

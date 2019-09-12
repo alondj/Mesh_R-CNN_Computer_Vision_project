@@ -1,11 +1,10 @@
 import torch
 from torch import Tensor
 import torch.nn as nn
-import torch.nn.functional as F
 from typing import Tuple, Optional, List
 import datetime
 import math
-from utils import aggregate_neighbours, dummy
+from utils import aggregate_neighbours
 
 # data representation for graphs:
 # adjacency matrix: we just save occupied indices in coo format
@@ -353,8 +352,6 @@ class Cubify(nn.Module):
         self.reset_stats()
         assert voxel_probas.ndim == 4
         out_device=voxel_probas.device
-        # #TODO for now let it compute on cpu as it's faster
-        # voxel_probas=voxel_probas.to('cpu')
         N, C, H, W = voxel_probas.shape
         batched_vertex_positions, batched_faces, batched_adjacency_matrices = [], [], ([],[])
         vertice_index, faces_index = [], []
@@ -691,17 +688,3 @@ class VertexAlign(nn.Module):
         output = Q11 + Q21 + Q12 + Q22
 
         return output
-
-       
-          
-
-def tesst_cubify():
-    cube = Cubify(0.2)
-
-    inp = torch.randn(1, 48, 48, 48,device='cuda:0')
-    _ = cube(inp)
-
-
-if __name__ == "__main__":
-    tesst_cubify()
-

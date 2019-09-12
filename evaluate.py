@@ -42,13 +42,13 @@ print(f"evaluating on device: {device}")
 if options.model == 'ShapeNet':
     model = ShapeNetModel(ShapeNetFeatureExtractor(3), residual=options.residual,
                           cubify_threshold=options.threshold,
-                          image_shape=(137, 137),  # TODO ben verify
+                          image_shape=(137, 137),
                           vertex_feature_dim=options.featDim,
                           num_refinement_stages=options.num_refinement_stages)
 else:
     model = Pix3DModel(pretrained_MaskRcnn(num_classes=10, pretrained=False),
                        cubify_threshold=options.threshold,
-                       image_shape=(224, 224),  # TODO ben verify
+                       image_shape=(224, 224),
                        vertex_feature_dim=options.featDim,
                        num_refinement_stages=options.num_refinement_stages)
 

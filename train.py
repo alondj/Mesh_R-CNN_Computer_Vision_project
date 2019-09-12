@@ -1,19 +1,19 @@
 import argparse
+import datetime
+import os
 import platform
 import sys
-import os
-import datetime
 
+import numpy as np
 import torch
 import torch.nn as nn
 import tqdm
 from torch.optim import SGD, Adam
-from torch.utils.data import DataLoader
-import numpy as np
+from torch.utils.data import DataLoader, random_split
+
 from dataloader import pix3dDataset, shapeNet_Dataset
 from loss_functions import total_loss
-from models import (Pix3DModel, pretrained_ResNet50, ShapeNetModel,
-                    pretrained_MaskRcnn)
+from models import Pix3DModel, ShapeNetModel, pretrained_MaskRcnn, pretrained_ResNet50
 
 assert torch.cuda.is_available(), "the training process is slow and requires gpu"
 
@@ -21,9 +21,11 @@ assert torch.cuda.is_available(), "the training process is slow and requires gpu
 def test_train_split(ds, train_ratio, batch_size, num_workers):
     train_amount = int(train_ratio * len(ds))
     test_amount = len(ds) - train_amount
-    train_set, test_set = data.random_split(ds, (train_amount, test_amount))
-    train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
-    test_dl = DataLoader(test_set, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+    train_set, test_set = random_split(ds, (train_amount, test_amount))
+    train_dl = DataLoader(train_set, batch_size=batch_size,
+                          shuffle=True, num_workers=num_workers)
+    test_dl = DataLoader(test_set, batch_size=batch_size,
+                         shuffle=False, num_workers=num_workers)
     return train_dl, test_dl
 
 
@@ -50,12 +52,9 @@ parser.add_argument("--normal", help="weight of the normal loss",
 parser.add_argument("--edge", help="weight of the edge loss",
                     type=float, default=0.5)
 # dataset/loader arguments
-# TODO ben should handle this
 parser.add_argument('--num_samples', type=int,
                     help='number of sampels to dataset', default=None)
 parser.add_argument('--dataRoot', type=str, help='file root')
-parser.add_argument('--dataTrainList', type=str, help='train file list')
-parser.add_argument('--dataTestList', type=str, help='test file list')
 parser.add_argument('--batchSize', '-b', type=int,
                     defaults=16, help='batch size')
 parser.add_argument('--workers', type=int,
@@ -99,7 +98,7 @@ print(f"options were:\n{options}\n")
 # TODO if we wish to train the backbone then we need also things like boxes labels etc.
 # model and datasets/loaders definition
 if model_name == 'ShapeNet':
-    model = ShapeNetModel(pretrained_ResNet50(nn.CrossEntropyLoss, num_classes=10,
+    model = ShapeNetModel(pretrained_ResNet50(nn.functional.cross_entropy, num_classes=10,
                                               pretrained=True),
                           residual=options.residual,
                           cubify_threshold=options.threshold,
@@ -107,7 +106,6 @@ if model_name == 'ShapeNet':
                           vertex_feature_dim=options.featDim,
                           num_refinement_stages=options.num_refinement_stages)
 
-    # TODO why for shapenet and not for pix3d?
     dataset = shapeNet_Dataset(options.dataRoot, options.num_sampels)
     trainloader = DataLoader(
         dataset, batch_size=options.batchSize, shuffle=True, num_workers=options.workers)
@@ -168,13 +166,15 @@ for epoch in range(epochs):
             images = images.to(devices[0])
             voxels_gts = voxels_gts.to(devices[0])
             pts_gts = pts_gts.to(devices[0])
-            # TODO will not work for pix3d
+            # TODO will not work for pix3d write a function that will convert the list
             backbone_gts = backbone_gts.to(devices[0])
 
             # predict and comput loss
             output = model(images, backbone_gts)
 
             # TODO how will we treat the backbone training?
+            # for now we just add it but of course pix3d is more complicated
+            # so it will not work
             backbone_loss = output['backbone']
             loss = total_loss(loss_weights, output, voxel_gts, pts_gts)
             loss += backbone_loss
