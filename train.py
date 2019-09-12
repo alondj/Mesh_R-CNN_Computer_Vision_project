@@ -17,6 +17,16 @@ from models import (Pix3DModel, ShapeNetFeatureExtractor, ShapeNetModel,
 
 assert torch.cuda.is_available(), "the training process is slow and requires gpu"
 
+
+def test_train_split(ds, train_ratio, batch_size, num_workers):
+    train_amount = int(train_ratio * len(ds))
+    test_amount = len(ds) - train_amount
+    train_set, test_set = data.random_split(ds, (train_amount, test_amount))
+    train_dl = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+    test_dl = DataLoader(test_set, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+    return train_dl, test_dl
+
+
 parser = argparse.ArgumentParser()
 
 # model args
