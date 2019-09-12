@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 import numpy as np
 from dataloader import pix3dDataset, shapeNet_Dataset
 from loss_functions import total_loss
-from models import (Pix3DModel, ShapeNetFeatureExtractor, ShapeNetModel,
+from models import (Pix3DModel, pretrained_ResNet50, ShapeNetModel,
                     pretrained_MaskRcnn)
 
 assert torch.cuda.is_available(), "the training process is slow and requires gpu"
@@ -89,7 +89,9 @@ print(f"options were:\n{options}\n")
 # TODO if we wish to train the backbone then we need also things like boxes labels etc.
 # model and datasets/loaders definition
 if model_name == 'ShapeNet':
-    model = ShapeNetModel(ShapeNetFeatureExtractor(3), residual=options.residual,
+    model = ShapeNetModel(pretrained_ResNet50(nn.CrossEntropyLoss, num_classes=10,
+                                              pretrained=True),
+                          residual=options.residual,
                           cubify_threshold=options.threshold,
                           image_shape=(137, 137),
                           vertex_feature_dim=options.featDim,
@@ -110,6 +112,7 @@ else:
         dataset, batch_size=options.batchSize, shuffle=True, num_workers=options.workers)
 
 # use data parallel if possible
+# TODO will not work unless targets are tensors...
 if len(devices > 1):
     model = nn.DataParallel(model)
 
@@ -150,22 +153,24 @@ for epoch in range(epochs):
     with tqdm.tqdm(total=len(trainloader.batch_sampler), file=sys.stdout) as pbar:
         for i, data in enumerate(trainloader, 0):
             optimizer.zero_grad()
-            # TODO ben is this what we are getting? yes
-            images, voxel_gts, pts_gts = data
+            images, voxel_gts, pts_gts, backbone_gts = data
 
-            images = images.cuda()
-            voxels_gts = voxels_gts.cuda()
-            pts_gts = pts_gts.cuda()
+            images = images.to(devices[0])
+            voxels_gts = voxels_gts.to(devices[0])
+            pts_gts = pts_gts.to(devices[0])
+            # TODO will not work for pix3d
+            backbone_gts = backbone_gts.to(devices[0])
 
             # predict and comput loss
-            output = model(images)
+            output = model(images, backbone_gts)
 
             # TODO how will we treat the backbone training?
-            # this only takes our losses into account
+            backbone_loss = output['backbone']
             loss = total_loss(loss_weights, output, voxel_gts, pts_gts)
-
+            loss += backbone_loss
             loss.backward()
             optimizer.step()
+
             epoch_loss.append(loss.item())
             pbar.update()
             avg_loss = np.mean(epoch_loss)

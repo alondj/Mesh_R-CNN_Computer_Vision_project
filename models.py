@@ -6,10 +6,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 from layers import VoxelBranch, Cubify, VertixRefinePix3D, VertixRefineShapeNet,\
     ResVertixRefineShapenet
-from typing import Tuple
+from typing import Tuple, List, Optional, Dict
 # MaskRCNN FasterRCNN, GeneralizedRCNN, RoIHeads MultiScaleRoIAlign RoIAlign
-from torchvision.models.detection import maskrcnn_resnet50_fpn, MaskRCNN
+from torchvision.models.detection import maskrcnn_resnet50_fpn, MaskRCNN, model_urls as mask_urls
 from torchvision.models.detection.backbone_utils import resnet_fpn_backbone
+from torchvision.models import ResNet, resnet50
+from torchvision.models.resnet import Bottleneck, model_urls as res_urls
 from torchvision.ops import MultiScaleRoIAlign, RoIAlign
 from collections import OrderedDict
 from torch.utils.model_zoo import load_url
@@ -41,10 +43,13 @@ class ShapeNetModel(nn.Module):
 
         self.refineStages = nn.ModuleList(stages)
 
-    def forward(self, img: Tensor) -> dict:
-        img_feature_maps = self.feature_extractor(img)
+    def forward(self, img: Tensor, targets=None) -> dict:
+        if self.training and targets is None:
+            raise ValueError("In training mode, targets should be passed")
 
-        upscaled = F.interpolate(img_feature_maps[-1], scale_factor=4.8,
+        backbone_out, feature_maps = self.feature_extractor(img, targets)
+
+        upscaled = F.interpolate(feature_maps[-1], scale_factor=4.8,
                                  mode='bilinear', align_corners=True)
 
         voxelGrid = self.voxelBranch(upscaled)
@@ -52,13 +57,13 @@ class ShapeNetModel(nn.Module):
         vertice_index, faces_index, vertex_positions0, edge_index, mesh_faces = self.cubify(
             voxelGrid)
 
-        vertex_features, vertex_positions1 = self.refineStages[0](vertice_index, img_feature_maps,
+        vertex_features, vertex_positions1 = self.refineStages[0](vertice_index, feature_maps,
                                                                   edge_index, vertex_positions0)
 
         vertex_positions = [vertex_positions0, vertex_positions1]
 
         for stage in self.refineStages[1:]:
-            vertex_features, new_positions = stage(vertice_index, img_feature_maps,
+            vertex_features, new_positions = stage(vertice_index, feature_maps,
                                                    edge_index, vertex_positions[-1], vertex_features=vertex_features)
             vertex_positions.append(new_positions)
 
@@ -69,9 +74,58 @@ class ShapeNetModel(nn.Module):
         output['vertice_index'] = vertice_index
         output['faces'] = mesh_faces
         output['voxels'] = voxelGrid
-        output['backbone'] = img_feature_maps
+        output['backbone'] = backbone_out
+        output['graphs_per_image'] = [1]
 
         return output
+
+
+class ShapeNetResNet50(ResNet):
+    def __init__(self, loss_function, block, layers, num_classes=1000, zero_init_residual=False,
+                 groups=1, width_per_group=64, replace_stride_with_dilation=None,
+                 norm_layer=None):
+        super(ShapeNetResNet50, self).__init__(block, layers, num_classes=1000,
+                                               zero_init_residual=False,
+                                               groups=1, width_per_group=64,
+                                               replace_stride_with_dilation=None,
+                                               norm_layer=None)
+        self.loss = loss_function
+
+    def forward(self, x: Tensor, targets: Optional[Tensor] = None):
+        if self.training and targets is None:
+            raise ValueError("In training mode, targets should be passed")
+
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+
+        img0 = self.layer1(x)
+        img1 = self.layer2(img0)
+        img2 = self.layer3(img1)
+        img3 = self.layer4(img2)
+
+        x = self.avgpool(img3)
+        x = torch.flatten(x, 1)
+        x = self.fc(x)
+
+        if self.training:
+            return self.loss(x, targets), [img0, img1, img2, img3]
+
+        return x, [img0, img1, img2, img3]
+
+
+def pretrained_ResNet50(loss_function, num_classes=10, pretrained=True):
+    url = res_urls['resnet50']
+    model = ShapeNetResNet50(loss_function, Bottleneck, [3, 4, 6, 3])
+    if pretrained:
+        state_dict = load_url(url, progress=True)
+        model.load_state_dict(state_dict)
+
+    if num_classes != model.fc.out_features:
+        model.fc = nn.Linear(model.fc.in_features, num_classes)
+
+    return model
 
 
 class Pix3DModel(nn.Module):
@@ -98,9 +152,12 @@ class Pix3DModel(nn.Module):
 
         self.refineStages = nn.ModuleList(stages)
 
-    # TODO in train mode maskRcnn needs to recive gts as input
-    def forward(self, image: Tensor) -> dict:
-        backbone_out, roiAlign = self.feature_extractor(image)
+    def forward(self, image: Tensor, targets: Optional[List[Dict]] = None) -> dict:
+        if self.training and targets is None:
+            raise ValueError("In training mode, targets should be passed")
+
+        backbone_out, roiAlign, graphs_per_image = self.feature_extractor(
+            image, targets)
 
         voxelGrid = self.voxelBranch(roiAlign)
 
@@ -126,83 +183,9 @@ class Pix3DModel(nn.Module):
         output['voxels'] = voxelGrid
         output['backbone'] = backbone_out
         output['roi_input'] = roiAlign
+        output['graphs_per_image'] = graphs_per_image
 
         return output
-
-
-class ShapeNetFeatureExtractor(nn.Module):
-    ''' ShapeNetFeatureExtractor is a fully convolutional network based on the VGG16 architecture emmitting 4 feature maps\n
-        given an input of shape NxCxHxW and filters=f the 4 feature maps are of shapes:\n
-        Nx(4f)xH/4xW/4 , Nx(8f)xH/8xW/8 , Nx(16f)xH/16xW/16 , Nx(32f)xH/32xW/32
-    '''
-
-    def __init__(self, in_channels: int, filters: int = 64):
-        super(ShapeNetFeatureExtractor, self).__init__()
-        self.conv0_1 = nn.Conv2d(in_channels, filters, 3, stride=1, padding=1)
-        self.conv0_2 = nn.Conv2d(filters, filters, 3, stride=1, padding=1)
-
-        # cut h and w by half
-        self.conv1_1 = nn.Conv2d(filters, 2*filters, 3, stride=2, padding=1)
-        self.conv1_2 = nn.Conv2d(2*filters, 2*filters, 3, stride=1, padding=1)
-        self.conv1_3 = nn.Conv2d(2*filters, 2*filters, 3, stride=1, padding=1)
-
-        # cut h and w by half
-        self.conv2_1 = nn.Conv2d(2*filters, 4*filters, 3, stride=2, padding=1)
-        self.conv2_2 = nn.Conv2d(4*filters, 4*filters, 3, stride=1, padding=1)
-        self.conv2_3 = nn.Conv2d(4*filters, 4*filters, 3, stride=1, padding=1)
-
-        # cut h and w by half
-        self.conv3_1 = nn.Conv2d(4*filters, 8*filters, 3, stride=2, padding=1)
-        self.conv3_2 = nn.Conv2d(8*filters, 8*filters, 3, stride=1, padding=1)
-        self.conv3_3 = nn.Conv2d(8*filters, 8*filters, 3, stride=1, padding=1)
-
-        # cut h and w by half
-        self.conv4_1 = nn.Conv2d(8*filters, 16*filters, 5, stride=2, padding=2)
-        self.conv4_2 = nn.Conv2d(16*filters, 16*filters,
-                                 3, stride=1, padding=1)
-        self.conv4_3 = nn.Conv2d(16*filters, 16*filters,
-                                 3, stride=1, padding=1)
-
-        # cut h and w by half
-        self.conv5_1 = nn.Conv2d(16*filters, 32*filters,
-                                 5, stride=2, padding=2)
-        self.conv5_2 = nn.Conv2d(32*filters, 32*filters,
-                                 3, stride=1, padding=1)
-        self.conv5_3 = nn.Conv2d(32*filters, 32*filters,
-                                 3, stride=1, padding=1)
-        self.conv5_4 = nn.Conv2d(32*filters, 32*filters,
-                                 3, stride=1, padding=1)
-
-    def forward(self, img) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
-        img = F.relu(self.conv0_1(img))
-        img = F.relu(self.conv0_2(img))
-
-        img = F.relu(self.conv1_1(img))
-        img = F.relu(self.conv1_2(img))
-        img = F.relu(self.conv1_3(img))
-
-        img = F.relu(self.conv2_1(img))
-        img = F.relu(self.conv2_2(img))
-        img = F.relu(self.conv2_3(img))
-        img0 = img
-
-        img = F.relu(self.conv3_1(img))
-        img = F.relu(self.conv3_2(img))
-        img = F.relu(self.conv3_3(img))
-        img1 = img
-
-        img = F.relu(self.conv4_1(img))
-        img = F.relu(self.conv4_2(img))
-        img = F.relu(self.conv4_3(img))
-        img2 = img
-
-        img = F.relu(self.conv5_1(img))
-        img = F.relu(self.conv5_2(img))
-        img = F.relu(self.conv5_3(img))
-        img = F.relu(self.conv5_4(img))
-        img3 = img
-
-        return img0, img1, img2, img3
 
 
 class Pix3DMask_RCNN(MaskRCNN):
@@ -219,10 +202,10 @@ class Pix3DMask_RCNN(MaskRCNN):
                                            output_size=12,
                                            sampling_ratio=1)
 
-    def forward(self, images, targets=None):
+    def forward(self, images: Tensor, targets: Optional[List[Dict]] = None):
         """
         Arguments:
-            images (list[Tensor]): images to be processed
+            images (Tensor): images to be processed
             targets (list[Dict[Tensor]]): ground-truth boxes present in the image (optional)
 
         Returns:
@@ -232,6 +215,7 @@ class Pix3DMask_RCNN(MaskRCNN):
                 like `scores`, `labels` and `mask` (for Mask R-CNN models).
 
         """
+        images = list(images.split(1))
         if self.training and targets is None:
             raise ValueError("In training mode, targets should be passed")
         original_image_sizes = [img.shape[-2:] for img in images]
@@ -262,7 +246,7 @@ class Pix3DMask_RCNN(MaskRCNN):
 
 
 def pretrained_MaskRcnn(num_classes=10, pretrained=True):
-    url = 'https://download.pytorch.org/models/maskrcnn_resnet50_fpn_coco-bf2d0c1e.pth'
+    url = mask_urls['maskrcnn_resnet50_fpn_coco']
     model = Pix3DMask_RCNN(91)
     if pretrained:
         state_dict = load_url(url, progress=True)
@@ -280,65 +264,5 @@ def pretrained_MaskRcnn(num_classes=10, pretrained=True):
     model.roi_heads.mask_predictor = MaskRCNNPredictor(in_features_mask,
                                                        hidden_layer,
                                                        num_classes)
-    print("done")
+
     return model
-
-
-if __name__ == "__main__":
-    model = pretrained_MaskRcnn(num_classes=10).cuda().eval()
-
-    x = torch.randn(3, 224, 224).cuda()
-    y = torch.randn(3, 224, 224).cuda()
-    out, pix, _ = model([y, x])
-    v = VoxelBranch(256, 24).cuda()
-    print(pix.shape)
-    print(pix[0][0])
-
-
-# Pix3DMask_RCNN(
-#   (transform): GeneralizedRCNNTransform()
-#   (backbone): BackboneWithFPN(
-#     )
-#     (fpn): FeaturePyramidNetwork(
-#     )
-#   (rpn): RegionProposalNetwork(
-#     (anchor_generator): AnchorGenerator()
-#     (head): RPNHead(
-#       (conv): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-#       (cls_logits): Conv2d(256, 3, kernel_size=(1, 1), stride=(1, 1))
-#       (bbox_pred): Conv2d(256, 12, kernel_size=(1, 1), stride=(1, 1))
-#     )
-#   )
-#   (roi_heads): RoIHeads(
-#     (box_roi_pool): MultiScaleRoIAlign()
-#     (box_head): TwoMLPHead(
-#       (fc6): Linear(in_features=12544, out_features=1024, bias=True)
-#       (fc7): Linear(in_features=1024, out_features=1024, bias=True)
-#     )
-#     (box_predictor): FastRCNNPredictor(
-#       (cls_score): Linear(in_features=1024, out_features=91, bias=True)
-#       (bbox_pred): Linear(in_features=1024, out_features=364, bias=True)
-#     )
-#     (mask_roi_pool): MultiScaleRoIAlign()
-#     (mask_head): MaskRCNNHeads(
-#       (mask_fcn1): Conv2d(256, 256, kernel_size=(
-#           3, 3), stride=(1, 1), padding=(1, 1))
-#       (relu1): ReLU(inplace=True)
-#       (mask_fcn2): Conv2d(256, 256, kernel_size=(
-#           3, 3), stride=(1, 1), padding=(1, 1))
-#       (relu2): ReLU(inplace=True)
-#       (mask_fcn3): Conv2d(256, 256, kernel_size=(
-#           3, 3), stride=(1, 1), padding=(1, 1))
-#       (relu3): ReLU(inplace=True)
-#       (mask_fcn4): Conv2d(256, 256, kernel_size=(
-#           3, 3), stride=(1, 1), padding=(1, 1))
-#       (relu4): ReLU(inplace=True)
-#     )
-#     (mask_predictor): MaskRCNNPredictor(
-#       (conv5_mask): ConvTranspose2d(256, 256, kernel_size=(2, 2), stride=(2, 2))
-#       (relu): ReLU(inplace=True)
-#       (mask_fcn_logits): Conv2d(256, 91, kernel_size=(1, 1), stride=(1, 1))
-#     )
-#   )
-#   (mesh_ROI): MultiScaleRoIAlign()
-# )

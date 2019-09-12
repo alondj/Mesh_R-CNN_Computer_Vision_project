@@ -1,3 +1,5 @@
+#TODOS
+
 1. num_samples of datasets should be for both datasets
 2. train/test splits
 3. have ground truths for the backbone networks aka ground truths for mask_rcnn and vgg16
