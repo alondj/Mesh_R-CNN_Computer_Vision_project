@@ -3,8 +3,8 @@ import torch
 import torch.nn as nn
 from layers import Cubify, GraphConv, ResGraphConv, VoxelBranch,\
     VertexAlign, ResVertixRefineShapenet, VertixRefineShapeNet, VertixRefinePix3D
-from models import ShapeNetFeatureExtractor, Pix3DMask_RCNN
 
+from models import pretrained_ResNet50
 from utils import aggregate_neighbours
 
 devices = ['cpu']
@@ -36,10 +36,11 @@ def tesst_cubify(device):
 
 @pytest.mark.parametrize('device', devices)
 def test_align(device):
-    feature_extractor = ShapeNetFeatureExtractor(3).to(device)
+    feature_extractor = pretrained_ResNet50(
+        loss_function=None, pretrained=False).to(device).eval()
     # check multiple graphs with multiple feature maps sizes
     img = torch.randn(2, 3, 137, 137).to(device)
-    f_maps = feature_extractor(img)
+    _, f_maps = feature_extractor(img)
     align = VertexAlign((137, 137))
     pos = torch.randint(0, 137, (100, 3)).float().to(device)
     vert_per_m = [49, 51]
@@ -115,14 +116,14 @@ def test_voxelBranch(device):
 
 @pytest.mark.parametrize('device', devices)
 def test_ShapeNetFeatureExtractor(device):
-    filters = 32
-    feature_extractor = ShapeNetFeatureExtractor(
-        3, filters=filters).to(device)
+    filters = 64
+    feature_extractor = pretrained_ResNet50(
+        loss_function=None, pretrained=False).to(device).eval()
 
     H = 64
     x = torch.randn(2, 3, H, H).to(device)
 
-    outs = feature_extractor(x)
+    _, outs = feature_extractor(x)
 
     assert len(outs) == 4
 

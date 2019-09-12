@@ -8,7 +8,8 @@ from layers import VoxelBranch, Cubify, VertixRefinePix3D, VertixRefineShapeNet,
     ResVertixRefineShapenet
 from typing import Tuple, List, Optional, Dict
 # MaskRCNN FasterRCNN, GeneralizedRCNN, RoIHeads MultiScaleRoIAlign RoIAlign
-from torchvision.models.detection import maskrcnn_resnet50_fpn, MaskRCNN, model_urls as mask_urls
+from torchvision.models.detection import maskrcnn_resnet50_fpn, MaskRCNN
+from torchvision.models.detection.mask_rcnn import model_urls as mask_urls
 from torchvision.models.detection.backbone_utils import resnet_fpn_backbone
 from torchvision.models import ResNet, resnet50
 from torchvision.models.resnet import Bottleneck, model_urls as res_urls
