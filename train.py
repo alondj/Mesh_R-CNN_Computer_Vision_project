@@ -19,7 +19,6 @@ assert torch.cuda.is_available(), "the training process is slow and requires gpu
 
 parser = argparse.ArgumentParser()
 
-
 # model args
 parser.add_argument(
     "--model", "-m", help="the model we wish to train", choices=["ShapeNet", "Pix3D"], required=True)
@@ -42,6 +41,8 @@ parser.add_argument("--edge", help="weight of the edge loss",
                     type=float, default=0.5)
 # dataset/loader arguments
 # TODO ben should handle this
+parser.add_argument('--num_samples', type=int,
+                    help='number of sampels to ShapeNet dataset', default=None)
 parser.add_argument('--dataRoot', type=str, help='file root')
 parser.add_argument('--dataTrainList', type=str, help='train file list')
 parser.add_argument('--dataTestList', type=str, help='test file list')
@@ -62,11 +63,9 @@ parser.add_argument('--weightDecay', type=float,
                     default=5e-6, help='weight decay for L2 loss')
 parser.add_argument('--lr', type=float, default=1e-4, help='learning rate')
 
-
 options = parser.parse_args()
 
 epochs = options.nEpoch
-
 
 devices = [torch.device('cuda', i)
            for i in range(torch.cuda.device_count())]
@@ -92,11 +91,11 @@ print(f"options were:\n{options}\n")
 if model_name == 'ShapeNet':
     model = ShapeNetModel(ShapeNetFeatureExtractor(3), residual=options.residual,
                           cubify_threshold=options.threshold,
-                          image_shape=(137, 137),  # TODO ben verify
+                          image_shape=(137, 137),  # TODO ben verify // ok
                           vertex_feature_dim=options.featDim,
                           num_refinement_stages=options.num_refinement_stages)
-    # TODO ben dataloading
-    dataset = shapeNet_Dataset(options.dataRoot)
+    # TODO ben dataloading // added num_sampels arg
+    dataset = shapeNet_Dataset(options.dataRoot, options.num_sampels)
     trainloader = DataLoader(
         dataset, batch_size=options.batchSize, shuffle=True, num_workers=options.workers)
     testloader = DataLoader(
@@ -104,7 +103,8 @@ if model_name == 'ShapeNet':
 else:
     model = Pix3DModel(pretrained_MaskRcnn(num_classes=10, pretrained=True),
                        cubify_threshold=options.threshold,
-                       image_shape=(224, 224),  # TODO ben verify
+                       # TODO ben verify // 224,224 => 281,187
+                       image_shape=(281, 187),
                        vertex_feature_dim=options.featDim,
                        num_refinement_stages=options.num_refinement_stages)
     # TODO ben dataloading
@@ -137,14 +137,12 @@ loss_weights = {'c': options.chamfer,
                 'e': options.edge
                 }
 
-
 # checkpoint directory
 now = datetime.datetime.now()
 save_path = now.isoformat()
 dir_name = os.path.join('checkpoints', save_path)
 if not os.path.exists(dir_name):
     os.mkdir(dir_name)
-
 
 # Train model on the dataset
 losses = []
@@ -157,7 +155,7 @@ for epoch in range(epochs):
     with tqdm.tqdm(total=len(trainloader.batch_sampler), file=sys.stdout) as pbar:
         for i, data in enumerate(trainloader, 0):
             optimizer.zero_grad()
-            # TODO ben is this what we are getting?
+            # TODO ben is this what we are getting? yes
             images, voxel_gts, pts_gts = data
 
             images = images.cuda()
@@ -178,7 +176,7 @@ for epoch in range(epochs):
             avg_loss = np.mean(epoch_loss)
 
             # prediodic loss updates
-            if (i+1) % 128 == 0:
+            if (i + 1) % 128 == 0:
                 print(f"Epoch {epoch+1} batch {i+1}")
                 print(f"avg loss for this epoch sor far {avg_loss:.2f}")
 
@@ -190,6 +188,5 @@ for epoch in range(epochs):
     # save the model
     print('saving net...')
     torch.save(model.state_dict(), '%s/model%i.pth' % (dir_name, epoch))
-
 
 print(f"training done avg loss {np.mean(losses)}")
