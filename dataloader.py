@@ -9,14 +9,16 @@ import read_binvox
 
 class pix3dDataset(Dataset):
 
-    def __init__(self, dataset_path):
+    def __init__(self, dataset_path, num_sampels=None):
         with open(dataset_path) as json_file:
             dataset = json.load(json_file)
             self.models_vox_src = []
             self.imgs_src = []
             self.pointcloud = []
 
-            for p in dataset:
+            for i, p in enumerate(dataset):
+                if num_sampels is not None and num_sampels == len(self.imgs_src):
+                    break
                 if p["img"].find("chair") != -1 or p["img"].find("sofa") != -1 or p["img"].find("table") != -1:
                     img_src = f"dataset/pix3d/{p['img']}"
                     model3d_src = f"dataset/pix3d/{p['voxel']}"
@@ -98,7 +100,7 @@ class shapeNet_Dataset(Dataset):
 
 
 if __name__ == "__main__":
-    pxd = pix3dDataset("dataset/pix3d/pix3d.json")
-    #sdb = shapeNet_Dataset("../dataset/shapeNet/ShapeNetVox32", 9)
-    imgs, models, clouds = pxd[0:3]
-    print(imgs[0].shape)
+    pxd = pix3dDataset("dataset/pix3d/pix3d.json", 5)
+    # sdb = shapeNet_Dataset("../dataset/shapeNet/ShapeNetVox32", 9)
+    # imgs, models, clouds = pxd[0:3]
+    print(len(pxd))

@@ -42,7 +42,7 @@ parser.add_argument("--edge", help="weight of the edge loss",
 # dataset/loader arguments
 # TODO ben should handle this
 parser.add_argument('--num_samples', type=int,
-                    help='number of sampels to ShapeNet dataset', default=None)
+                    help='number of sampels to dataset', default=None)
 parser.add_argument('--dataRoot', type=str, help='file root')
 parser.add_argument('--dataTrainList', type=str, help='train file list')
 parser.add_argument('--dataTestList', type=str, help='test file list')
@@ -105,7 +105,7 @@ else:
                        image_shape=(281, 187),
                        vertex_feature_dim=options.featDim,
                        num_refinement_stages=options.num_refinement_stages)
-    dataset = pix3dDataset(options.dataRoot)
+    dataset = pix3dDataset(options.dataRoot, options.num_sampels)
     trainloader = DataLoader(
         dataset, batch_size=options.batchSize, shuffle=True, num_workers=options.workers)
 
