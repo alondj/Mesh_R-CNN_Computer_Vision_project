@@ -91,27 +91,22 @@ print(f"options were:\n{options}\n")
 if model_name == 'ShapeNet':
     model = ShapeNetModel(ShapeNetFeatureExtractor(3), residual=options.residual,
                           cubify_threshold=options.threshold,
-                          image_shape=(137, 137),  # TODO ben verify // ok
+                          image_shape=(137, 137),
                           vertex_feature_dim=options.featDim,
                           num_refinement_stages=options.num_refinement_stages)
-    # TODO ben dataloading // added num_sampels arg
+
+    # TODO why for shapenet and not for pix3d?
     dataset = shapeNet_Dataset(options.dataRoot, options.num_sampels)
     trainloader = DataLoader(
-        dataset, batch_size=options.batchSize, shuffle=True, num_workers=options.workers)
-    testloader = DataLoader(
         dataset, batch_size=options.batchSize, shuffle=True, num_workers=options.workers)
 else:
     model = Pix3DModel(pretrained_MaskRcnn(num_classes=10, pretrained=True),
                        cubify_threshold=options.threshold,
-                       # TODO ben verify // 224,224 => 281,187
                        image_shape=(281, 187),
                        vertex_feature_dim=options.featDim,
                        num_refinement_stages=options.num_refinement_stages)
-    # TODO ben dataloading
     dataset = pix3dDataset(options.dataRoot)
     trainloader = DataLoader(
-        dataset, batch_size=options.batchSize, shuffle=True, num_workers=options.workers)
-    testloader = DataLoader(
         dataset, batch_size=options.batchSize, shuffle=True, num_workers=options.workers)
 
 # use data parallel if possible

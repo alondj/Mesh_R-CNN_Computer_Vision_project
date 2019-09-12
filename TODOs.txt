@@ -1,0 +1,16 @@
+1. num_samples of datasets should be for both datasets
+2. train/test splits
+3. have ground truths for the backbone networks aka ground truths for mask_rcnn and vgg16
+   things like classes bounding boxes masks etc
+4. pix3D has weird shapes need to see if it works
+5. finish evaluate.py
+
+6. realy important write scripts to download datasets and preprocess data
+   both for pix3D and shapeNet
+
+7. finish Cubify https://github.com/pytorch/extension-cpp/tree/master/cuda
+    there is another option explained at jit.py
+
+8. for pix3D handle ROI_ALIGN and in general handle the backbone during training
+
+9. any other TODO in the project

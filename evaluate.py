@@ -67,17 +67,8 @@ img = load_file(options.dataPath)
 
 output = model(img)
 
+# TODO save each predicted mesh as point_clouds? / vertices+faces?
+# do what you think is best
 
-for i in range(len(pred_pts_list)):
-    face = np.loadtxt(os.path.join(opt.offPath, "face" +
-                                   str(i + 1) + ".obj"), dtype='|S32')
-    vert = pred_pts_list[i].cpu().data.numpy()
-    vert = np.hstack((np.full([vert.shape[0], 1], 'v'), vert))
-    mesh = np.vstack((vert, face))
-    np.savetxt(os.path.join(opt.savePath, opt.saveName + "_" +
-                            str(i + 1) + ".obj"), mesh, fmt='%s', delimiter=' ')
-
-np.savetxt(os.path.join(opt.savePath, opt.saveName + "_gt.xyz"),
-           pts.cpu().data.numpy(), fmt='%s', delimiter=' ')
 
 print("Finish!")
