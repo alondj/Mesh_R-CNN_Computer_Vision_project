@@ -353,8 +353,8 @@ class Cubify(nn.Module):
         self.reset_stats()
         assert voxel_probas.ndim == 4
         out_device=voxel_probas.device
-        #TODO for now let it compute on cput as it's faster
-        voxel_probas=voxel_probas.to('cpu')
+        # #TODO for now let it compute on cpu as it's faster
+        # voxel_probas=voxel_probas.to('cpu')
         N, C, H, W = voxel_probas.shape
         batched_vertex_positions, batched_faces, batched_adjacency_matrices = [], [], ([],[])
         vertice_index, faces_index = [], []
@@ -493,9 +493,6 @@ class Cubify(nn.Module):
         assert sum(faces_index) == mesh_faces.shape[0]
 
         self.summary(N)
-        print(((vertex_positions.nelement()*vertex_positions.element_size()) +
-              (mesh_faces.nelement()*mesh_faces.element_size())+
-              (edge_index.nelement()*edge_index.element_size()))/(32*1e6))
         return vertice_index, faces_index, vertex_positions, edge_index, mesh_faces
 
     def remove_shared_vertices(self, vertices: List[Point], faces: List[Face],out_device:torch.device) -> Tuple[Tensor, Tensor]:
@@ -701,7 +698,7 @@ class VertexAlign(nn.Module):
 def tesst_cubify():
     cube = Cubify(0.2)
 
-    inp = torch.randn(32, 48, 48, 48)
+    inp = torch.randn(1, 48, 48, 48,device='cuda:0')
     _ = cube(inp)
 
 

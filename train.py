@@ -85,7 +85,9 @@ print('system information\n python: %s, torch: %s, cudnn: %s, cuda: %s, \ngpus: 
     gpus))
 print("\n")
 
+print(f"options were:\n{options}\n")
 
+# TODO if we wish to train the backbone then we need also things like boxes labels etc.
 # model and datasets/loaders definition
 if model_name == 'ShapeNet':
     model = ShapeNetModel(ShapeNetFeatureExtractor(3), residual=options.residual,
@@ -99,7 +101,6 @@ if model_name == 'ShapeNet':
         dataset, batch_size=options.batchSize, shuffle=True, num_workers=options.workers)
     testloader = DataLoader(
         dataset, batch_size=options.batchSize, shuffle=True, num_workers=options.workers)
-
 else:
     model = Pix3DModel(pretrained_MaskRcnn(num_classes=10, pretrained=True),
                        cubify_threshold=options.threshold,

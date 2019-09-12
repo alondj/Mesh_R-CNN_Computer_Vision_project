@@ -98,6 +98,7 @@ class Pix3DModel(nn.Module):
 
         self.refineStages = nn.ModuleList(stages)
 
+    # TODO in train mode maskRcnn needs to recive gts as input
     def forward(self, image: Tensor) -> dict:
         backbone_out, roiAlign = self.feature_extractor(image)
 
