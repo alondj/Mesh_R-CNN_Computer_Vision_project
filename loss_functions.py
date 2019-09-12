@@ -4,7 +4,21 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
+
 # losses of of mesh prediction network
+def total_loss(ws: dict, model_output: dict, voxel_gts: Tensor, pt_gts: Tensor) -> Tensor:
+    v_loss = voxel_loss(model_output['voxels'], voxel_gts)
+
+    chamfer_loss, normal_loss, edge_loss = batched_mesh_loss(
+        model_output['vertex_postions'],
+        model_output['faces'],
+        model_output['edge_index'],
+        model_output['vertice_index'],
+        model_output['face_index'],
+        pt_gts
+    )
+
+    return chamfer_loss*ws['c']+normal_loss*ws['n']+edge_loss*ws['e']+v_loss*ws['v']
 
 
 def voxel_loss(voxel_prediction: Tensor, voxel_gts: Tensor) -> Tensor:
@@ -14,8 +28,7 @@ def voxel_loss(voxel_prediction: Tensor, voxel_gts: Tensor) -> Tensor:
 
 def batched_mesh_loss(vertex_positions_pred: Tensor, mesh_faces_pred: Tensor, pred_adjacency: Tensor,
                       vertices_per_sample_pred: List[int], faces_per_sample_pred: List[int],
-                      vertex_positions_gt: Tensor, mesh_faces_gt: Tensor,
-                      vertices_per_sample_gt: List[int], faces_per_sample_gt: List[int],
+                      pt_gts: Tensor,
                       point_cloud_size: float = 10e3,
                       num_neighbours_for_normal_loss: int = 10) -> Tuple[Tensor, Tensor, Tensor]:
 
@@ -23,13 +36,11 @@ def batched_mesh_loss(vertex_positions_pred: Tensor, mesh_faces_pred: Tensor, pr
     p2p_dist = batched_point2point_distance(vertex_positions_pred).squeeze(0)
     edge_loss = total_edge_length(p2p_dist, pred_adjacency)
 
-    # sample point clouds from the predictions and ground truthes
+    # sample point clouds from the predictions
     point_cloud_pred = batched_mesh_sampling(vertex_positions_pred, mesh_faces_pred,
                                              vertices_per_sample_pred, faces_per_sample_pred,
                                              point_cloud_size)
-    point_cloud_gt = batched_mesh_sampling(vertex_positions_gt, mesh_faces_gt,
-                                           vertices_per_sample_gt, faces_per_sample_gt,
-                                           point_cloud_size)
+    point_cloud_gt = pt_gts
 
     # find distance between the points
     p2p_dist = batched_point2point_distance(point_cloud_pred, point_cloud_gt)

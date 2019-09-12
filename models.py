@@ -13,10 +13,11 @@ from torchvision.models.detection.backbone_utils import resnet_fpn_backbone
 from torchvision.ops import MultiScaleRoIAlign, RoIAlign
 from collections import OrderedDict
 from torch.utils.model_zoo import load_url
+from torchvision.models.detection.image_list import ImageList
 
 
 class ShapeNetModel(nn.Module):
-    def __init__(self, feature_extractor: nn.Module, residual: bool = True,
+    def __init__(self, feature_extractor: nn.Module, residual: bool = False,
                  cubify_threshold: float = 0.2, image_shape: Tuple[int, int] = (137, 137),
                  voxelBranchChannels: Tuple[int, int] = (2048, 48),
                  alignmenet_channels: int = 3840,
@@ -74,7 +75,7 @@ class ShapeNetModel(nn.Module):
 
 
 class Pix3DModel(nn.Module):
-    def __init__(self, image_input_size: Tuple[int, int], feature_extractor: nn.Module,
+    def __init__(self, feature_extractor: nn.Module, image_shape: Tuple[int, int] = (224, 224),
                  cubify_threshold: float = 0.2,
                  voxelBranchChannels: Tuple[int, int] = (256, 24),
                  alignmenet_channels: int = 256,
@@ -86,12 +87,12 @@ class Pix3DModel(nn.Module):
         self.voxelBranch = VoxelBranch(*voxelBranchChannels)
         self.cubify = Cubify(cubify_threshold)
 
-        stages = [VertixRefinePix3D(image_input_size, alignment_size=alignmenet_channels,
+        stages = [VertixRefinePix3D(image_shape, alignment_size=alignmenet_channels,
                                     use_input_features=False,
                                     num_features=vertex_feature_dim)]
 
         for _ in range(num_refinement_stages-1):
-            stages.append(VertixRefinePix3D(image_input_size, alignment_size=alignmenet_channels,
+            stages.append(VertixRefinePix3D(image_shape, alignment_size=alignmenet_channels,
                                             num_features=vertex_feature_dim,
                                             use_input_features=True))
 
@@ -239,7 +240,10 @@ class Pix3DMask_RCNN(MaskRCNN):
             features = OrderedDict([(0, features)])
         proposals, proposal_losses = self.rpn(images, features, targets)
 
+        # additional ROI features for pix3d
+        graphs_per_image = [p.shape[0] for p in proposals]
         pix3d_input = self.mesh_ROI(features, proposals, images.image_sizes)
+
         detections, detector_losses = self.roi_heads(
             features, proposals, images.image_sizes, targets)
 
@@ -251,12 +255,12 @@ class Pix3DMask_RCNN(MaskRCNN):
         losses.update(proposal_losses)
 
         if self.training:
-            return losses, pix3d_input
+            return losses, pix3d_input, graphs_per_image
 
-        return detections, pix3d_input
+        return detections, pix3d_input, graphs_per_image
 
 
-def pretrained_MaskRcnn(num_classes=100, pretrained=True):
+def pretrained_MaskRcnn(num_classes=10, pretrained=True):
     url = 'https://download.pytorch.org/models/maskrcnn_resnet50_fpn_coco-bf2d0c1e.pth'
     model = Pix3DMask_RCNN(91)
     if pretrained:
@@ -280,4 +284,60 @@ def pretrained_MaskRcnn(num_classes=100, pretrained=True):
 
 
 if __name__ == "__main__":
-    model = pretrained_MaskRcnn()
+    model = pretrained_MaskRcnn(num_classes=10).cuda().eval()
+
+    x = torch.randn(3, 224, 224).cuda()
+    y = torch.randn(3, 224, 224).cuda()
+    out, pix, _ = model([y, x])
+    v = VoxelBranch(256, 24).cuda()
+    print(pix.shape)
+    print(pix[0][0])
+
+
+# Pix3DMask_RCNN(
+#   (transform): GeneralizedRCNNTransform()
+#   (backbone): BackboneWithFPN(
+#     )
+#     (fpn): FeaturePyramidNetwork(
+#     )
+#   (rpn): RegionProposalNetwork(
+#     (anchor_generator): AnchorGenerator()
+#     (head): RPNHead(
+#       (conv): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+#       (cls_logits): Conv2d(256, 3, kernel_size=(1, 1), stride=(1, 1))
+#       (bbox_pred): Conv2d(256, 12, kernel_size=(1, 1), stride=(1, 1))
+#     )
+#   )
+#   (roi_heads): RoIHeads(
+#     (box_roi_pool): MultiScaleRoIAlign()
+#     (box_head): TwoMLPHead(
+#       (fc6): Linear(in_features=12544, out_features=1024, bias=True)
+#       (fc7): Linear(in_features=1024, out_features=1024, bias=True)
+#     )
+#     (box_predictor): FastRCNNPredictor(
+#       (cls_score): Linear(in_features=1024, out_features=91, bias=True)
+#       (bbox_pred): Linear(in_features=1024, out_features=364, bias=True)
+#     )
+#     (mask_roi_pool): MultiScaleRoIAlign()
+#     (mask_head): MaskRCNNHeads(
+#       (mask_fcn1): Conv2d(256, 256, kernel_size=(
+#           3, 3), stride=(1, 1), padding=(1, 1))
+#       (relu1): ReLU(inplace=True)
+#       (mask_fcn2): Conv2d(256, 256, kernel_size=(
+#           3, 3), stride=(1, 1), padding=(1, 1))
+#       (relu2): ReLU(inplace=True)
+#       (mask_fcn3): Conv2d(256, 256, kernel_size=(
+#           3, 3), stride=(1, 1), padding=(1, 1))
+#       (relu3): ReLU(inplace=True)
+#       (mask_fcn4): Conv2d(256, 256, kernel_size=(
+#           3, 3), stride=(1, 1), padding=(1, 1))
+#       (relu4): ReLU(inplace=True)
+#     )
+#     (mask_predictor): MaskRCNNPredictor(
+#       (conv5_mask): ConvTranspose2d(256, 256, kernel_size=(2, 2), stride=(2, 2))
+#       (relu): ReLU(inplace=True)
+#       (mask_fcn_logits): Conv2d(256, 91, kernel_size=(1, 1), stride=(1, 1))
+#     )
+#   )
+#   (mesh_ROI): MultiScaleRoIAlign()
+# )
