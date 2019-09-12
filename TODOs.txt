@@ -1,7 +1,6 @@
-#TODOS
-
-1. num_samples of datasets should be for both datasets
-2. train/test splits
+#TODOs
+1. num_samples of datasets should be for both datasets //DONE
+2. train/test splits //DONE maybe should be a static allocation?
 3. have ground truths for the backbone networks aka ground truths for mask_rcnn and vgg16
    things like classes bounding boxes masks etc
 4. pix3D has weird shapes need to see if it works
