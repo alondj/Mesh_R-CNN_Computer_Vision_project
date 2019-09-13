@@ -1,10 +1,9 @@
 import argparse
-import datetime
-import os
 import platform
 import sys
+import os
+import datetime
 
-import numpy as np
 import torch
 import torch.nn as nn
 import tqdm
@@ -52,9 +51,12 @@ parser.add_argument("--normal", help="weight of the normal loss",
 parser.add_argument("--edge", help="weight of the edge loss",
                     type=float, default=0.5)
 # dataset/loader arguments
+# TODO ben should handle this
 parser.add_argument('--num_samples', type=int,
                     help='number of sampels to dataset', default=None)
 parser.add_argument('--dataRoot', type=str, help='file root')
+parser.add_argument('--dataTrainList', type=str, help='train file list')
+parser.add_argument('--dataTestList', type=str, help='test file list')
 parser.add_argument('--batchSize', '-b', type=int,
                     defaults=16, help='batch size')
 parser.add_argument('--workers', type=int,
