@@ -127,7 +127,7 @@ def pretrained_ResNet50(loss_function, num_classes=10, pretrained=True):
 
 
 class Pix3DModel(nn.Module):
-    def __init__(self, feature_extractor: nn.Module, image_shape: Tuple[int, int] = (224, 224),
+    def __init__(self, feature_extractor: nn.Module, image_shape: Tuple[int, int] = (281, 187),
                  cubify_threshold: float = 0.2,
                  voxelBranchChannels: Tuple[int, int] = (256, 24),
                  alignmenet_channels: int = 256,
@@ -213,7 +213,7 @@ class Pix3DMask_RCNN(MaskRCNN):
                 like `scores`, `labels` and `mask` (for Mask R-CNN models).
 
         """
-        images = list(images.split(1))
+        images = [im.squeeze(0) for im in images.split(1)]
         if self.training and targets is None:
             raise ValueError("In training mode, targets should be passed")
         original_image_sizes = [img.shape[-2:] for img in images]

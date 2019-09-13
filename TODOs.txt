@@ -3,7 +3,6 @@
 3. add the json/whatever config of shapeNet
 3. have ground truths for the backbone networks aka ground truths for mask_rcnn and resnet50
    things like classes bounding boxes masks etc
-4. pix3D has weird shapes need to see if it works with the backbone etc
 5. finish evaluate.py and train.py
 
 6. realy important write scripts to download datasets and preprocess data
