@@ -58,7 +58,6 @@ model = model.to(device)
 
 
 def load_file(file_path):
-    # TODO ben load the given image from options.dataPath
     import matplotlib.image as mpimg
     img = torch.from_numpy(mpimg.imread(file_path))
     return img

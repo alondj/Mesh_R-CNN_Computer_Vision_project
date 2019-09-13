@@ -64,7 +64,11 @@ class pix3dDataset(Dataset):
                 models.append(torch.from_numpy(sci.loadmat(model_s)['voxel']))
                 clouds.append(torch.from_numpy(np.load(pc_src)))
                 masks.append(torch.from_numpy(mpimg.imread(mask_s)))
-            return imgs, models, clouds, (masks, bbox, label)
+
+            targets = []
+            for mask, box, lb in zip(masks, bbox, label):
+                targets.append({'masks': mask, 'boxes': box, 'labels': lb})
+            return imgs, models, clouds, targets
 
 
 def get_class(s: str):
@@ -147,5 +151,5 @@ class shapeNet_Dataset(Dataset):
 if __name__ == "__main__":
     pxd = pix3dDataset("../dataset/pix3d", 5)
     # sdb = shapeNet_Dataset("../dataset/shapeNet/ShapeNetVox32", 9)
-    imgs, models, clouds, (masks, bbox, label) = pxd[0:1]
-    print(label[0])
+    imgs, models, clouds, dict = pxd[0:1]
+    print(dict['masks'][0])
