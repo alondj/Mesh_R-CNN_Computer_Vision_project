@@ -65,9 +65,7 @@ class pix3dDataset(Dataset):
                 clouds.append(torch.from_numpy(np.load(pc_src)))
                 masks.append(torch.from_numpy(mpimg.imread(mask_s)))
 
-            targets = []
-            for mask, box, lb in zip(masks, bbox, label):
-                targets.append({'masks': mask, 'boxes': box, 'labels': lb})
+            targets = pix3DTargetList(masks, bbox, label)
             return imgs, models, clouds, targets
 
 
@@ -100,6 +98,47 @@ def get_class(s: str):
         return "boat"
 
 
+class pix3DTarget():
+    keys = ['boxes', 'masks', 'labels']
+
+    def __init__(self, target: dict):
+        if not(isinstance(target, dict) and all(k in target for k in self.keys)):
+            raise ValueError(
+                f"target must be a dictionary with keys {self.keys}")
+
+        self.target = target
+
+    def to(self, *args, **kwargs):
+        for k in self.keys:
+            self.target[k] = self.target[k].to(*args, **kwargs)
+        return self
+
+    def __getitem__(self, key):
+        return self.target[key]
+
+
+# TODO useful but untested
+class pix3DTargetList():
+    def __init__(self, masks, boxes, labels):
+        assert len(boxes) == len(labels)
+        assert len(boxes) == len(masks)
+
+        self.targets = []
+        for mask, box, lb in zip(masks, boxes, labels):
+            target = pix3DTarget({'masks': mask, 'boxes': box, 'labels': lb})
+            self.targets.append(target)
+
+    def to(self, *args, **kwargs):
+        self.targets = [t.to(*args, **kwargs) for t in self.targets]
+        return self
+
+    def __getitem__(self, arg):
+        return self.targets[arg]
+
+    def __len__(self):
+        return len(self.targets)
+
+
 class shapeNet_Dataset(Dataset):
 
     def __init__(self, directory_in_str, num_sampels=None):
@@ -113,8 +152,10 @@ class shapeNet_Dataset(Dataset):
             if num_sampels is not None and i == num_sampels:
                 break
             voxel_path = str(path)
-            cloud_path = voxel_path.replace("ShapeNetVox32", "ShapeNet_pointclouds")
-            cloud_path = cloud_path.replace("model.binvox", "pointcloud_1024.npy")
+            cloud_path = voxel_path.replace(
+                "ShapeNetVox32", "ShapeNet_pointclouds")
+            cloud_path = cloud_path.replace(
+                "model.binvox", "pointcloud_1024.npy")
             img_path = voxel_path.replace("ShapeNetVox32", "ShapeNetRendering")
             img_path = img_path.replace("model.binvox", "rendering/00.png")
 
@@ -143,7 +184,8 @@ class shapeNet_Dataset(Dataset):
                 imgs.append(torch.from_numpy(mpimg.imread(img_s)))
                 clouds.append(torch.from_numpy(np.load(pc_src)))
                 with open(model_s, 'rb') as binvox_file:
-                    models.append(torch.from_numpy(data.read_binvox.read_as_3d_array(binvox_file)))
+                    models.append(torch.from_numpy(
+                        data.read_binvox.read_as_3d_array(binvox_file)))
 
             return imgs, models, clouds, label
 
@@ -151,5 +193,5 @@ class shapeNet_Dataset(Dataset):
 if __name__ == "__main__":
     pxd = pix3dDataset("../dataset/pix3d", 5)
     # sdb = shapeNet_Dataset("../dataset/shapeNet/ShapeNetVox32", 9)
-    imgs, models, clouds, dict = pxd[0:1]
-    print(dict['masks'][0])
+    imgs, models, clouds, targets = pxd[0:1]
+    print(targets['masks'][0])

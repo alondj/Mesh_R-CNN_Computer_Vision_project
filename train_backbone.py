@@ -124,7 +124,6 @@ for epoch in range(epochs):
             images, _, _, backbone_targets = data
 
             images = images.to(devices[0])
-            # TODO will not work for pix3d write a function that will convert the list
             backbone_targets = backbone_targets.to(devices[0])
 
             # predict and comput loss
