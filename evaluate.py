@@ -4,7 +4,6 @@ import torch
 import os
 import sys
 
-
 from model import ShapeNetModel, ShapeNetFeatureExtractor, pretrained_MaskRcnn, Pix3DModel
 
 parser = argparse.ArgumentParser()
@@ -30,7 +29,6 @@ parser.add_argument('--savePath', type=str, default='eval/',
 parser.add_argument('--saveName', type=str, default='out_mesh',
                     help='the name of the output mesh')
 
-
 options = parser.parse_args()
 print(options)
 
@@ -54,7 +52,6 @@ else:
                        vertex_feature_dim=options.featDim,
                        num_refinement_stages=options.num_refinement_stages)
 
-
 model.load_state_dict(torch.load(options.modelPath, map_location=device))
 model.eval()
 model = model.to(device)
@@ -63,7 +60,7 @@ model = model.to(device)
 def load_file(file_path):
     # TODO ben load the given image from options.dataPath
     import matplotlib.image as mpimg
-    img = mpimg.imread(file_path)
+    img = torch.from_numpy(mpimg.imread(file_path))
     return img
 
 
