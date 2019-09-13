@@ -62,7 +62,9 @@ model = model.to(device)
 
 def load_file(file_path):
     # TODO ben load the given image from options.dataPath
-    return file_path
+    import matplotlib.image as mpimg
+    img = mpimg.imread(file_path)
+    return img
 
 
 img = load_file(options.dataPath)
