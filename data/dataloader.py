@@ -4,7 +4,8 @@ from torch.utils.data import Dataset
 import scipy.io as sci
 import numpy as np
 from pathlib import Path
-import read_binvox
+import data.read_binvox
+import torch
 
 
 class pix3dDataset(Dataset):
@@ -36,7 +37,7 @@ class pix3dDataset(Dataset):
                     self.models_vox_src.append(model3d_src)
                     self.pointcloud.append(pointcloud_src)
                     self.masks.append(mask_src)
-                    self.bbox.append(p['bbox'])
+                    self.bbox.append(torch.tensor(p['bbox']))
                     self.Class.append(p['category'])
 
     def __len__(self):
@@ -59,10 +60,10 @@ class pix3dDataset(Dataset):
             masks = []
 
             for img_s, model_s, pc_src, mask_s in zip(img_src, model_src, pointcloud_src, masks_src):
-                imgs.append(mpimg.imread(img_s))
-                models.append(sci.loadmat(model_s)['voxel'])
-                clouds.append(np.load(pc_src))
-                masks.append(mpimg.imread(mask_s))
+                imgs.append(torch.from_numpy(mpimg.imread(img_s)))
+                models.append(torch.from_numpy(sci.loadmat(model_s)['voxel']))
+                clouds.append(torch.from_numpy(np.load(pc_src)))
+                masks.append(torch.from_numpy(mpimg.imread(mask_s)))
             return imgs, models, clouds, (masks, bbox, label)
 
 
@@ -135,16 +136,16 @@ class shapeNet_Dataset(Dataset):
             clouds = []
 
             for img_s, model_s, pc_src in zip(img_src, model_src, pointcloud_src):
-                imgs.append(mpimg.imread(img_s))
-                clouds.append(np.load(pc_src))
+                imgs.append(torch.from_numpy(mpimg.imread(img_s)))
+                clouds.append(torch.from_numpy(np.load(pc_src)))
                 with open(model_s, 'rb') as binvox_file:
-                    models.append(read_binvox.read_as_3d_array(binvox_file))
+                    models.append(torch.from_numpy(data.read_binvox.read_as_3d_array(binvox_file)))
 
             return imgs, models, clouds, label
 
 
 if __name__ == "__main__":
-    pxd = pix3dDataset("dataset/pix3d", 5)
+    pxd = pix3dDataset("../dataset/pix3d", 5)
     # sdb = shapeNet_Dataset("../dataset/shapeNet/ShapeNetVox32", 9)
-    imgs, models, clouds, (masks, bbox) = pxd[0:3]
-    print(bbox[0])
+    imgs, models, clouds, (masks, bbox, label) = pxd[0:1]
+    print(label[0])
