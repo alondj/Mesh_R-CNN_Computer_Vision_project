@@ -36,11 +36,11 @@ def tesst_cubify(device):
 
 @pytest.mark.parametrize('device', devices)
 def test_align(device):
-    feature_extractor = pretrained_ResNet50(
+    backbone = pretrained_ResNet50(
         loss_function=None, pretrained=False).to(device).eval()
     # check multiple graphs with multiple feature maps sizes
     img = torch.randn(2, 3, 137, 137).to(device)
-    _, f_maps = feature_extractor(img)
+    _, f_maps = backbone(img)
     align = VertexAlign((137, 137))
     pos = torch.randint(0, 137, (100, 3)).float().to(device)
     vert_per_m = [49, 51]
@@ -117,13 +117,13 @@ def test_voxelBranch(device):
 @pytest.mark.parametrize('device', devices)
 def test_ShapeNetFeatureExtractor(device):
     filters = 64
-    feature_extractor = pretrained_ResNet50(
+    backbone = pretrained_ResNet50(
         loss_function=None, pretrained=False).to(device).eval()
 
     H = 64
     x = torch.randn(2, 3, H, H).to(device)
 
-    _, outs = feature_extractor(x)
+    _, outs = backbone(x)
 
     assert len(outs) == 4
 

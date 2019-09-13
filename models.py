@@ -23,14 +23,14 @@ from layers import (Cubify, ResVertixRefineShapenet, VertixRefinePix3D,
 
 
 class ShapeNetModel(nn.Module):
-    def __init__(self, feature_extractor: nn.Module, residual: bool = False,
+    def __init__(self, backbone: nn.Module, residual: bool = False,
                  cubify_threshold: float = 0.2, image_shape: Tuple[int, int] = (137, 137),
                  voxelBranchChannels: Tuple[int, int] = (2048, 48),
                  alignmenet_channels: int = 3840,
                  vertex_feature_dim: int = 128,
                  num_refinement_stages: int = 3):
         super(ShapeNetModel, self).__init__()
-        self.feature_extractor = feature_extractor
+        self.backbone = backbone
         self.voxelBranch = VoxelBranch(*voxelBranchChannels)
         self.cubify = Cubify(cubify_threshold)
 
@@ -51,7 +51,7 @@ class ShapeNetModel(nn.Module):
         if self.training and targets is None:
             raise ValueError("In training mode, targets should be passed")
 
-        backbone_out, feature_maps = self.feature_extractor(img, targets)
+        backbone_out, feature_maps = self.backbone(img, targets)
 
         upscaled = F.interpolate(feature_maps[-1], scale_factor=4.8,
                                  mode='bilinear', align_corners=True)
@@ -114,6 +114,7 @@ class ShapeNetResNet50(ResNet):
 
 
 def pretrained_ResNet50(loss_function, num_classes=10, pretrained=True):
+    # TODO we should have our own pretrained model and not the default one
     url = res_urls['resnet50']
     model = ShapeNetResNet50(loss_function, Bottleneck, [3, 4, 6, 3])
     if pretrained:
@@ -127,7 +128,7 @@ def pretrained_ResNet50(loss_function, num_classes=10, pretrained=True):
 
 
 class Pix3DModel(nn.Module):
-    def __init__(self, feature_extractor: nn.Module, image_shape: Tuple[int, int] = (281, 187),
+    def __init__(self, backbone: nn.Module, image_shape: Tuple[int, int] = (281, 187),
                  cubify_threshold: float = 0.2,
                  voxelBranchChannels: Tuple[int, int] = (256, 24),
                  alignmenet_channels: int = 256,
@@ -135,7 +136,7 @@ class Pix3DModel(nn.Module):
                  num_refinement_stages: int = 3):
 
         super(Pix3DModel, self).__init__()
-        self.feature_extractor = feature_extractor
+        self.backbone = backbone
         self.voxelBranch = VoxelBranch(*voxelBranchChannels)
         self.cubify = Cubify(cubify_threshold)
 
@@ -154,7 +155,7 @@ class Pix3DModel(nn.Module):
         if self.training and targets is None:
             raise ValueError("In training mode, targets should be passed")
 
-        backbone_out, roiAlign, graphs_per_image = self.feature_extractor(
+        backbone_out, roiAlign, graphs_per_image = self.backbone(
             image, targets)
 
         voxelGrid = self.voxelBranch(roiAlign)
@@ -214,6 +215,7 @@ class Pix3DMask_RCNN(MaskRCNN):
 
         """
         images = [im.squeeze(0) for im in images.split(1)]
+
         if self.training and targets is None:
             raise ValueError("In training mode, targets should be passed")
         original_image_sizes = [img.shape[-2:] for img in images]
@@ -244,6 +246,7 @@ class Pix3DMask_RCNN(MaskRCNN):
 
 
 def pretrained_MaskRcnn(num_classes=10, pretrained=True):
+    # TODO we should have our own pretrained model and not the default one
     url = mask_urls['maskrcnn_resnet50_fpn_coco']
     model = Pix3DMask_RCNN(91)
     if pretrained:
@@ -264,3 +267,17 @@ def pretrained_MaskRcnn(num_classes=10, pretrained=True):
                                                        num_classes)
 
     return model
+
+
+if __name__ == "__main__":
+    model = pretrained_MaskRcnn(num_classes=10, pretrained=False).cuda()
+
+    x = torch.randn(2, 3, 224, 224).cuda()
+
+    boxes = torch.randint(0, 224, (1, 4)).float().cuda()
+    labels = torch.randint(0, 10, (1,)).long().cuda()
+    masks = torch.randint(0, 2, (1, 224, 224)).cuda()
+    targes = [{'boxes': boxes, 'labels': labels, 'masks': masks}]
+
+    out, _, _ = model(x, targes+targes)
+    print(out.keys())

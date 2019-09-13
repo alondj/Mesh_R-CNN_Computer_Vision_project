@@ -629,7 +629,7 @@ class VertexAlign(nn.Module):
         # dimentions are addresed in order as Z,Y,X or d,h,w
         # Y/ Z
         # X/ -Z
-        # TODO magic numbers i think those relate to camerea intrinsics
+        # TODO magic numbers 
         # ∑V
         h = 248 * (vertex_positions[:, 1] / vertex_positions[:, 0]) + 111.5
         w = 248 * (vertex_positions[:, 2] / -vertex_positions[:, 0]) + 111.5

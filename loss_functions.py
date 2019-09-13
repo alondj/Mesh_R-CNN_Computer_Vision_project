@@ -5,8 +5,10 @@ import torch.nn as nn
 from torch import Tensor
 
 
-# losses of of mesh prediction network
-def total_loss(ws: dict, model_output: dict, voxel_gts: Tensor, pt_gts: Tensor) -> Tensor:
+# compute combined losses of the bacbone and GCN
+def total_loss(ws: dict, model_output: dict, voxel_gts: Tensor, pt_gts: Tensor,
+               train_backbone: bool,
+               backbone_type: str) -> Tensor:
     v_loss = voxel_loss(model_output['voxels'], voxel_gts)
 
     chamfer_loss, normal_loss, edge_loss = batched_mesh_loss(
@@ -18,7 +20,15 @@ def total_loss(ws: dict, model_output: dict, voxel_gts: Tensor, pt_gts: Tensor) 
         pt_gts
     )
 
-    return chamfer_loss*ws['c']+normal_loss*ws['n']+edge_loss*ws['e']+v_loss*ws['v']
+    # if we train the backbone just add the losses
+    backbone_loss = 0
+    if train_backbone:
+        if backbone_type == 'ShapeNet':
+            backbone_loss = model_output['backbone']
+        else:
+            backbone_loss = sum(model_output['backbone'].values())
+
+    return backbone_loss*ws['b']+chamfer_loss*ws['c']+normal_loss*ws['n']+edge_loss*ws['e']+v_loss*ws['v']
 
 
 def voxel_loss(voxel_prediction: Tensor, voxel_gts: Tensor) -> Tensor:

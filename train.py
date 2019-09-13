@@ -42,6 +42,8 @@ parser.add_argument('--threshold', '-th',
                     help='Cubify threshold', type=float, default=0.2)
 parser.add_argument("--residual", default=False,
                     action="store_true", help="whether to use residual refinement for ShapeNet")
+parser.add_argument("--train_backbone", default=False, action="store_true",
+                    help="whether to train the backbone in additon to the GCN")
 # loss args
 parser.add_argument("--chamfer", help="weight of the chamfer loss",
                     type=float, default=1.0)
@@ -51,6 +53,8 @@ parser.add_argument("--normal", help="weight of the normal loss",
                     type=float, default=0)
 parser.add_argument("--edge", help="weight of the edge loss",
                     type=float, default=0.5)
+parser.add_argument("--backbone", help="weight of the backbone loss",
+                    type=float, default=1.0)
 # dataset/loader arguments
 parser.add_argument('--num_samples', type=int,
                     help='number of sampels to dataset', default=None)
@@ -63,7 +67,6 @@ parser.add_argument('--workers', type=int,
 parser.add_argument('--nEpoch', type=int, default=10,
                     help='number of epochs to train for')
 
-parser.add_argument('')
 
 # optimizer parameters
 parser.add_argument('--optim', type=str,
@@ -120,19 +123,29 @@ else:
         dataset, batch_size=options.batchSize, shuffle=True, num_workers=options.workers)
 
 # use data parallel if possible
-# TODO will not work unless targets are tensors...
+# TODO i do not know if it will work for mask rcnn
 if len(devices > 1):
     model = nn.DataParallel(model)
 
 model: nn.Module = model.to(devices[0])
 
+# select trainable parameters
+trained_parameters = model.refineStages.parameters()
+if options.train_backbone:
+    trained_parameters.extend(model.backbone.parameters())
+    model.backbone.train()
+else:
+    for p in model.backbone.parameters():
+        p.requires_grad = False
+    model.backbone.eval()
+
 # Create Optimizer
 lrate = options.lr
 decay = options.weightDecay
 if options.optim == 'Adam':
-    optimizer = Adam(model.parameters(), lr=lrate, weight_decay=decay)
+    optimizer = Adam(trained_parameters, lr=lrate, weight_decay=decay)
 else:
-    optimizer = SGD(model.parameters(), lr=lrate, weight_decay=decay)
+    optimizer = SGD(trained_parameters, lr=lrate, weight_decay=decay)
     # TODO they increased learning rate do we wish to do the same?
     # linearly increasing the learning rate from 0.002 to 0.02 over the first 1K iterations,
 
@@ -140,7 +153,8 @@ else:
 loss_weights = {'c': options.chamfer,
                 'v': options.voxel,
                 'n': options.normal,
-                'e': options.edge
+                'e': options.edge,
+                'b': options.backbone
                 }
 
 # checkpoint directory
@@ -157,27 +171,26 @@ for epoch in range(epochs):
     print(f'--- EPOCH {epoch+1}/{epochs} ---')
 
     # Set to Train mode
-    model.train()
+    model.refineStages.train()
     with tqdm.tqdm(total=len(trainloader.batch_sampler), file=sys.stdout) as pbar:
         for i, data in enumerate(trainloader, 0):
             optimizer.zero_grad()
-            images, voxel_gts, pts_gts, backbone_gts = data
+            images, voxel_gts, pts_gts, backbone_targets = data
 
             images = images.to(devices[0])
             voxels_gts = voxels_gts.to(devices[0])
             pts_gts = pts_gts.to(devices[0])
             # TODO will not work for pix3d write a function that will convert the list
-            backbone_gts = backbone_gts.to(devices[0])
+            backbone_targets = backbone_targets.to(devices[0])
 
             # predict and comput loss
-            output = model(images, backbone_gts)
+            output = model(images, backbone_targets)
 
-            # TODO how will we treat the backbone training?
-            # for now we just add it but of course pix3d is more complicated
-            # so it will not work
-            backbone_loss = output['backbone']
-            loss = total_loss(loss_weights, output, voxel_gts, pts_gts)
-            loss += backbone_loss
+            loss = total_loss(loss_weights, output,
+                              voxel_gts, pts_gts,
+                              train_backbone=options.train_backbone,
+                              backbone_type=model_name)
+
             loss.backward()
             optimizer.step()
 

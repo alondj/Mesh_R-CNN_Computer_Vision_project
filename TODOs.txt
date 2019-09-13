@@ -13,4 +13,8 @@
 
 8. for pix3D handle ROI_ALIGN and in general handle the backbone during training
 
+9. in regards to training do we wish to train the whole model backbone+GCN together
+   or train the backbone before the GCN
+
+
 9. any other TODO in the project
