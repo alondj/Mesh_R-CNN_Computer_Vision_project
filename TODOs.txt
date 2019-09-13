@@ -5,6 +5,8 @@
    things like classes bounding boxes masks etc
 5. finish evaluate.py and train.py
 
+13. for efficiency sake maybe add the option to load only the backbone features/only GCN features
+
 6. realy important write scripts to download datasets and preprocess data
    both for pix3D and shapeNet
 
@@ -16,5 +18,8 @@
 9. in regards to training do we wish to train the whole model backbone+GCN together
    or train the backbone before the GCN
 
+10. add backbone only training
 
-9. any other TODO in the project
+12. consolidate checkpoints for the backbone and the GCN
+
+11. any other TODO in the project

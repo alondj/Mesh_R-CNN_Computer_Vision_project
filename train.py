@@ -36,6 +36,10 @@ parser.add_argument(
     "--model", "-m", help="the model we wish to train", choices=["ShapeNet", "Pix3D"], required=True)
 parser.add_argument('--featDim', type=int, default=128,
                     help='number of vertex features')
+parser.add_argument('--GCN_path', '-Gp', type=str, default='',
+                    help='path of a pretrained GCN if we wish to continue training from checkpoint must be provided with backbone_path')
+parser.add_argument('--backbone_path', '-bp', type=str, default='',
+                    help='path of a pretrained backbone if we wish to continue training from checkpoint must be provided with GCN_path')
 parser.add_argument('--num_refinement_stages', "-nr", type=int,
                     default=3, help='number of mesh refinement stages')
 parser.add_argument('--threshold', '-th',
@@ -44,6 +48,7 @@ parser.add_argument("--residual", default=False,
                     action="store_true", help="whether to use residual refinement for ShapeNet")
 parser.add_argument("--train_backbone", default=False, action="store_true",
                     help="whether to train the backbone in additon to the GCN")
+
 # loss args
 parser.add_argument("--chamfer", help="weight of the chamfer loss",
                     type=float, default=1.0)
@@ -55,8 +60,8 @@ parser.add_argument("--edge", help="weight of the edge loss",
                     type=float, default=0.5)
 parser.add_argument("--backbone", help="weight of the backbone loss",
                     type=float, default=1.0)
+
 # dataset/loader arguments
-# TODO ben should handle this
 parser.add_argument('--num_samples', type=int,
                     help='number of sampels to dataset', default=None)
 parser.add_argument('--dataRoot', type=str, help='file root')
@@ -69,7 +74,6 @@ parser.add_argument('--workers', type=int,
 parser.add_argument('--nEpoch', type=int, default=10,
                     help='number of epochs to train for')
 
-
 # optimizer parameters
 parser.add_argument('--optim', type=str,
                     help='optimizer to use', choices=['Adam', 'SGD'])
@@ -78,6 +82,11 @@ parser.add_argument('--weightDecay', type=float,
 parser.add_argument('--lr', type=float, default=1e-4, help='learning rate')
 
 options = parser.parse_args()
+
+# if loading checkpoint must load both backbone and GCN
+if options.GCN_path == '' and options.backbone_path != '' or options.GCN_path != '' and options.backbone_path == '':
+    raise ValueError(
+        "if loading checkpoint both GCN_path and backbone_path must be provided")
 
 epochs = options.nEpoch
 
@@ -103,7 +112,7 @@ print(f"options were:\n{options}\n")
 # model and datasets/loaders definition
 if model_name == 'ShapeNet':
     model = ShapeNetModel(pretrained_ResNet50(nn.functional.cross_entropy, num_classes=10,
-                                              pretrained=True),
+                                              pretrained=True, path=options.backbone_path),
                           residual=options.residual,
                           cubify_threshold=options.threshold,
                           image_shape=(137, 137),
@@ -114,7 +123,8 @@ if model_name == 'ShapeNet':
     trainloader = DataLoader(
         dataset, batch_size=options.batchSize, shuffle=True, num_workers=options.workers)
 else:
-    model = Pix3DModel(pretrained_MaskRcnn(num_classes=10, pretrained=True),
+    model = Pix3DModel(pretrained_MaskRcnn(num_classes=10, pretrained=True,
+                                           path=options.backbone_path),
                        cubify_threshold=options.threshold,
                        image_shape=(281, 187),
                        vertex_feature_dim=options.featDim,
@@ -122,6 +132,9 @@ else:
     dataset = pix3dDataset(options.dataRoot, options.num_sampels)
     trainloader = DataLoader(
         dataset, batch_size=options.batchSize, shuffle=True, num_workers=options.workers)
+
+if options.GCN_path != '':
+    model.refineStages.load_state_dict(torch.load(options.GCN_path))
 
 # use data parallel if possible
 # TODO i do not know if it will work for mask rcnn
@@ -158,12 +171,16 @@ loss_weights = {'c': options.chamfer,
                 'b': options.backbone
                 }
 
-# checkpoint directory
+# checkpoint directories
 now = datetime.datetime.now()
 save_path = now.isoformat()
-dir_name = os.path.join('checkpoints', save_path)
-if not os.path.exists(dir_name):
-    os.mkdir(dir_name)
+GCN_path = os.path.join('checkpoints', model_name, 'GCN', save_path)
+backbone_path = os.path.join('checkpoints', options.model,
+                             'backbone', save_path)
+if not os.path.exists(GCN_path):
+    os.mkdir(GCN_path)
+if options.train_backbone and not os.path.exists(backbone_path):
+    os.mkdir(backbone_path)
 
 # Train model on the dataset
 losses = []
@@ -209,8 +226,16 @@ for epoch in range(epochs):
     print(
         f'--- EPOCH {epoch+1}/{epochs} --- avg epoch loss {np.mean(epoch_loss):.2f}')
     print(f"total avg loss so far {np.mean(losses):.2f}")
+
     # save the model
     print('saving net...')
-    torch.save(model.state_dict(), '%s/model%i.pth' % (dir_name, epoch))
+    # for eg checkpoints/Pix3D/GCN/date/model_1.pth
+    # for eg checkpoints/Pix3D/backbone/date/model_1.pth
+    file_name = f"model_{epoch}.pth"
+    torch.save(model.refineStages.state_dict(),
+               os.path.join(GCN_path, file_name))
+    if options.train_backbone:
+        torch.save(model.backbone.state_dict(),
+                   os.path.join(backbone_path, file_name))
 
 print(f"training done avg loss {np.mean(losses)}")
