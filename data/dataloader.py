@@ -116,8 +116,13 @@ class pix3DTarget():
     def __getitem__(self, key):
         return self.target[key]
 
+    def __setitem__(self, key, value):
+        self.target[key] = value
 
-# TODO useful but untested
+    def __contains__(self, key):
+        return key in self.target
+
+
 class pix3DTargetList():
     def __init__(self, masks, boxes, labels):
         assert len(boxes) == len(labels)
@@ -134,6 +139,9 @@ class pix3DTargetList():
 
     def __getitem__(self, arg):
         return self.targets[arg]
+
+    def __setitem__(self, key, value):
+        self.targets[key] = value
 
     def __len__(self):
         return len(self.targets)
