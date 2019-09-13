@@ -18,8 +18,8 @@ from torchvision.models.resnet import Bottleneck
 from torchvision.models.resnet import model_urls as res_urls
 from torchvision.ops import MultiScaleRoIAlign, RoIAlign
 
-from layers import (Cubify, ResVertixRefineShapenet, VertixRefinePix3D,
-                    VertixRefineShapeNet, VoxelBranch)
+from .layers import (Cubify, ResVertixRefineShapenet, VertixRefinePix3D,
+                     VertixRefineShapeNet, VoxelBranch)
 
 
 class ShapeNetModel(nn.Module):

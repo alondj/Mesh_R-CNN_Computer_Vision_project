@@ -1,8 +1,9 @@
 import argparse
+import datetime
+import os
 import platform
 import sys
-import os
-import datetime
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -10,9 +11,9 @@ import tqdm
 from torch.optim import SGD, Adam
 from torch.utils.data import DataLoader, random_split
 
-from dataloader import pix3dDataset, shapeNet_Dataset
-from loss_functions import total_loss
-from models import Pix3DModel, ShapeNetModel, pretrained_MaskRcnn, pretrained_ResNet50
+from data.dataloader import pix3dDataset, shapeNet_Dataset
+from model import (Pix3DModel, ShapeNetModel, pretrained_MaskRcnn,
+                   pretrained_ResNet50, total_loss)
 
 assert torch.cuda.is_available(), "the training process is slow and requires gpu"
 
@@ -99,7 +100,6 @@ print("\n")
 
 print(f"options were:\n{options}\n")
 
-# TODO if we wish to train the backbone then we need also things like boxes labels etc.
 # model and datasets/loaders definition
 if model_name == 'ShapeNet':
     model = ShapeNetModel(pretrained_ResNet50(nn.functional.cross_entropy, num_classes=10,

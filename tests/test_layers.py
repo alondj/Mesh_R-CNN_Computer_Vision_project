@@ -1,11 +1,11 @@
 import pytest
 import torch
 import torch.nn as nn
-from layers import Cubify, GraphConv, ResGraphConv, VoxelBranch,\
+from model.layers import Cubify, GraphConv, ResGraphConv, VoxelBranch,\
     VertexAlign, ResVertixRefineShapenet, VertixRefineShapeNet, VertixRefinePix3D
 
-from models import pretrained_ResNet50
-from utils import aggregate_neighbours
+from model.models import pretrained_ResNet50
+from model.utils import aggregate_neighbours
 
 devices = ['cpu']
 if torch.cuda.is_available():
@@ -20,8 +20,8 @@ def test_aggregate(device):
 
     out = aggregate_neighbours(edge_index, a)
     expected = torch.Tensor([[11., 13., 15.],
-                             [4.,  5.,  6.],
-                             [1.,  2.,  3.]]).to(device)
+                             [4., 5., 6.],
+                             [1., 2., 3.]]).to(device)
 
     assert torch.allclose(expected, out)
 
@@ -128,8 +128,8 @@ def test_ShapeNetFeatureExtractor(device):
     assert len(outs) == 4
 
     for i, out in enumerate(outs):
-        mul = 2**(i+2)
-        b, c, h, w = 2, mul*filters, H//mul, H//mul
+        mul = 2**(i + 2)
+        b, c, h, w = 2, mul * filters, H // mul, H // mul
 
         assert out.shape == torch.Size([b, c, h, w])
 
@@ -145,11 +145,11 @@ def test_resVertixRefineShapenet(device):
 
     # circle adjacency
     for i in range(49):
-        vertex_adjacency[i, (i+1) % 49] = 1
-        vertex_adjacency[(i-1) % 49, i] = 1
+        vertex_adjacency[i, (i + 1) % 49] = 1
+        vertex_adjacency[(i - 1) % 49, i] = 1
     for i in range(49, 100):
-        vertex_adjacency[i, 49+(i+1) % 49] = 1
-        vertex_adjacency[49 + (i+1) % 49, i] = 1
+        vertex_adjacency[i, 49 + (i + 1) % 49] = 1
+        vertex_adjacency[49 + (i + 1) % 49, i] = 1
 
     edge_index = vertex_adjacency.nonzero()
     edge_index = torch.stack([edge_index[:, 0], edge_index[:, 1]])
@@ -182,11 +182,11 @@ def test_vertixRefineShapenet(device):
 
     # circle adjacency
     for i in range(49):
-        vertex_adjacency[i, (i+1) % 49] = 1
-        vertex_adjacency[(i-1) % 49, i] = 1
+        vertex_adjacency[i, (i + 1) % 49] = 1
+        vertex_adjacency[(i - 1) % 49, i] = 1
     for i in range(49, 100):
-        vertex_adjacency[i, 49+(i+1) % 49] = 1
-        vertex_adjacency[49 + (i+1) % 49, i] = 1
+        vertex_adjacency[i, 49 + (i + 1) % 49] = 1
+        vertex_adjacency[49 + (i + 1) % 49, i] = 1
 
     edge_index = vertex_adjacency.nonzero()
     edge_index = torch.stack([edge_index[:, 0], edge_index[:, 1]])
@@ -219,11 +219,11 @@ def test_vertixRefinePix3D(device):
 
     # circle adjacency
     for i in range(49):
-        vertex_adjacency[i, (i+1) % 49] = 1
-        vertex_adjacency[(i-1) % 49, i] = 1
+        vertex_adjacency[i, (i + 1) % 49] = 1
+        vertex_adjacency[(i - 1) % 49, i] = 1
     for i in range(49, 100):
-        vertex_adjacency[i, 49+(i+1) % 49] = 1
-        vertex_adjacency[49 + (i+1) % 49, i] = 1
+        vertex_adjacency[i, 49 + (i + 1) % 49] = 1
+        vertex_adjacency[49 + (i + 1) % 49, i] = 1
 
     edge_index = vertex_adjacency.nonzero()
     edge_index = torch.stack([edge_index[:, 0], edge_index[:, 1]])

@@ -2,8 +2,10 @@ import numpy as np
 import argparse
 import torch
 import os
+import sys
 
-from models import ShapeNetModel, ShapeNetFeatureExtractor, pretrained_MaskRcnn, Pix3DModel
+
+from model import ShapeNetModel, ShapeNetFeatureExtractor, pretrained_MaskRcnn, Pix3DModel
 
 parser = argparse.ArgumentParser()
 

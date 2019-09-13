@@ -4,8 +4,7 @@ import torch.nn as nn
 from typing import Tuple, Optional, List
 import datetime
 import math
-from utils import aggregate_neighbours, dummy
-from torch.utils.cpp_extension import load
+from .utils import aggregate_neighbours, dummy
 
 # data representation for graphs:
 # adjacency matrix: we just save occupied indices in coo format

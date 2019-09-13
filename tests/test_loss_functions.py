@@ -1,8 +1,8 @@
 import pytest
 import torch
-from loss_functions import batched_point2point_distance, total_edge_length, batched_chamfer_distance, \
+from model.loss_functions import batched_point2point_distance, total_edge_length, batched_chamfer_distance, \
     surface_areas, mesh_sampling
-from utils import dummy
+from model.utils import dummy
 
 devices = ['cpu']
 if torch.cuda.is_available():
@@ -17,11 +17,11 @@ def test_p2p_distance(device):
 
     assert p2p.shape == torch.Size([5, 5])
 
-    expected = torch.Tensor([[0, 9*3, 36*3, 81*3, 144*3],
-                             [9*3, 0, 9*3, 36*3, 81*3],
-                             [36*3, 9*3, 0, 9*3, 36*3],
-                             [81*3, 36*3, 9*3, 0, 9*3],
-                             [144*3, 81*3, 36*3, 9*3, 0]]).to(device)
+    expected = torch.Tensor([[0, 9 * 3, 36 * 3, 81 * 3, 144 * 3],
+                             [9 * 3, 0, 9 * 3, 36 * 3, 81 * 3],
+                             [36 * 3, 9 * 3, 0, 9 * 3, 36 * 3],
+                             [81 * 3, 36 * 3, 9 * 3, 0, 9 * 3],
+                             [144 * 3, 81 * 3, 36 * 3, 9 * 3, 0]]).to(device)
 
     # check l2 norm
     assert torch.allclose(expected,
@@ -29,7 +29,7 @@ def test_p2p_distance(device):
 
     assert torch.allclose(expected, p2p, rtol=1e-5)
 
-    p2p = batched_point2point_distance(a, a+1).squeeze()
+    p2p = batched_point2point_distance(a, a + 1).squeeze()
     # check shape
     assert p2p.shape == torch.Size([5, 5])
 
@@ -66,7 +66,7 @@ def test_edge_length(device):
     edg_index = adj.nonzero()
     edg_index = torch.stack([edg_index[:, 0], edg_index[:, 1]])
 
-    expected = (p2p[0, 1]+p2p[1, 0])/2
+    expected = (p2p[0, 1] + p2p[1, 0]) / 2
 
     assert torch.allclose(expected, total_edge_length(p2p, edg_index))
 
@@ -74,7 +74,7 @@ def test_edge_length(device):
 @pytest.mark.parametrize('device', devices)
 def test_chamfer_distance(device):
     pt0 = dummy(1, 10, 3).to(device)
-    pt1 = dummy(1, 7, 3).to(device)+1
+    pt1 = dummy(1, 7, 3).to(device) + 1
 
     p2p = batched_point2point_distance(pt0, pt1)
     l0, idx0, l1, idx1 = batched_chamfer_distance(p2p)
@@ -85,7 +85,7 @@ def test_chamfer_distance(device):
     assert l1.item() == 21
 
     pt0 = dummy(1, 10, 3).expand(2, 10, 3).to(device)
-    pt1 = (dummy(1, 7, 3)+1).expand(2, 7, 3).to(device)
+    pt1 = (dummy(1, 7, 3) + 1).expand(2, 7, 3).to(device)
     p2p = batched_point2point_distance(pt0, pt1)
 
     l0, idx0, l1, idx1 = batched_chamfer_distance(p2p)
@@ -115,7 +115,7 @@ def test_face_probas(device):
                               ]).to(device)
 
     surface_area = surface_areas(pos, faces)
-    probas = surface_area/surface_area.sum()
+    probas = surface_area / surface_area.sum()
 
     areas = torch.Tensor([1.22474, 4., 3.5, 8.3666]).to(device)
     expected_probas = areas / areas.sum()

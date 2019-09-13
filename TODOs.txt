@@ -1,6 +1,6 @@
 #TODOs
 2. train/test splits  maybe should be a static allocation?
-3. add the json/whatever config of shapeNet
+3. all data should be tensors or objects that support to(device) for mask_rcnn
 3. have ground truths for the backbone networks aka ground truths for mask_rcnn and resnet50
    things like classes bounding boxes masks etc
 5. finish evaluate.py and train.py
