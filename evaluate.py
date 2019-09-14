@@ -10,6 +10,7 @@ import torch.nn as nn
 
 from model import (Pix3DModel, ShapeNetModel, pretrained_MaskRcnn,
                    pretrained_ResNet50)
+from utils.save import save_mesh, save_voxels
 
 assert torch.cuda.is_available(), "the training process is slow and requires gpu"
 
@@ -38,8 +39,6 @@ parser.add_argument("--elipsoid", default=False, action="store_true",
 parser.add_argument('--imagePath', type=str, help='the path to find the data')
 parser.add_argument('--savePath', type=str, default='eval/',
                     help='the path to save the reconstructed meshes')
-parser.add_argument('--saveName', type=str, default='out_mesh',
-                    help='the name of the output mesh')
 
 options = parser.parse_args()
 
@@ -73,7 +72,7 @@ def load_file(file_path):
     return img
 
 
-img = load_file(options.dataPath)
+img = load_file(options.imagePath)
 
 output = model(img)
 
@@ -92,7 +91,16 @@ mesh_faces = output['faces']
 voxels = output['voxels']
 graphs_per_image = output['graphs_per_image']
 
-# TODO save voxels and meshes
+print(f"saving output to {options.savePath}")
 
+filename = os.path.basename(options.imgPath).split('.')[0]
+# save voxels
+save_voxels(voxels, os.path.join(options.savePath, filename))
+
+# TODO handle the graph_per_image vertex per graph nonsense
+# save the intermediate meshes
+for idx, (pos, faces) in enumerate(zip(vertex_positions.split(vertice_index), mesh_faces.split(face_index))):
+    mesh_file = os.path.join(options.savePath, filename, f"_mesh_{idx}")
+    save_mesh(pos, faces, mesh_file)
 
 print("Finish!")
