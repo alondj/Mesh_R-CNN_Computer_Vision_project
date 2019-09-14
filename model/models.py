@@ -268,17 +268,3 @@ def pretrained_MaskRcnn(num_classes=10, pretrained=True):
                                                        num_classes)
 
     return model
-
-
-if __name__ == "__main__":
-    model = pretrained_MaskRcnn(num_classes=10, pretrained=False).cuda()
-
-    x = torch.randn(2, 3, 224, 224).cuda()
-
-    boxes = torch.randint(0, 224, (1, 4)).float().cuda()
-    labels = torch.randint(0, 10, (1,)).long().cuda()
-    masks = torch.randint(0, 2, (1, 224, 224)).cuda()
-    targes = [{'boxes': boxes, 'labels': labels, 'masks': masks}]
-
-    out, _, _ = model(x, targes+targes)
-    print(out.keys())

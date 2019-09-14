@@ -107,7 +107,7 @@ print(f"options were:\n{options}\n")
 
 # model and datasets/loaders definition
 if model_name == 'ShapeNet':
-    model=ShapeNetModel(pretrained_ResNet50(nn.functional.cross_entropy,
+    model=ShapeNetModel(pretrained_ResNet50(nn.functional.nll_loss,
                                               num_classes=10,
                                               pretrained=True),
                           residual=options.residual,
