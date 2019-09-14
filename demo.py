@@ -2,7 +2,7 @@ import argparse
 import datetime
 import os
 import sys
-
+import matplotlib.image as mpimg
 import numpy as np
 import torch
 import torch.nn as nn
@@ -63,21 +63,13 @@ else:
 
 # load checkpoint
 model.load_state_dict(torch.load(options.model_path))
-model: nn.Module = model.to('cuda')
+model: nn.Module = model.to('cuda').eval()
 
 
-def load_file(file_path):
-    import matplotlib.image as mpimg
-    img = torch.from_numpy(mpimg.imread(file_path))
-    return img
-
-
-img = load_file(options.imagePath)
+img = torch.from_numpy(mpimg.imread(options.imagePath))
 
 output = model(img)
 
-# TODO save each predicted mesh as point_clouds? / vertices+faces?
-# do what you think is best
 
 if not os.path.exists(options.savePath):
     os.mkdir(options.savePath)
