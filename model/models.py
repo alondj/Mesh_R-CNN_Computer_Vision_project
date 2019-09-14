@@ -113,20 +113,14 @@ class ShapeNetResNet50(ResNet):
         return x, [img0, img1, img2, img3]
 
 
-def pretrained_ResNet50(loss_function, num_classes=10, pretrained=True, path=''):
+def pretrained_ResNet50(loss_function, num_classes=10, pretrained=True):
     # TODO we should have our own pretrained model and not the default one
     # when that time comes remove the pretrained arg and set path as deafult model path
     url = res_urls['resnet50']
     model = ShapeNetResNet50(loss_function, Bottleneck, [3, 4, 6, 3])
 
-    state_dict = None
-    if path != '':
-        state_dict = torch.load(path)
-    elif pretrained:
-        state_dict = load_url(url, progress=True)
-
-    if state_dict:
-        model.load_state_dict(state_dict)
+    if pretrained:
+        model.load_state_dict(load_url(url, progress=True))
 
     if num_classes != model.fc.out_features:
         model.fc = nn.Linear(model.fc.in_features, num_classes)
@@ -252,19 +246,13 @@ class Pix3DMask_RCNN(MaskRCNN):
         return detections, pix3d_input, graphs_per_image
 
 
-def pretrained_MaskRcnn(num_classes=10, pretrained=True, path=''):
+def pretrained_MaskRcnn(num_classes=10, pretrained=True):
     # TODO we should have our own pretrained model and not the default one
     # when that time comes remove the pretrained arg and set path as deafult model path
     url = mask_urls['maskrcnn_resnet50_fpn_coco']
     model = Pix3DMask_RCNN(91)
-    state_dict = None
-    if path != '':
-        state_dict = torch.load(path)
-    elif pretrained:
-        state_dict = load_url(url, progress=True)
-
-    if state_dict:
-        model.load_state_dict(state_dict)
+    if pretrained:
+        model.load_state_dict(load_url(url, progress=True))
 
     # get the number of input features for the classifier
     in_features = model.roi_heads.box_predictor.cls_score.in_features

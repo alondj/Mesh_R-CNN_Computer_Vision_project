@@ -37,10 +37,7 @@ parser.add_argument(
     "--model", "-m", help="the model we wish to train", choices=["ShapeNet", "Pix3D"], required=True)
 parser.add_argument('--featDim', type=int, default=128,
                     help='number of vertex features')
-parser.add_argument('--GCN_path', '-Gp', type=str, default='',
-                    help='path of a pretrained GCN if we wish to continue training from checkpoint must be provided with backbone_path')
-parser.add_argument('--backbone_path', '-bp', type=str, default='',
-                    help='path of a pretrained backbone if we wish to continue training from checkpoint must be provided with GCN_path')
+parser.add_argument("--model_path", help="path of a pretrained model to cintinue training", default='')
 parser.add_argument('--num_refinement_stages', "-nr", type=int,
                     default=3, help='number of mesh refinement stages')
 parser.add_argument('--threshold', '-th',
@@ -49,6 +46,9 @@ parser.add_argument("--residual", default=False,
                     action="store_true", help="whether to use residual refinement for ShapeNet")
 parser.add_argument("--train_backbone", default=False, action="store_true",
                     help="whether to train the backbone in additon to the GCN")
+                    # TODO nice to have
+parser.add_argument("--elipsoid", default=False, action="store_true",
+                    help="wether to skip the voxel branch and start always from elipsoid mesh")
 
 # loss args
 parser.add_argument("--chamfer", help="weight of the chamfer loss",
@@ -82,24 +82,19 @@ parser.add_argument('--weightDecay', type=float,
                     default=5e-6, help='weight decay for L2 loss')
 parser.add_argument('--lr', type=float, default=1e-4, help='learning rate')
 
-options = parser.parse_args()
+options=parser.parse_args()
 
-# if loading checkpoint must load both backbone and GCN
-if options.GCN_path == '' and options.backbone_path != '' or options.GCN_path != '' and options.backbone_path == '':
-    raise ValueError(
-        "if loading checkpoint both GCN_path and backbone_path must be provided")
+epochs=options.nEpoch
 
-epochs = options.nEpoch
-
-devices = [torch.device('cuda', i)
+devices=[torch.device('cuda', i)
            for i in range(torch.cuda.device_count())]
 
 # print header
-model_name = options.model
-title = f'{model_name} training \n used_gpus: {len(devices)}\n epochs: {epochs}\n'
+model_name=options.model
+title=f'{model_name} training \n used_gpus: {len(devices)}\n epochs: {epochs}\n'
 print(title)
 
-gpus = [torch.cuda.get_device_name(device) for device in devices]
+gpus=[torch.cuda.get_device_name(device) for device in devices]
 print('system information\n python: %s, torch: %s, cudnn: %s, cuda: %s, \ngpus: %s' % (
     platform.python_version(),
     torch.__version__,
@@ -112,66 +107,63 @@ print(f"options were:\n{options}\n")
 
 # model and datasets/loaders definition
 if model_name == 'ShapeNet':
-    model = ShapeNetModel(pretrained_ResNet50(nn.functional.cross_entropy, num_classes=10,
-                                              pretrained=True, path=options.backbone_path),
+    model=ShapeNetModel(pretrained_ResNet50(nn.functional.cross_entropy,
+                                              num_classes=10,
+                                              pretrained=True),
                           residual=options.residual,
                           cubify_threshold=options.threshold,
                           image_shape=(137, 137),
                           vertex_feature_dim=options.featDim,
                           num_refinement_stages=options.num_refinement_stages)
 
-    dataset = shapeNet_Dataset(options.dataRoot, options.num_sampels)
-    trainloader = DataLoader(
+    dataset=shapeNet_Dataset(options.dataRoot, options.num_sampels)
+    trainloader=DataLoader(
         dataset, batch_size=options.batchSize, shuffle=True, num_workers=options.workers)
 else:
-    model = Pix3DModel(pretrained_MaskRcnn(num_classes=10, pretrained=True,
-                                           path=options.backbone_path),
+    model=Pix3DModel(pretrained_MaskRcnn(num_classes=10, pretrained=True),
                        cubify_threshold=options.threshold,
                        image_shape=(281, 187),
                        vertex_feature_dim=options.featDim,
                        num_refinement_stages=options.num_refinement_stages)
-    dataset = pix3dDataset(options.dataRoot, options.num_sampels)
-    trainloader = DataLoader(
+    dataset=pix3dDataset(options.dataRoot, options.num_sampels)
+    trainloader=DataLoader(
         dataset, batch_size=options.batchSize, shuffle=True, num_workers=options.workers)
 
-if options.GCN_path != '':
-    state_dict = torch.load(options.GCN_path)
-    voxel_state_dict = state_dict['voxelBranch']
-    state_dict().pop('voxelBranch')
-    model.refineStages.load_state_dict(state_dict)
-    model.voxelBranch.load_state_dict(voxel_state_dict)
+#load checkpoint if possible
+if options.model_path != '':
+    model.load_state_dict(torch.load(options.model_path))
 
 
 # use data parallel if possible
 # TODO i do not know if it will work for mask rcnn
 if len(devices > 1):
-    model = nn.DataParallel(model)
+    model=nn.DataParallel(model)
 
-model: nn.Module = model.to(devices[0])
+model: nn.Module=model.to(devices[0])
 
 # select trainable parameters
-trained_parameters = chain(model.refineStages.parameters(),
+trained_parameters=chain(model.refineStages.parameters(),
                            model.voxelBranch.parameters())
 if options.train_backbone:
-    trained_parameters = chain(trained_parameters, model.backbone.parameters())
+    trained_parameters=chain(trained_parameters, model.backbone.parameters())
     model.backbone.train()
 else:
     for p in model.backbone.parameters():
-        p.requires_grad = False
+        p.requires_grad=False
     model.backbone.eval()
 
 # Create Optimizer
-lrate = options.lr
-decay = options.weightDecay
+lrate=options.lr
+decay=options.weightDecay
 if options.optim == 'Adam':
-    optimizer = Adam(trained_parameters, lr=lrate, weight_decay=decay)
+    optimizer=Adam(trained_parameters, lr=lrate, weight_decay=decay)
 else:
-    optimizer = SGD(trained_parameters, lr=lrate, weight_decay=decay)
+    optimizer=SGD(trained_parameters, lr=lrate, weight_decay=decay)
     # TODO they increased learning rate do we wish to do the same?
     # linearly increasing the learning rate from 0.002 to 0.02 over the first 1K iterations,
 
 # loss weights
-loss_weights = {'c': options.chamfer,
+loss_weights={'c': options.chamfer,
                 'v': options.voxel,
                 'n': options.normal,
                 'e': options.edge,
@@ -179,20 +171,18 @@ loss_weights = {'c': options.chamfer,
                 }
 
 # checkpoint directories
-now = datetime.datetime.now()
-save_path = now.isoformat()
-GCN_path = os.path.join('checkpoints', model_name, 'GCN', save_path)
-backbone_path = os.path.join('checkpoints', options.model,
-                             'backbone', save_path)
-if not os.path.exists(GCN_path):
-    os.mkdir(GCN_path)
-if options.train_backbone and not os.path.exists(backbone_path):
-    os.mkdir(backbone_path)
+now=datetime.datetime.now()
+save_path=now.isoformat()
+checkpoint_path=os.path.join('checkpoints', model_name, save_path)
+
+if not os.path.exists(checkpoint_path):
+    os.mkdir(checkpoint_path)
+
 
 # Train model on the dataset
-losses = []
+losses=[]
 for epoch in range(epochs):
-    epoch_loss = []
+    epoch_loss=[]
     print(f'--- EPOCH {epoch+1}/{epochs} ---')
 
     # Set to Train mode
@@ -200,17 +190,17 @@ for epoch in range(epochs):
     with tqdm.tqdm(total=len(trainloader.batch_sampler), file=sys.stdout) as pbar:
         for i, data in enumerate(trainloader, 0):
             optimizer.zero_grad()
-            images, voxel_gts, pts_gts, backbone_targets = data
+            images, voxel_gts, pts_gts, backbone_targets=data
 
-            images = images.to(devices[0])
-            voxels_gts = voxels_gts.to(devices[0])
-            pts_gts = pts_gts.to(devices[0])
-            backbone_targets = backbone_targets.to(devices[0])
+            images=images.to(devices[0])
+            voxels_gts=voxels_gts.to(devices[0])
+            pts_gts=pts_gts.to(devices[0])
+            backbone_targets=backbone_targets.to(devices[0])
 
             # predict and comput loss
-            output = model(images, backbone_targets)
+            output=model(images, backbone_targets)
 
-            loss = total_loss(loss_weights, output,
+            loss=total_loss(loss_weights, output,
                               voxel_gts, pts_gts,
                               train_backbone=options.train_backbone,
                               backbone_type=model_name)
@@ -220,7 +210,7 @@ for epoch in range(epochs):
 
             epoch_loss.append(loss.item())
             pbar.update()
-            avg_loss = np.mean(epoch_loss)
+            avg_loss=np.mean(epoch_loss)
 
             # prediodic loss updates
             if (i + 1) % 128 == 0:
@@ -235,14 +225,10 @@ for epoch in range(epochs):
 
     # save the model
     print('saving net...')
-    # for eg checkpoints/Pix3D/GCN/date/model_1.pth
-    # for eg checkpoints/Pix3D/backbone/date/model_1.pth
-    file_name = f"model_{epoch}.pth"
-    state_dict = model.refineStages.state_dict()
-    state_dict["voxelBranch"] = model.voxelBranch.state_dict()
-    torch.save(state_dict, os.path.join(GCN_path, file_name))
-    if options.train_backbone:
-        torch.save(model.backbone.state_dict(),
-                   os.path.join(backbone_path, file_name))
+    # for eg checkpoints/Pix3D/date/model_{1}.pth
+    file_name=f"model_{epoch}.pth"
+    torch.save(model.state_dict(), 
+    os.path.join(checkpoint_path, file_name))
+
 
 print(f"training done avg loss {np.mean(losses)}")
