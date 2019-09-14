@@ -7,6 +7,12 @@ plt.rcParams["figure.figsize"] = 12.8, 9.6
 
 # TODO zyx vs x,y,z
 
+# visualize meshes pointclouds
+# https://medium.com/@yzhong.cs/beyond-data-scientist-3d-plots-in-python-with-examples-2a8bd7aa654b
+
+# visualize voxels
+# https://matplotlib.org/3.1.1/gallery/mplot3d/voxels_rgb.html
+
 
 def show_mesh(mesh):
     if isinstance(mesh, str):

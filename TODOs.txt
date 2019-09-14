@@ -1,10 +1,7 @@
 #TODOs
 2. train/test splits  maybe should be a static allocation?
-3. have ground truths for the backbone networks aka ground truths for mask_rcnn and resnet50
-   things like classes bounding boxes masks etc
-5. finish evaluate.py and train.py
 
-14. added custom target class for pix3D that supports to(device)
+5. finish evaluate.py and train.py
 
 13. for efficiency sake maybe add the option to load only the backbone features/only GCN features
 
@@ -18,10 +15,6 @@
 
 9. in regards to training do we wish to train the whole model backbone+GCN together
    or train the backbone before the GCN
-
-10. add backbone only training
-
-12. consolidate checkpoints for the backbone and the GCN
 
 
 11. any other TODO in the project

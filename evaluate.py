@@ -94,10 +94,5 @@ graphs_per_image = output['graphs_per_image']
 
 # TODO save voxels and meshes
 
-# TODO way to visualize the meshes pointclouds
-# https://medium.com/@yzhong.cs/beyond-data-scientist-3d-plots-in-python-with-examples-2a8bd7aa654b
-
-# TODO visualize voxels
-# https://matplotlib.org/3.1.1/gallery/mplot3d/voxels_rgb.html
 
 print("Finish!")
