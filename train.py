@@ -3,6 +3,7 @@ import datetime
 import os
 import platform
 import sys
+from itertools import chain
 
 import numpy as np
 import torch
@@ -134,7 +135,12 @@ else:
         dataset, batch_size=options.batchSize, shuffle=True, num_workers=options.workers)
 
 if options.GCN_path != '':
-    model.refineStages.load_state_dict(torch.load(options.GCN_path))
+    state_dict = torch.load(options.GCN_path)
+    voxel_state_dict = state_dict['voxelBranch']
+    state_dict().pop('voxelBranch')
+    model.refineStages.load_state_dict(state_dict)
+    model.voxelBranch.load_state_dict(voxel_state_dict)
+
 
 # use data parallel if possible
 # TODO i do not know if it will work for mask rcnn
@@ -144,9 +150,10 @@ if len(devices > 1):
 model: nn.Module = model.to(devices[0])
 
 # select trainable parameters
-trained_parameters = model.refineStages.parameters()
+trained_parameters = chain(model.refineStages.parameters(),
+                           model.voxelBranch.parameters())
 if options.train_backbone:
-    trained_parameters.extend(model.backbone.parameters())
+    trained_parameters = chain(trained_parameters, model.backbone.parameters())
     model.backbone.train()
 else:
     for p in model.backbone.parameters():
@@ -231,8 +238,9 @@ for epoch in range(epochs):
     # for eg checkpoints/Pix3D/GCN/date/model_1.pth
     # for eg checkpoints/Pix3D/backbone/date/model_1.pth
     file_name = f"model_{epoch}.pth"
-    torch.save(model.refineStages.state_dict(),
-               os.path.join(GCN_path, file_name))
+    state_dict = model.refineStages.state_dict()
+    state_dict["voxelBranch"] = model.voxelBranch.state_dict()
+    torch.save(state_dict, os.path.join(GCN_path, file_name))
     if options.train_backbone:
         torch.save(model.backbone.state_dict(),
                    os.path.join(backbone_path, file_name))
