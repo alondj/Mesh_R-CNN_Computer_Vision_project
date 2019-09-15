@@ -5,7 +5,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 plt.rcParams["figure.figsize"] = 12.8, 9.6
 
-# TODO zyx vs x,y,z
 
 # visualize meshes pointclouds
 # https://medium.com/@yzhong.cs/beyond-data-scientist-3d-plots-in-python-with-examples-2a8bd7aa654b

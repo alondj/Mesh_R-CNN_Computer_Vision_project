@@ -85,6 +85,10 @@ class ShapeNetModel(nn.Module):
 
 
 class ShapeNetResNet50(ResNet):
+    '''
+    this model outputs logits for class scores
+    '''
+
     def __init__(self, loss_function, *res_args, **res_kwargs):
         super(ShapeNetResNet50, self).__init__(*res_args, **res_kwargs)
         self.loss = loss_function
@@ -106,6 +110,7 @@ class ShapeNetResNet50(ResNet):
         x = self.avgpool(img3)
         x = torch.flatten(x, 1)
         x = self.fc(x)
+        x = F.softmax(x, -1)
 
         if self.training:
             return self.loss(x, targets), [img0, img1, img2, img3]

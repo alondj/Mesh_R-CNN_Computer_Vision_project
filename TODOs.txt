@@ -16,5 +16,11 @@
 9. in regards to training do we wish to train the whole model backbone+GCN together
    or train the backbone before the GCN
 
+1.ensure we always use x,y,z as coords
+
+12.evaluation metrics for pix3d and shapeNet
+
+14. in general how to train and validate mask rcnn
+
 
 11. any other TODO in the project

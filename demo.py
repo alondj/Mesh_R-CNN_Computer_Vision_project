@@ -19,7 +19,7 @@ parser = argparse.ArgumentParser()
 
 # model args
 parser.add_argument(
-    "--model", "-m", help="the model we wish to train", choices=["ShapeNet", "Pix3D"], required=True)
+    "--model", "-m", help="the model to run the demo with", choices=["ShapeNet", "Pix3D"], required=True)
 parser.add_argument('--featDim', type=int, default=128,
                     help='number of vertex features')
 parser.add_argument('--modelPath', type=str, required=True,
@@ -31,10 +31,6 @@ parser.add_argument('--threshold', '-th',
 parser.add_argument("--residual", default=False,
                     action="store_true", help="whether to use residual refinement for ShapeNet")
 
-# TODO nice to have
-parser.add_argument("--elipsoid", default=False, action="store_true",
-                    help="wether to skip the voxel branch and start always from elipsoid mesh")
-
 # sample to evaluate and output paths
 parser.add_argument('--imagePath', type=str, help='the path to find the data')
 parser.add_argument('--savePath', type=str, default='eval/',
@@ -44,7 +40,8 @@ options = parser.parse_args()
 
 # model definition
 if options.model == 'ShapeNet':
-    model = ShapeNetModel(pretrained_ResNet50(nn.functional.cross_entropy, num_classes=10,
+    # TODO how many classes are in shapenet and pix3d?
+    model = ShapeNetModel(pretrained_ResNet50(nn.functional.nll_loss, num_classes=10,
                                               pretrained=True),
                           residual=options.residual,
                           cubify_threshold=options.threshold,
