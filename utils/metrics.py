@@ -15,11 +15,11 @@ def f_score(confusion: Tensor, beta=1.0):
     # precision is number of true class predictions / total class prediction
     # recall is number of true class predictions / number of class in gt
     tp = confusion.diagonal()
-    actual = confusion.sum(0)
-    total_predicted = confusion.sum(1)
+    should_be_positive = confusion.sum(0)
+    total_positive_predicted = confusion.sum(1)
 
-    class_precision = 100*(tp/total_predicted)
-    class_recall = 100*(tp/actual)
+    class_precision = 100*(tp/total_positive_predicted)
+    class_recall = 100*(tp/should_be_positive)
 
     score = (1+beta**2)*class_precision*class_recall
 

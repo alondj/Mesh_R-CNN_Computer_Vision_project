@@ -5,6 +5,8 @@
 
 13. for efficiency sake maybe add the option to load only the backbone features/only GCN features
 
+7. for pix3d sample point clouds from gt meshes
+
 6. realy important write scripts to download datasets and preprocess data
    both for pix3D and shapeNet
 

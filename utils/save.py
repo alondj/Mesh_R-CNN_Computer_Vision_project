@@ -1,7 +1,7 @@
 
 import numpy as np
 from collections import namedtuple
-import torch
+
 from torch import Tensor
 
 Mesh = namedtuple('Mesh', ['vertices', 'faces'])
@@ -52,29 +52,3 @@ def load_mesh(filename: str) -> Mesh:
                 vertices.append(vertex)
 
     return Mesh(np.array(vertices), np.array(triangles))
-
-
-def check_mesh_save_load():
-    mesh = load_mesh("teapot.obj")
-
-    vertices = torch.from_numpy(mesh.vertices)
-    faces = torch.from_numpy(mesh.faces)
-
-    save_mesh(vertices, faces, "a")
-
-    mesh2 = load_mesh("a.obj")
-
-    assert np.allclose(mesh.vertices, mesh2.vertices)
-    assert np.allclose(mesh.faces, mesh2.faces)
-
-
-def check_voxel_save_load():
-    N1 = 10
-    N2 = 10
-    N3 = 10
-    ma = np.ones((10, 10, 10))
-    ma[4, :, 2] = 0
-    save_voxels(torch.from_numpy(ma), "voxels.npy")
-    # show_voxels(ma)
-    m = load_voxels("voxels.npy")
-    assert np.allclose(ma, m)
