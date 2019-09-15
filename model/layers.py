@@ -628,13 +628,13 @@ class VertexAlign(nn.Module):
     def single_projection(self, img_features: List[Tensor], vertex_positions: Tensor) -> Tensor:
         # perform a projection of vertex_positions accross all given feature maps
 
-        # dimentions are addresed in order as Z,Y,X or d,h,w
+        # dimentions are addresed in order X,Y,Z
         # Y/ Z
         # X/ -Z
         # TODO magic numbers 
         # ∑V
-        h = 248 * (vertex_positions[:, 1] / vertex_positions[:, 0]) + 111.5
-        w = 248 * (vertex_positions[:, 2] / -vertex_positions[:, 0]) + 111.5
+        h = 248 * (vertex_positions[:, 1] / vertex_positions[:, 2]) + 111.5
+        w = 248 * (vertex_positions[:, 0] / -vertex_positions[:, 2]) + 111.5
 
         # scale upto original image size
         h = torch.clamp(h, min=0, max=self.h-1)
@@ -663,10 +663,10 @@ class VertexAlign(nn.Module):
         y2 = torch.clamp(y2, max=size_y - 1)
 
         # C x ∑V x  ∑V
-        Q11 = img_feat[:, y1, x1].clone()
-        Q12 = img_feat[:, y2, x1].clone()
-        Q21 = img_feat[:, y1, x2].clone()
-        Q22 = img_feat[:, y2, x2].clone()
+        Q11 = img_feat[:, x1, y1].clone()
+        Q12 = img_feat[:, x1, y2].clone()
+        Q21 = img_feat[:, x2, y1].clone()
+        Q22 = img_feat[:, x2, y2].clone()
 
         x, y = x.long(), y.long()
 
