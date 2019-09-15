@@ -150,6 +150,21 @@ with torch.no_grad():
             for p, t in zip(preds, get_labels(backbone_targets)):
                 confusion_matrix[p, t] += 1
 
-    losses_and_scores['f_0.1'] = f_score(confusion_matrix, 0.1).mean()
-    losses_and_scores['f_0.3'] = f_score(confusion_matrix, 0.3).mean()
-    losses_and_scores['f_0.5'] = f_score(confusion_matrix, 0.5).mean()
+    # compute final metrics
+    f_0_1loss = f_score(confusion_matrix, 0.1).mean().item()
+    f_0_3loss = f_score(confusion_matrix, 0.3).mean().item()
+    f_0_5loss = f_score(confusion_matrix, 0.5).mean().item()
+
+    avg_chamfer = losses_and_scores['chamfer'] / len(testLoader.batch_sampler)
+    avg_edge = losses_and_scores['edge']/len(testLoader.batch_sampler)
+    avg_voxel = losses_and_scores['voxel']/len(testLoader.batch_sampler)
+    avg_normal = losses_and_scores['normal']/len(testLoader.batch_sampler)
+
+    print(f"evaluated {model_name} dataset")
+    print(f"avg chamfer loss {avg_chamfer:.2f}")
+    print(f"avg edge loss {avg_edge:.2f}")
+    print(f"avg voxel loss {avg_voxel:.2f}")
+    print(f"avg normal loss {avg_normal:.2f}")
+    print(f"avg f0.1 1loss {f_0_1loss:.2f}")
+    print(f"avg f0.3 loss {f_0_3loss:.2f}")
+    print(f"avg f0.5 1loss {f_0_5loss:.2f}")
