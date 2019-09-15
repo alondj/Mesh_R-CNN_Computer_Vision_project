@@ -75,7 +75,7 @@ print(f"options were:\n{options}\n")
 # model and datasets/loaders definition
 if options.model == 'ShapeNet':
     # TODO how many classes are in shapenet and pix3d?
-    model = pretrained_ResNet50(nn.functional.nll_loss, num_classes=10,
+    model = pretrained_ResNet50(nn.functional.nll_loss, num_classes=13,
                                 pretrained=True)
 
     dataset = shapeNet_Dataset(options.dataRoot, options.num_sampels)

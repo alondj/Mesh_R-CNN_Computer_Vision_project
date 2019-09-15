@@ -41,7 +41,7 @@ options = parser.parse_args()
 # model definition
 if options.model == 'ShapeNet':
     # TODO how many classes are in shapenet and pix3d?
-    model = ShapeNetModel(pretrained_ResNet50(nn.functional.nll_loss, num_classes=10,
+    model = ShapeNetModel(pretrained_ResNet50(nn.functional.nll_loss, num_classes=13,
                                               pretrained=True),
                           residual=options.residual,
                           cubify_threshold=options.threshold,

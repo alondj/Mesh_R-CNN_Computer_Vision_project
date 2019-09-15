@@ -61,10 +61,10 @@ gpus = [torch.cuda.get_device_name(device) for device in devices]
 
 # model and datasets/loaders definition
 if model_name == 'ShapeNet':
-    num_classes = 10
+    num_classes = 13
     # TODO how many classes are in shapenet and pix3d?
     model = ShapeNetModel(pretrained_ResNet50(nn.functional.nll_loss,
-                                              num_classes=10,
+                                              num_classes=13,
                                               pretrained=True),
                           residual=options.residual,
                           cubify_threshold=options.threshold,
@@ -147,7 +147,7 @@ with torch.no_grad():
             # update confusion matrix
             # TODO how to handle pix3d
             preds = torch.argmax(model_output['preds'], 1)
-            for p, t in zip(preds, labels):
+            for p, t in zip(preds, get_labels(backbone_targets)):
                 confusion_matrix[p, t] += 1
 
     losses_and_scores['f_0.1'] = f_score(confusion_matrix, 0.1).mean()
