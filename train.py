@@ -186,6 +186,7 @@ for epoch in range(epochs):
 
     # Set to Train mode
     model.refineStages.train()
+    model.voxelBranch.train()
     with tqdm.tqdm(total=len(trainloader.batch_sampler), file=sys.stdout) as pbar:
         for i, data in enumerate(trainloader, 0):
             optimizer.zero_grad()
