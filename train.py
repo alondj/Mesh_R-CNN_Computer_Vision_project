@@ -175,10 +175,22 @@ loss_weights = {'c': options.chamfer,
 # checkpoint directories
 now = datetime.datetime.now()
 save_path = now.isoformat()
-checkpoint_path = os.path.join('checkpoints', model_name, save_path)
-
-if not os.path.exists(checkpoint_path):
-    os.mkdir(checkpoint_path)
+GCN_path = os.path.join('checkpoints', model_name, 'GCN', save_path)
+backbone_path = os.path.join('checkpoints', options.model,
+                             'backbone', save_path)
+if not os.path.exists(GCN_path):
+    os.mkdir(os.path.join('checkpoints'))
+    os.mkdir(os.path.join('checkpoints',model_name))
+    os.mkdir(os.path.join('checkpoints',model_name,'GCN'))
+    os.mkdir(GCN_path)
+if options.train_backbone and not os.path.exists(backbone_path):
+    if not os.path.exists('checkpoints'):
+      os.mkdir(os.path.join('checkpoints'))
+    if not os.path.exists(os.path.join('checkpoints', options.model)):
+      os.mkdir(os.path.join('checkpoints', options.model))
+    if not os.path.exists(os.path.join('checkpoints', options.model,'backbone')):
+      os.mkdir(os.path.join('checkpoints', options.model,'backbone'))
+    os.mkdir(backbone_path)
 
 
 # Train model on the dataset

@@ -89,7 +89,7 @@ else:
 
 # use data parallel if possible
 # TODO i do not know if it will work for mask rcnn
-if len(devices > 1):
+if len(devices) > 1:
     model = nn.DataParallel(model)
 
 model: nn.Module = model.to(devices[0])

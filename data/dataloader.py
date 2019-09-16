@@ -202,4 +202,4 @@ if __name__ == "__main__":
     pxd = pix3dDataset("../dataset/pix3d", 5)
     # sdb = shapeNet_Dataset("../dataset/shapeNet/ShapeNetVox32", 9)
     imgs, models, clouds, targets = pxd[0:1]
-    print(targets['masks'][0])
+    print(models)
