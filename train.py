@@ -133,16 +133,11 @@ if options.model_path != '':
     model.load_state_dict(torch.load(options.model_path))
 
 
-# use data parallel if possible
-# TODO i do not know if it will work for mask rcnn
-if len(devices > 1):
-    model = nn.DataParallel(model)
-
-model: nn.Module = model.to(devices[0])
-
 # select trainable parameters
 trained_parameters = chain(model.refineStages.parameters(),
                            model.voxelBranch.parameters())
+model.refineStages.train()
+model.voxelBranch.train()
 if options.train_backbone:
     trained_parameters = chain(trained_parameters, model.backbone.parameters())
     model.backbone.train()
@@ -150,6 +145,14 @@ else:
     for p in model.backbone.parameters():
         p.requires_grad = False
     model.backbone.eval()
+
+# use data parallel if possible
+# TODO i do not know if it will work for mask rcnn
+if len(devices > 1):
+    model = nn.DataParallel(model)
+
+model: nn.Module = model.to(devices[0])
+
 
 # Create Optimizer
 lrate = options.lr
@@ -183,10 +186,6 @@ losses = []
 for epoch in range(epochs):
     epoch_loss = []
     print(f'--- EPOCH {epoch+1}/{epochs} ---')
-
-    # Set to Train mode
-    model.refineStages.train()
-    model.voxelBranch.train()
     with tqdm.tqdm(total=len(trainloader.batch_sampler), file=sys.stdout) as pbar:
         for i, data in enumerate(trainloader, 0):
             optimizer.zero_grad()
