@@ -593,6 +593,7 @@ class VoxelBranch(nn.Sequential):
 class VertexAlign(nn.Module):
     # explained in the article http://openaccess.thecvf.com/content_ECCV_2018/papers/Nanyang_Wang_Pixel2Mesh_Generating_3D_ECCV_2018_paper.pdf
     # as perceptual feature pooling https://github.com/Tong-ZHAO/Pixel2Mesh-Pytorch
+    # http://bigvid.fudan.edu.cn/pixel2mesh/eccv2018/Pixel2Mesh-supp.pdf
     # https://github.com/nywang16/Pixel2Mesh original source code
     # https://gist.github.com/peteflorence/a1da2c759ca1ac2b74af9a83f69ce20e
 
@@ -631,7 +632,8 @@ class VertexAlign(nn.Module):
         # dimentions are addresed in order X,Y,Z
         # Y/ Z
         # X/ -Z
-        # TODO magic numbers 
+        # TODO magic numbers for camera intrinsics
+        # http://bigvid.fudan.edu.cn/pixel2mesh/eccv2018/Pixel2Mesh-supp.pdf
         # ∑V
         h = 248 * (vertex_positions[:, 1] / vertex_positions[:, 2]) + 111.5
         w = 248 * (vertex_positions[:, 0] / -vertex_positions[:, 2]) + 111.5
