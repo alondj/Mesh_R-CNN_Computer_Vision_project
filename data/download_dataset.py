@@ -2,6 +2,7 @@ import urllib.request
 import zipfile
 import os
 import shutil
+import tarfile
 
 """
 the dataset should be built like that:
@@ -31,7 +32,7 @@ def download_pix3d(download_path):
     urllib.request.urlretrieve(url, zip_download_path)
     print("unzipping pix3d.zip")
     with zipfile.ZipFile(zip_download_path, 'r') as zip_ref:
-        zip_ref.extractall(f"{download_path}/dataset")
+        zip_ref.extractall(f"{download_path}/dataset/pix3d")
     print("deleting the zip file")
     os.remove(zip_download_path)
 
@@ -58,24 +59,25 @@ def download_shapenet(download_path):
     shapeNet voxel http://cvgl.stanford.edu/data2/ShapeNetVox32.tgz
     shapeNet pointclouds https://drive.google.com/open?id=1cfoe521iTgcB_7-g_98GYAqO553W8Y0g
     """
+
     print("downloading shapeNet img zip")
     os.mkdir(f"{download_path}/dataset/shapeNet")
     url = "http://cvgl.stanford.edu/data2/ShapeNetRendering.tgz"
-    zip_download_path = f"{download_path}/dataset/shapeNet/ShapeNetRendering.zip"
+    zip_download_path = f"{download_path}/dataset/shapeNet/ShapeNetRendering.tgz"
     urllib.request.urlretrieve(url, zip_download_path)
     print("unzipping")
-    with zipfile.ZipFile(zip_download_path, 'r') as zip_ref:
-        zip_ref.extractall(f"{download_path}/dataset/shapeNet")
+    tf = tarfile.open(f"{download_path}/dataset/shapeNet/ShapeNetRendering.tgz")
+    tf.extractall(f"{download_path}/dataset/shapeNet")
     print("deleting the zip file")
     os.remove(zip_download_path)
 
     print("downloading shapNet voxel zip")
     url = "http://cvgl.stanford.edu/data2/ShapeNetVox32.tgz"
-    zip_download_path = f"{download_path}/dataset/shapeNet/ShapeNetVox32.zip"
+    zip_download_path = f"{download_path}/dataset/shapeNet/ShapeNetVox32.tgz"
     urllib.request.urlretrieve(url, zip_download_path)
     print("unzipping")
-    with zipfile.ZipFile(zip_download_path, 'r') as zip_ref:
-        zip_ref.extractall(f"{download_path}/dataset/shapeNet")
+    tf = tarfile.open(f"{download_path}/dataset/shapeNet/ShapeNetVox32.tgz")
+    tf.extractall(f"{download_path}/dataset/shapeNet")
     print("deleting the zip file")
     os.remove(zip_download_path)
 
@@ -92,5 +94,5 @@ def download_shapenet(download_path):
 
 
 if __name__ == "__main__":
-    download_pix3d("D:")
-    download_shapenet()
+    download_pix3d("/home/benbanuz")
+    download_shapenet("/home/benbanuz")
