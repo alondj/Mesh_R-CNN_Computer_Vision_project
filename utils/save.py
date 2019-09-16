@@ -2,7 +2,9 @@
 import numpy as np
 from collections import namedtuple
 
+import torch
 from torch import Tensor
+import pickle
 
 Mesh = namedtuple('Mesh', ['vertices', 'faces'])
 
@@ -52,3 +54,21 @@ def load_mesh(filename: str) -> Mesh:
                 vertices.append(vertex)
 
     return Mesh(np.array(vertices), np.array(triangles))
+
+
+def read_pix3d_data():
+    # read the mesh data return np arrays vertices and faces
+    mesh = load_mesh("model.obj")
+
+    print(mesh.vertices.shape, mesh.faces.shape)
+
+    print(np.max(mesh.vertices, axis=0))
+    print(np.min(mesh.vertices, axis=0))
+    # read voxel as np array
+    import scipy.io
+    mat = scipy.io.loadmat('voxel.mat')['voxel']
+    print(mat.shape)
+
+
+if __name__ == "__main__":
+    read_pix3d_data()

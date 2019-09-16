@@ -69,35 +69,6 @@ class pix3dDataset(Dataset):
             return imgs, models, clouds, targets
 
 
-def get_class(s: str):
-    if s.find("02691156") != -1:
-        return "airplane"
-    if s.find("02828884") != -1:
-        return "bench"
-    if s.find("02933112") != -1:
-        return "drawer"
-    if s.find("02958343") != -1:
-        return "car"
-    if s.find("03001627") != -1:
-        return "chair"
-    if s.find("03211117") != -1:
-        return "TV"
-    if s.find("03636649") != -1:
-        return "lamp"
-    if s.find("03691459") != -1:
-        return "sterio"
-    if s.find("04090263") != -1:
-        return "gun"
-    if s.find("04256520") != -1:
-        return "sofa"
-    if s.find("04379243") != -1:
-        return "table"
-    if s.find("04401088") != -1:
-        return "phone"
-    if s.find("04530566") != -1:
-        return "boat"
-
-
 class pix3DTarget():
     keys = ['boxes', 'masks', 'labels']
 
@@ -145,6 +116,35 @@ class pix3DTargetList():
 
     def __len__(self):
         return len(self.targets)
+
+
+def get_class(s: str):
+    if s.find("02691156") != -1:
+        return "airplane"
+    if s.find("02828884") != -1:
+        return "bench"
+    if s.find("02933112") != -1:
+        return "drawer"
+    if s.find("02958343") != -1:
+        return "car"
+    if s.find("03001627") != -1:
+        return "chair"
+    if s.find("03211117") != -1:
+        return "TV"
+    if s.find("03636649") != -1:
+        return "lamp"
+    if s.find("03691459") != -1:
+        return "sterio"
+    if s.find("04090263") != -1:
+        return "gun"
+    if s.find("04256520") != -1:
+        return "sofa"
+    if s.find("04379243") != -1:
+        return "table"
+    if s.find("04401088") != -1:
+        return "phone"
+    if s.find("04530566") != -1:
+        return "boat"
 
 
 class shapeNet_Dataset(Dataset):
