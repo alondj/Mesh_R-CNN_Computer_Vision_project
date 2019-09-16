@@ -1,5 +1,6 @@
 
 from .save import load_mesh, load_voxels
+from .normalize_mesh import normalize_mesh
 from mpl_toolkits import mplot3d
 import numpy as np
 import matplotlib.pyplot as plt
@@ -18,14 +19,17 @@ def show_mesh(mesh):
         mesh = load_mesh(mesh)
 
     vertices, triangles = mesh
+    if vertices.abs().max() > 1:
+        vertices = normalize_mesh(vertices)
+
     triangles -= 1
     x = vertices[:, 0]
     y = vertices[:, 1]
     z = vertices[:, 2]
     ax = plt.axes(projection='3d')
-    ax.set_xlim([-3, 3])
-    ax.set_ylim([-3, 3])
-    ax.set_zlim([0, 3])
+    ax.set_xlim([-1, 1])
+    ax.set_ylim([-1, 1])
+    ax.set_zlim([-1, 1])
     ax.plot_trisurf(x, z, triangles, y, shade=True, color='white')
     plt.show()
 
