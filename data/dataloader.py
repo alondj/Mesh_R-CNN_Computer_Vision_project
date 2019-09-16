@@ -6,6 +6,7 @@ import numpy as np
 from pathlib import Path
 import data.read_binvox
 import torch
+import PIL.Image
 
 
 class pix3dDataset(Dataset):
@@ -38,71 +39,68 @@ class pix3dDataset(Dataset):
                     self.pointcloud.append(pointcloud_src)
                     self.masks.append(mask_src)
                     self.bbox.append(torch.tensor(p['bbox']))
-                    self.Class.append(p['category'])
+
+                    if p["img"].find("chair") != -1:
+                        self.Class.append(torch.tensor(0))
+                    if p["img"].find("sofa") != -1:
+                        self.Class.append(torch.tensor(1))
+                    if p["img"].find("table") != -1:
+                        self.Class.append(torch.tensor(2))
 
     def __len__(self):
         return len(self.imgs_src)
 
     def __getitem__(self, idx):
-        if type(idx) != slice:
-            idx = slice(idx, idx + 1)
-        if type(idx) == slice:
-            img_src = self.imgs_src[idx]
-            model_src = self.models_vox_src[idx]
-            pointcloud_src = self.pointcloud[idx]
-            masks_src = self.masks[idx]
-            bbox = self.bbox[idx]
-            label = self.Class[idx]
+        img_src = self.imgs_src[idx]
+        model_src = self.models_vox_src[idx]
+        pointcloud_src = self.pointcloud[idx]
+        masks_src = self.masks[idx]
+        bbox = self.bbox[idx]
+        label = self.Class[idx]
 
-            imgs = []
-            models = []
-            clouds = []
-            masks = []
+        img = torch.from_numpy(mpimg.imread(img_src))
+        model = torch.from_numpy(sci.loadmat(model_src)['voxel'])
+        cloud = torch.from_numpy(np.load(pointcloud_src))
+        mask = torch.from_numpy(mpimg.imread(masks_src))
 
-            for img_s, model_s, pc_src, mask_s in zip(img_src, model_src, pointcloud_src, masks_src):
-                imgs.append(torch.from_numpy(mpimg.imread(img_s)))
-                models.append(torch.from_numpy(sci.loadmat(model_s)['voxel']))
-                clouds.append(torch.from_numpy(np.load(pc_src)))
-                masks.append(torch.from_numpy(mpimg.imread(mask_s)))
-
-            targets = pix3DTargetList(masks, bbox, label)
-            return imgs, models, clouds, targets
+        target = pix3DTarget({'masks': mask, 'boxes': bbox, 'labels': label})
+        return img, model, cloud, target
 
 
 def get_class(s: str):
     if s.find("02691156") != -1:
-        return "airplane"
+        return 0
     if s.find("02828884") != -1:
-        return "bench"
+        return 1
     if s.find("02933112") != -1:
-        return "drawer"
+        return 2
     if s.find("02958343") != -1:
-        return "car"
+        return 3
     if s.find("03001627") != -1:
-        return "chair"
+        return 4
     if s.find("03211117") != -1:
-        return "TV"
+        return 5
     if s.find("03636649") != -1:
-        return "lamp"
+        return 6
     if s.find("03691459") != -1:
-        return "sterio"
+        return 7
     if s.find("04090263") != -1:
-        return "gun"
+        return 8
     if s.find("04256520") != -1:
-        return "sofa"
+        return 9
     if s.find("04379243") != -1:
-        return "table"
+        return 10
     if s.find("04401088") != -1:
-        return "phone"
+        return 11
     if s.find("04530566") != -1:
-        return "boat"
+        return 12
 
 
 class pix3DTarget():
     keys = ['boxes', 'masks', 'labels']
 
     def __init__(self, target: dict):
-        if not(isinstance(target, dict) and all(k in target for k in self.keys)):
+        if not (isinstance(target, dict) and all(k in target for k in self.keys)):
             raise ValueError(
                 f"target must be a dictionary with keys {self.keys}")
 
@@ -121,30 +119,6 @@ class pix3DTarget():
 
     def __contains__(self, key):
         return key in self.target
-
-
-class pix3DTargetList():
-    def __init__(self, masks, boxes, labels):
-        assert len(boxes) == len(labels)
-        assert len(boxes) == len(masks)
-
-        self.targets = []
-        for mask, box, lb in zip(masks, boxes, labels):
-            target = pix3DTarget({'masks': mask, 'boxes': box, 'labels': lb})
-            self.targets.append(target)
-
-    def to(self, *args, **kwargs):
-        self.targets = [t.to(*args, **kwargs) for t in self.targets]
-        return self
-
-    def __getitem__(self, arg):
-        return self.targets[arg]
-
-    def __setitem__(self, key, value):
-        self.targets[key] = value
-
-    def __len__(self):
-        return len(self.targets)
 
 
 class shapeNet_Dataset(Dataset):
@@ -176,30 +150,26 @@ class shapeNet_Dataset(Dataset):
         return len(self.imgs_src)
 
     def __getitem__(self, idx):
-        if type(idx) != slice:
-            idx = slice(idx, idx + 1)
-        if type(idx) == slice:
-            img_src = self.imgs_src[idx]
-            model_src = self.models_vox_src[idx]
-            pointcloud_src = self.pointcloud[idx]
-            label = self.label[idx]
+        img_src = self.imgs_src[idx]
+        model_src = self.models_vox_src[idx]
+        pc_src = self.pointcloud[idx]
+        label = self.label[idx]
 
-            imgs = []
-            models = []
-            clouds = []
+        rgba_image = PIL.Image.open(img_src)
+        rgb_image = rgba_image.convert('RGB')
+        img = torch.from_numpy(np.array(rgb_image))
+        img = img.transpose(2, 0)
+        img = img.type(torch.FloatTensor)
 
-            for img_s, model_s, pc_src in zip(img_src, model_src, pointcloud_src):
-                imgs.append(torch.from_numpy(mpimg.imread(img_s)))
-                clouds.append(torch.from_numpy(np.load(pc_src)))
-                with open(model_s, 'rb') as binvox_file:
-                    models.append(torch.from_numpy(
-                        data.read_binvox.read_as_3d_array(binvox_file)))
+        cloud = torch.from_numpy(np.load(pc_src))
+        with open(model_src, 'rb') as binvox_file:
+            model = torch.from_numpy(data.read_binvox.read_as_3d_array(binvox_file))
 
-            return imgs, models, clouds, label
+        return img, model, cloud, torch.tensor(label)
 
 
 if __name__ == "__main__":
     pxd = pix3dDataset("../dataset/pix3d", 5)
     # sdb = shapeNet_Dataset("../dataset/shapeNet/ShapeNetVox32", 9)
-    imgs, models, clouds, targets = pxd[0:1]
-    print(models)
+    imgs, models, clouds, targets = pxd[0]
+    print(imgs.shape)

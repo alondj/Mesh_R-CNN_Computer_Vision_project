@@ -61,12 +61,12 @@ parser.add_argument("--backbone", help="weight of the backbone loss",
                     type=float, default=1.0)
 
 # dataset/loader arguments
-parser.add_argument('--num_samples', type=int,
+parser.add_argument('--num_sampels', type=int,
                     help='number of sampels to dataset', default=None)
 parser.add_argument('--dataRoot', type=str, help='file root')
 
 parser.add_argument('--batchSize', '-b', type=int,
-                    defaults=16, help='batch size')
+                    default=16, help='batch size')
 parser.add_argument('--workers', type=int,
                     help='number of data loading workers', default=4)
 
@@ -132,7 +132,6 @@ else:
 if options.model_path != '':
     model.load_state_dict(torch.load(options.model_path))
 
-
 # select trainable parameters
 trained_parameters = chain(model.refineStages.parameters(),
                            model.voxelBranch.parameters())
@@ -148,11 +147,10 @@ else:
 
 # use data parallel if possible
 # TODO i do not know if it will work for mask rcnn
-if len(devices > 1):
+if len(devices) > 1:
     model = nn.DataParallel(model)
 
 model: nn.Module = model.to(devices[0])
-
 
 # Create Optimizer
 lrate = options.lr
@@ -180,18 +178,17 @@ backbone_path = os.path.join('checkpoints', options.model,
                              'backbone', save_path)
 if not os.path.exists(GCN_path):
     os.mkdir(os.path.join('checkpoints'))
-    os.mkdir(os.path.join('checkpoints',model_name))
-    os.mkdir(os.path.join('checkpoints',model_name,'GCN'))
+    os.mkdir(os.path.join('checkpoints', model_name))
+    os.mkdir(os.path.join('checkpoints', model_name, 'GCN'))
     os.mkdir(GCN_path)
 if options.train_backbone and not os.path.exists(backbone_path):
     if not os.path.exists('checkpoints'):
-      os.mkdir(os.path.join('checkpoints'))
+        os.mkdir(os.path.join('checkpoints'))
     if not os.path.exists(os.path.join('checkpoints', options.model)):
-      os.mkdir(os.path.join('checkpoints', options.model))
-    if not os.path.exists(os.path.join('checkpoints', options.model,'backbone')):
-      os.mkdir(os.path.join('checkpoints', options.model,'backbone'))
+        os.mkdir(os.path.join('checkpoints', options.model))
+    if not os.path.exists(os.path.join('checkpoints', options.model, 'backbone')):
+        os.mkdir(os.path.join('checkpoints', options.model, 'backbone'))
     os.mkdir(backbone_path)
-
 
 # Train model on the dataset
 losses = []
@@ -204,7 +201,7 @@ for epoch in range(epochs):
             images, voxel_gts, pts_gts, backbone_targets = data
 
             images = images.to(devices[0])
-            voxels_gts = voxels_gts.to(devices[0])
+            voxel_gts = voxel_gts.to(devices[0])
             pts_gts = pts_gts.to(devices[0])
             backbone_targets = backbone_targets.to(devices[0])
 
@@ -239,7 +236,6 @@ for epoch in range(epochs):
     # for eg checkpoints/Pix3D/date/model_{1}.pth
     file_name = f"model_{epoch}.pth"
     torch.save(model.state_dict(),
-               os.path.join(checkpoint_path, file_name))
-
+               os.path.join(GCN_path, file_name))
 
 print(f"training done avg loss {np.mean(losses)}")
