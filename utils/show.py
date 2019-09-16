@@ -40,8 +40,6 @@ def show_voxels(voxel_mask):
 
     fig = plt.figure()
     ax = fig.gca(projection='3d')
-    # ax.set_aspect('equal')
-    # , shade=False, color='grey')
     ax.voxels(voxel_mask, facecolors='grey', edgecolor='black', shade=True)
 
     plt.show()
