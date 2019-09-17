@@ -24,7 +24,7 @@ from .layers import (Cubify, ResVertixRefineShapenet, VertixRefinePix3D,
 
 class ShapeNetModel(nn.Module):
     def __init__(self, backbone: nn.Module, residual: bool = False,
-                 cubify_threshold: float = 0.2, image_shape: Tuple[int, int] = (137, 137),
+                 cubify_threshold: float = 0.2,
                  voxelBranchChannels: Tuple[int, int] = (2048, 48),
                  alignmenet_channels: int = 3840,
                  vertex_feature_dim: int = 128,
@@ -36,23 +36,23 @@ class ShapeNetModel(nn.Module):
 
         refineClass = ResVertixRefineShapenet if residual else VertixRefineShapeNet
 
-        stages = [refineClass(image_shape, alignment_size=alignmenet_channels,
+        stages = [refineClass(alignment_size=alignmenet_channels,
                               use_input_features=False,
                               num_features=vertex_feature_dim)]
 
         for _ in range(num_refinement_stages-1):
-            stages.append(refineClass(image_shape, alignment_size=alignmenet_channels,
+            stages.append(refineClass(alignment_size=alignmenet_channels,
                                       num_features=vertex_feature_dim,
                                       use_input_features=True))
 
         self.refineStages = nn.ModuleList(stages)
 
-    def forward(self, img: Tensor, targets=None) -> dict:
+    def forward(self, images: Tensor, targets=None) -> dict:
         if self.training and targets is None:
             raise ValueError("In training mode, targets should be passed")
 
-        backbone_out, feature_maps = self.backbone(img, targets)
-
+        backbone_out, feature_maps = self.backbone(images, targets)
+        sizes = [i.shape[1:] for i in images]
         upscaled = F.interpolate(feature_maps[-1], scale_factor=4.8,
                                  mode='bilinear', align_corners=True)
 
@@ -62,13 +62,15 @@ class ShapeNetModel(nn.Module):
             voxelGrid)
 
         vertex_features, vertex_positions1 = self.refineStages[0](vertice_index, feature_maps,
-                                                                  edge_index, vertex_positions0)
+                                                                  edge_index, vertex_positions0,
+                                                                  sizes)
 
         vertex_positions = [vertex_positions0, vertex_positions1]
 
         for stage in self.refineStages[1:]:
             vertex_features, new_positions = stage(vertice_index, feature_maps,
-                                                   edge_index, vertex_positions[-1], vertex_features=vertex_features)
+                                                   edge_index, vertex_positions[-1],
+                                                   sizes, vertex_features=vertex_features)
             vertex_positions.append(new_positions)
 
         output = dict()
@@ -134,7 +136,7 @@ def pretrained_ResNet50(loss_function, num_classes=10, pretrained=True):
 
 
 class Pix3DModel(nn.Module):
-    def __init__(self, backbone: nn.Module, image_shape: Tuple[int, int] = (281, 187),
+    def __init__(self, backbone: nn.Module,
                  cubify_threshold: float = 0.2,
                  voxelBranchChannels: Tuple[int, int] = (256, 24),
                  alignmenet_channels: int = 256,
@@ -146,37 +148,40 @@ class Pix3DModel(nn.Module):
         self.voxelBranch = VoxelBranch(*voxelBranchChannels)
         self.cubify = Cubify(cubify_threshold)
 
-        stages = [VertixRefinePix3D(image_shape, alignment_size=alignmenet_channels,
+        stages = [VertixRefinePix3D(alignment_size=alignmenet_channels,
                                     use_input_features=False,
                                     num_features=vertex_feature_dim)]
 
         for _ in range(num_refinement_stages-1):
-            stages.append(VertixRefinePix3D(image_shape, alignment_size=alignmenet_channels,
+            stages.append(VertixRefinePix3D(alignment_size=alignmenet_channels,
                                             num_features=vertex_feature_dim,
                                             use_input_features=True))
 
         self.refineStages = nn.ModuleList(stages)
 
-    def forward(self, image: Tensor, targets: Optional[List[Dict]] = None) -> dict:
+    def forward(self, images: List[Tensor], targets: Optional[List[Dict]] = None) -> dict:
         if self.training and targets is None:
             raise ValueError("In training mode, targets should be passed")
 
         backbone_out, roiAlign, graphs_per_image = self.backbone(
-            image, targets)
+            images, targets)
 
         voxelGrid = self.voxelBranch(roiAlign)
 
         vertice_index, faces_index, vertex_positions0, edge_index, mesh_faces = self.cubify(
             voxelGrid)
 
+        sizes = [i.shape[1:] for i in images]
         vertex_features, vertex_positions1 = self.refineStages[0](vertice_index, roiAlign,
-                                                                  edge_index, vertex_positions0)
+                                                                  edge_index, vertex_positions0,
+                                                                  sizes)
 
         vertex_positions = [vertex_positions0, vertex_positions1]
 
         for stage in self.refineStages[1:]:
             vertex_features, new_positions = stage(vertice_index, roiAlign,
-                                                   edge_index, vertex_positions[-1], vertex_features=vertex_features)
+                                                   edge_index, vertex_positions[-1], sizes,
+                                                   vertex_features=vertex_features)
             vertex_positions.append(new_positions)
 
         output = dict()
@@ -207,10 +212,10 @@ class Pix3DMask_RCNN(MaskRCNN):
                                            output_size=12,
                                            sampling_ratio=1)
 
-    def forward(self, images: Tensor, targets: Optional[List[Dict]] = None):
+    def forward(self, images: List[Tensor], targets: Optional[List[Dict]] = None):
         """
         Arguments:
-            images (Tensor): images to be processed
+            images (List[Tensor]): images to be processed
             targets (list[Dict[Tensor]]): ground-truth boxes present in the image (optional)
 
         Returns:
@@ -220,7 +225,6 @@ class Pix3DMask_RCNN(MaskRCNN):
                 like `scores`, `labels` and `mask` (for Mask R-CNN models).
 
         """
-        images = [im.squeeze(0) for im in images.split(1)]
 
         if self.training and targets is None:
             raise ValueError("In training mode, targets should be passed")
