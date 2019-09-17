@@ -68,7 +68,6 @@ if model_name == 'ShapeNet':
                                               pretrained=True),
                           residual=options.residual,
                           cubify_threshold=options.threshold,
-                          image_shape=(137, 137),
                           vertex_feature_dim=options.featDim,
                           num_refinement_stages=options.num_refinement_stages)
 
@@ -78,7 +77,6 @@ if model_name == 'ShapeNet':
 else:
     model = Pix3DModel(pretrained_MaskRcnn(num_classes=10, pretrained=True),
                        cubify_threshold=options.threshold,
-                       image_shape=(281, 187),
                        vertex_feature_dim=options.featDim,
                        num_refinement_stages=options.num_refinement_stages)
     dataset = pix3dDataset(options.dataRoot, options.num_sampels)

@@ -251,7 +251,6 @@ class VertixRefineShapeNet(nn.Module):
         return new_positions, new_features
 
 
-# TODO every image in shapenet is with different shape
 class VertixRefinePix3D(nn.Module):
     ''' VertixRefine are cells which given an image feature maps and a 3D mesh\n
         outputs an updated 3D mesh and vertex features
