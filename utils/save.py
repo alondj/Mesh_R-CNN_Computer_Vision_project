@@ -1,42 +1,53 @@
 
 import numpy as np
+import scipy.io
 from collections import namedtuple
 
 import torch
 from torch import Tensor
-import pickle
+
 
 Mesh = namedtuple('Mesh', ['vertices', 'faces'])
 
 
-def save_voxels(voxels: Tensor, filename: str, threshold: float = 0.5):
+def save_voxels(voxels, filename: str, threshold: float = 0.5):
+    if isinstance(voxels, Tensor):
+        voxels = voxels.cpu().data.numpy()
     # create voxel mask
-    vxls = voxels.cpu().data.numpy()
-    vxls = (vxls > threshold).astype(np.int32)
-    np.save(filename, vxls)
+    voxels = (voxels > threshold).astype(np.int32)
+    np.save(filename, voxels)
 
 
-def save_mesh(vertices: Tensor, faces: Tensor, filename: str):
+def save_mesh(vertices, faces, filename: str):
     # List of geometric vertices
     # v 0.123 0.234 0.345
     # v ...
     # Polygonal face element
     # f 1 2 3
     # f ...
-    vert = vertices.cpu().data.numpy()
-    vert = np.hstack((np.full([vert.shape[0], 1], 'v'), vert))
+    if isinstance(vertices, Tensor):
+        vertices = vertices.cpu().data.numpy()
+    vertices = np.hstack((np.full([vertices.shape[0], 1], 'v'), vertices))
 
-    face = faces.cpu().data.numpy()
-    face = np.hstack((np.full([faces.shape[0], 1], 'f'), faces))
-    mesh = np.vstack((vert, face))
+    if isinstance(faces, Tensor):
+        faces = faces.cpu().data.numpy()
+    faces = np.hstack((np.full([faces.shape[0], 1], 'f'), faces))
+    mesh = np.vstack((vertices, faces))
     np.savetxt(filename + ".obj", mesh, fmt='%s', delimiter=' ')
 
 
-def load_voxels(path: str) -> np.ndarray:
-    return np.load(path)
+def load_voxels(path: str, tensor=False):
+    if path.endswith(".npy"):
+        vxls = np.load(path)
+    else:
+        assert path.endswith(".mat")
+        vxls = scipy.io.loadmat(path)['voxel']
+    if tensor:
+        return torch.from_numpy(vxls)
+    return vxls
 
 
-def load_mesh(filename: str) -> Mesh:
+def load_mesh(filename: str, tenosr=False) -> Mesh:
     triangles = []
     vertices = []
     with open(filename) as file:
@@ -53,7 +64,13 @@ def load_mesh(filename: str) -> Mesh:
                 vertex = list(map(float, components[1:]))
                 vertices.append(vertex)
 
-    return Mesh(np.array(vertices), np.array(triangles))
+    vertices = np.array(vertices)
+    triangles = np.array(triangles)
+    if tenosr:
+        vertices = torch.from_numpy(vertices)
+        triangles = torch.from_numpy(triangles)
+
+    return Mesh(vertices, triangles)
 
 
 def read_pix3d_data():
@@ -65,7 +82,6 @@ def read_pix3d_data():
     print(np.max(mesh.vertices, axis=0))
     print(np.min(mesh.vertices, axis=0))
     # read voxel as np array
-    import scipy.io
     mat = scipy.io.loadmat('voxel.mat')['voxel']
     print(mat.shape)
 

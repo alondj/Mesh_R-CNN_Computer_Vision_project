@@ -1,4 +1,7 @@
 
+import torch
+from torch.nn.functional import adaptive_max_pool3d, interpolate
+from torch import Tensor
 from .save import load_mesh, load_voxels
 from .normalize_mesh import normalize_mesh
 from mpl_toolkits import mplot3d
@@ -40,8 +43,6 @@ def show_voxels(voxel_mask):
 
     fig = plt.figure()
     ax = fig.gca(projection='3d')
-    # ax.set_aspect('equal')
-    # , shade=False, color='grey')
     ax.voxels(voxel_mask, facecolors='grey', edgecolor='black', shade=True)
 
     plt.show()

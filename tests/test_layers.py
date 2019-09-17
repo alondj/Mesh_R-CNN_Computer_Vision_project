@@ -41,16 +41,16 @@ def test_align(device):
     # check multiple graphs with multiple feature maps sizes
     img = torch.randn(2, 3, 137, 137).to(device)
     _, f_maps = backbone(img)
-    align = VertexAlign((137, 137))
+    align = VertexAlign()
     pos = torch.randint(0, 137, (100, 3)).float().to(device)
     vert_per_m = [49, 51]
-    c = align(f_maps, pos, vert_per_m)
+    c = align(f_maps, pos, vert_per_m, [i.shape[1:] for i in img])
     assert c.shape == torch.Size([100, 3840])
 
     # check multiple graphs with one feature_map size
     f_map = torch.randn(2, 256, 224, 224).to(device)
-    align = VertexAlign((224, 224))
-    c = align([f_map], pos, vert_per_m)
+    align = VertexAlign()
+    c = align([f_map], pos, vert_per_m, [(224, 224), (224, 224)])
     assert c.shape == torch.Size([100, 256])
 
 
@@ -136,8 +136,8 @@ def test_ShapeNetFeatureExtractor(device):
 
 @pytest.mark.parametrize('device', devices)
 def test_resVertixRefineShapenet(device):
-    refine0 = ResVertixRefineShapenet(
-        (224, 224), alignment_size=256, use_input_features=False).to(device)
+    refine0 = ResVertixRefineShapenet(alignment_size=256,
+                                      use_input_features=False).to(device)
 
     vertices_per_sample = [49, 51]
     vertex_adjacency = torch.zeros(100, 100).to(device)
@@ -155,26 +155,26 @@ def test_resVertixRefineShapenet(device):
     edge_index = torch.stack([edge_index[:, 0], edge_index[:, 1]])
 
     vertex_positions = torch.randn(100, 3).to(device)
-
+    sizes = [(132, 132), (132, 164)]
     new_pos, new_featues = refine0(vertices_per_sample, [img_feature_maps], edge_index,
-                                   vertex_positions, vertex_features=None)
+                                   vertex_positions, sizes, vertex_features=None)
 
     assert new_pos.shape == torch.Size([100, 3])
     assert new_featues.shape == torch.Size([100, 128])
 
-    refine1 = ResVertixRefineShapenet(
-        (224, 224), alignment_size=256, use_input_features=True).to(device)
+    refine1 = ResVertixRefineShapenet(alignment_size=256,
+                                      use_input_features=True).to(device)
 
     new_pos, new_new_features = refine1(vertices_per_sample, [img_feature_maps], edge_index,
-                                        vertex_positions, vertex_features=new_featues)
+                                        vertex_positions, sizes, vertex_features=new_featues)
     assert new_pos.shape == torch.Size([100, 3])
     assert new_new_features.shape == torch.Size([100, 128])
 
 
 @pytest.mark.parametrize('device', devices)
 def test_vertixRefineShapenet(device):
-    refine0 = VertixRefineShapeNet(
-        (224, 224), alignment_size=256, use_input_features=False).to(device)
+    refine0 = VertixRefineShapeNet(alignment_size=256,
+                                   use_input_features=False).to(device)
 
     vertices_per_sample = [49, 51]
     vertex_adjacency = torch.zeros(100, 100).to(device)
@@ -192,31 +192,31 @@ def test_vertixRefineShapenet(device):
     edge_index = torch.stack([edge_index[:, 0], edge_index[:, 1]])
 
     vertex_positions = torch.randn(100, 3).to(device)
-
+    sizes = [(224, 136), (134, 122)]
     new_pos, new_featues = refine0(vertices_per_sample, [img_feature_maps], edge_index,
-                                   vertex_positions, vertex_features=None)
+                                   vertex_positions, sizes, vertex_features=None)
 
     assert new_pos.shape == torch.Size([100, 3])
     assert new_featues.shape == torch.Size([100, 128])
 
     refine1 = VertixRefineShapeNet(
-        (224, 224), alignment_size=256, use_input_features=True).to(device)
+        alignment_size=256, use_input_features=True).to(device)
 
     new_pos, new_new_features = refine1(vertices_per_sample, [img_feature_maps], edge_index,
-                                        vertex_positions, vertex_features=new_featues)
+                                        vertex_positions, sizes, vertex_features=new_featues)
     assert new_pos.shape == torch.Size([100, 3])
     assert new_new_features.shape == torch.Size([100, 128])
 
 
 @pytest.mark.parametrize('device', devices)
 def test_vertixRefinePix3D(device):
-    refine0 = VertixRefinePix3D(
-        (224, 224), alignment_size=256, use_input_features=False).to(device)
+    refine0 = VertixRefinePix3D(alignment_size=256,
+                                use_input_features=False).to(device)
 
     vertices_per_sample = [49, 51]
     vertex_adjacency = torch.zeros(100, 100).to(device)
     img_feature_maps = torch.randn(2, 256, 224, 224).to(device)
-
+    sizes = [(224, 136), (134, 122)]
     # circle adjacency
     for i in range(49):
         vertex_adjacency[i, (i + 1) % 49] = 1
@@ -231,15 +231,15 @@ def test_vertixRefinePix3D(device):
     vertex_positions = torch.randn(100, 3).to(device)
 
     new_pos, new_featues = refine0(vertices_per_sample, img_feature_maps, edge_index,
-                                   vertex_positions, vertex_features=None)
+                                   vertex_positions, sizes, vertex_features=None)
 
     assert new_pos.shape == torch.Size([100, 3])
     assert new_featues.shape == torch.Size([100, 128])
 
-    refine1 = VertixRefinePix3D(
-        (224, 224), alignment_size=256, use_input_features=True).to(device)
+    refine1 = VertixRefinePix3D(alignment_size=256,
+                                use_input_features=True).to(device)
 
     new_pos, new_new_features = refine1(vertices_per_sample, img_feature_maps, edge_index,
-                                        vertex_positions, vertex_features=new_featues)
+                                        vertex_positions, sizes, vertex_features=new_featues)
     assert new_pos.shape == torch.Size([100, 3])
     assert new_new_features.shape == torch.Size([100, 128])

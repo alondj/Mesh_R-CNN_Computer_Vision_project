@@ -54,7 +54,7 @@ class GraphConv(nn.Module):
         # use the adjacency matrix as a mask
         # note a vertex is not connected to itself
         # ∑Vx∑V @ ∑VxOut => ∑VxOut
-        neighbours = aggregate_neighbours(vertex_adjacency,w1_features)
+        neighbours = aggregate_neighbours(vertex_adjacency, w1_features)
 
         # aggregate features of neighbours
         new_features = w0_features + neighbours
@@ -102,12 +102,12 @@ class ResVertixRefineShapenet(nn.Module):
         outputs an updated 3D mesh and vertex features
     '''
 
-    def __init__(self, original_image_size: Tuple[int, int], use_input_features: bool = True,
+    def __init__(self, use_input_features: bool = True,
                  num_features: int = 128, alignment_size: int = 3840,
                  ndims: int = 3):
         super(ResVertixRefineShapenet, self).__init__()
 
-        self.vertAlign = VertexAlign(original_image_size)
+        self.vertAlign = VertexAlign()
 
         self.linear = nn.Linear(alignment_size, num_features, bias=False)
 
@@ -126,6 +126,7 @@ class ResVertixRefineShapenet(nn.Module):
 
     def forward(self, vertice_index: List[int], img_feature_maps: List[Tensor],
                 vertex_adjacency: Tensor, vertex_positions: Tensor,
+                sizes: List,
                 vertex_features: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
 
         # note that vertex_features is the concatination of all feature matrices of the batch
@@ -142,7 +143,7 @@ class ResVertixRefineShapenet(nn.Module):
         # project the 3D mesh to the 2D feature planes and pool new features
         # ∑Vx3840
         aligned_vertices = self.vertAlign(img_feature_maps, vertex_positions,
-                                          vertice_index)
+                                          vertice_index, sizes)
 
         # ∑Vx128
         projected = self.linear(aligned_vertices)
@@ -176,11 +177,11 @@ class VertixRefineShapeNet(nn.Module):
         outputs an updated 3D mesh and vertex features
     '''
 
-    def __init__(self, original_image_size: Tuple[int, int], use_input_features: bool = True,
+    def __init__(self, use_input_features: bool = True,
                  num_features: int = 128, alignment_size: int = 3840,
                  ndims: int = 3):
         super(VertixRefineShapeNet, self).__init__()
-        self.vertAlign = VertexAlign(original_image_size)
+        self.vertAlign = VertexAlign()
 
         self.linear0 = nn.Linear(alignment_size, num_features, bias=False)
 
@@ -199,6 +200,7 @@ class VertixRefineShapeNet(nn.Module):
 
     def forward(self, vertice_index: List[int], img_feature_maps: List[Tensor],
                 vertex_adjacency: Tensor, vertex_positions: Tensor,
+                sizes: List,
                 vertex_features: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
 
         # note that vertex_features is the concatination of all feature matrices of the batch
@@ -215,7 +217,7 @@ class VertixRefineShapeNet(nn.Module):
         # project the 3D mesh to the 2D feature planes and pool new features
         # ∑Vx3840
         aligned_vertices = self.vertAlign(img_feature_maps, vertex_positions,
-                                          vertice_index)
+                                          vertice_index, sizes)
         # ∑Vx128
         projected = self.linear0(aligned_vertices)
 
@@ -249,17 +251,18 @@ class VertixRefineShapeNet(nn.Module):
         return new_positions, new_features
 
 
+# TODO every image in shapenet is with different shape
 class VertixRefinePix3D(nn.Module):
     ''' VertixRefine are cells which given an image feature maps and a 3D mesh\n
         outputs an updated 3D mesh and vertex features
     '''
 
-    def __init__(self, original_image_size: Tuple[int, int], use_input_features: bool = True,
+    def __init__(self, use_input_features: bool = True,
                  num_features: int = 128, alignment_size: int = 256,
                  ndims: int = 3):
 
         super(VertixRefinePix3D, self).__init__()
-        self.vertAlign = VertexAlign(original_image_size)
+        self.vertAlign = VertexAlign()
 
         in_channels = alignment_size + ndims
         if use_input_features:
@@ -276,8 +279,9 @@ class VertixRefinePix3D(nn.Module):
                                 ndims, bias=False)
         self.tanh = nn.Tanh()
 
-    def forward(self, vertice_index: List[int], back_bone_features: Tensor, vertex_adjacency: Tensor,
-                vertex_positions: Tensor, vertex_features: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
+    def forward(self, vertice_index: List[int], back_bone_features: Tensor,
+                vertex_adjacency: Tensor, vertex_positions: Tensor,
+                sizes: List, vertex_features: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
 
         # note that vertex_features is the concatination of all feature matrices of the batch
         # along the vertex dimension (we stack them vertically)
@@ -292,7 +296,7 @@ class VertixRefinePix3D(nn.Module):
 
         # project the 3D mesh to the 2D feature planes and pool new features
         algined = self.vertAlign([back_bone_features], vertex_positions,
-                                 vertice_index)
+                                 vertice_index, sizes)
 
         # ∑Vx387 if there are initial vertex_features
         # and ∑Vx259 otherwise
@@ -334,9 +338,9 @@ class Cubify(nn.Module):
         and outputing a list of 3D meshes.
         \n each occupied voxel is replaced with a cuboid triangle mesh with 8 vertices, 18 edges, and 12 faces.
     '''
-    remove_shared_vertices_time=[]
-    create_undirected_adjacency_matrix_time=[]
-    iter_time=[]
+    remove_shared_vertices_time = []
+    create_undirected_adjacency_matrix_time = []
+    iter_time = []
     # I assume that z,y,x is the center of the cube so the vertices are at
     # bottom face z-0.5,y+-0.5,x+-0.5
     # top face z+0.5,y+-0.5,x+-0.5
@@ -351,20 +355,19 @@ class Cubify(nn.Module):
         # output is vertices Vx3 , faces Fx3
         self.reset_stats()
         assert voxel_probas.ndim == 4
-        out_device=voxel_probas.device
-        # #TODO for now let it compute on cpu as it's faster
-        # voxel_probas=voxel_probas.to('cpu')
+        out_device = voxel_probas.device
         N, C, H, W = voxel_probas.shape
-        batched_vertex_positions, batched_faces, batched_adjacency_matrices = [], [], ([],[])
+        batched_vertex_positions, batched_faces = [], []
+        batched_adjacency_matrices = ([], [])
         vertice_index, faces_index = [], []
-        offset=0
+        offset = 0
 
         start = datetime.datetime.now()
         # slow implementation just to know what I'm doing
         for n in range(N):
             vertices, faces = [], []
-            iter_start=datetime.datetime.now()
-            #TODO the problem is literlly this for loop
+            iter_start = datetime.datetime.now()
+            # TODO the problem is literlly this for loop
             for z in range(C):
                 for y in range(H):
                     for x in range(W):
@@ -460,33 +463,35 @@ class Cubify(nn.Module):
                                     (v1, v2, v3)
                                 ])
 
-            iter_end=datetime.datetime.now()
+            iter_end = datetime.datetime.now()
             self.iter_time.append(iter_end-iter_start)
-            vertices, faces = self.remove_shared_vertices(vertices,faces,out_device)
+            vertices, faces = self.remove_shared_vertices(
+                vertices, faces, out_device)
             batched_vertex_positions.append(vertices)
             batched_faces.append(faces)
-            adj_i,adj_j=self.create_undirected_adjacency_matrix(faces,offset)
+            adj_i, adj_j = self.create_undirected_adjacency_matrix(
+                faces, offset)
             batched_adjacency_matrices[0].append(adj_i)
             batched_adjacency_matrices[1].append(adj_j)
             vertice_index.append(vertices.shape[0])
             faces_index.append(faces.shape[0])
-            offset+=vertices.shape[0]
+            offset += vertices.shape[0]
 
-        #merge all meshes
+        # merge all meshes
         vertex_positions = torch.cat(batched_vertex_positions)
         mesh_faces = torch.cat(batched_faces)
-        #we have a list of lists of i indices and a list of lists of j indices
-        #just reduce to i indices and j indices
-        idx_i,idx_j=batched_adjacency_matrices
+        # we have a list of lists of i indices and a list of lists of j indices
+        # just reduce to i indices and j indices
+        idx_i, idx_j = batched_adjacency_matrices
         idx_i = torch.cat(idx_i, dim=0)
         idx_j = torch.cat(idx_j, dim=0)
-        edge_index=torch.stack([idx_i,idx_j])
+        edge_index = torch.stack([idx_i, idx_j])
 
         fin = datetime.datetime.now()
 
-        delta=fin-start
+        delta = fin-start
 
-        self.exec_time=delta
+        self.exec_time = delta
 
         assert sum(vertice_index) == vertex_positions.shape[0]
         assert sum(faces_index) == mesh_faces.shape[0]
@@ -494,7 +499,7 @@ class Cubify(nn.Module):
         self.summary(N)
         return vertice_index, faces_index, vertex_positions, edge_index, mesh_faces
 
-    def remove_shared_vertices(self, vertices: List[Point], faces: List[Face],out_device:torch.device) -> Tuple[Tensor, Tensor]:
+    def remove_shared_vertices(self, vertices: List[Point], faces: List[Face], out_device: torch.device) -> Tuple[Tensor, Tensor]:
         # for performence reasons in the construction phase we duplicate shared vertices
         # and also we save the vertices coordinates explicitly inside the faces (each face is a tuple of 3 3D coordinates)
 
@@ -511,51 +516,55 @@ class Cubify(nn.Module):
 
         efficient_faces = [[vertex_indices[v] for v in f] for f in faces]
 
-        pos_class = torch.Tensor if out_device == torch.device('cpu') else torch.cuda.FloatTensor
-        idx_class = torch.LongTensor if out_device == torch.device('cpu') else torch.cuda.LongTensor
+        pos_class = torch.Tensor if out_device == torch.device(
+            'cpu') else torch.cuda.FloatTensor
+        idx_class = torch.LongTensor if out_device == torch.device(
+            'cpu') else torch.cuda.LongTensor
 
-        mesh_vertices = pos_class(cannonic_vertices,device=out_device)
-        mesh_faces = idx_class(efficient_faces,device=out_device)
+        mesh_vertices = pos_class(cannonic_vertices, device=out_device)
+        mesh_faces = idx_class(efficient_faces, device=out_device)
 
         fin = datetime.datetime.now()
         self.remove_shared_vertices_time.extend([fin-start])
         return mesh_vertices, mesh_faces
 
-    def create_undirected_adjacency_matrix(self, faces: Tensor,offset:int) -> List:
+    def create_undirected_adjacency_matrix(self, faces: Tensor, offset: int) -> List:
         start = datetime.datetime.now()
-        
-        faces_t=faces.t()
 
-        #get all directed edges
-        idx_i,idx_j=torch.cat([faces_t[:2],faces_t[1:],faces_t[::2]],dim=1)+offset
+        faces_t = faces.t()
 
-        #duplicate to get undirected edges
-        idx_i, idx_j = torch.cat([idx_i, idx_j], dim=0), torch.cat([idx_j, idx_i], dim=0)
-        
+        # get all directed edges
+        idx_i, idx_j = torch.cat(
+            [faces_t[:2], faces_t[1:], faces_t[::2]], dim=1)+offset
+
+        # duplicate to get undirected edges
+        idx_i, idx_j = torch.cat([idx_i, idx_j], dim=0), torch.cat(
+            [idx_j, idx_i], dim=0)
+
         fin = datetime.datetime.now()
 
         self.create_undirected_adjacency_matrix_time.extend([fin-start])
 
-        return idx_i,idx_j
-        
-    def summary(self,b_size):
-        total_remove_shared_time=self.remove_shared_vertices_time[0]
-        total_remove_shared_time=sum(self.remove_shared_vertices_time[1:],total_remove_shared_time)
-                
-        total_adj_creation_time=self.create_undirected_adjacency_matrix_time[0]
-        total_adj_creation_time=sum(self.create_undirected_adjacency_matrix_time[1:],total_adj_creation_time)
+        return idx_i, idx_j
 
+    def summary(self, b_size):
+        total_remove_shared_time = self.remove_shared_vertices_time[0]
+        total_remove_shared_time = sum(self.remove_shared_vertices_time[1:],
+                                       total_remove_shared_time)
+
+        total_adj_creation_time = self.create_undirected_adjacency_matrix_time[0]
+        total_adj_creation_time = sum(self.create_undirected_adjacency_matrix_time[1:],
+                                      total_adj_creation_time)
 
         total_iter_time = self.iter_time[0]
         total_iter_time = sum(self.iter_time[1:], total_iter_time)
 
-        assert len(self.iter_time)==b_size
+        assert len(self.iter_time) == b_size
         assert len(self.remove_shared_vertices_time) == b_size
         assert len(self.create_undirected_adjacency_matrix_time) == b_size
-        
 
-        loop_time = self.exec_time - (total_adj_creation_time+total_remove_shared_time)
-
+        loop_time = self.exec_time - \
+            (total_adj_creation_time+total_remove_shared_time)
 
         print(f"total {self.exec_time}")
         print(f"loop time {loop_time}")
@@ -569,7 +578,8 @@ class Cubify(nn.Module):
         self.create_undirected_adjacency_matrix_time = []
         self.merge_index_time = []
         self.iter_time = []
-        
+
+
 class VoxelBranch(nn.Sequential):
     ''' the VoxelBranch predicts a grid of voxel occupancy probabilities by applying a fully convolutional network
         to the input feature map
@@ -590,9 +600,11 @@ class VoxelBranch(nn.Sequential):
             # N x out_channels x V x V
         )
 
+
 class VertexAlign(nn.Module):
     # explained in the article http://openaccess.thecvf.com/content_ECCV_2018/papers/Nanyang_Wang_Pixel2Mesh_Generating_3D_ECCV_2018_paper.pdf
     # as perceptual feature pooling https://github.com/Tong-ZHAO/Pixel2Mesh-Pytorch
+    # http://bigvid.fudan.edu.cn/pixel2mesh/eccv2018/Pixel2Mesh-supp.pdf
     # https://github.com/nywang16/Pixel2Mesh original source code
     # https://gist.github.com/peteflorence/a1da2c759ca1ac2b74af9a83f69ce20e
 
@@ -601,15 +613,8 @@ class VertexAlign(nn.Module):
     bilinear interpolation to get the corresponding feature.
     """
 
-    def __init__(self, original_image_size: Tuple[int, int]):
-        '''
-        original_image_size is a tuple (h,w) of sizes of the original image fed into the network
-        '''
-        super(VertexAlign, self).__init__()
-        assert len(original_image_size) == 2
-        self.h, self.w = original_image_size
-
-    def forward(self, img_features: List[Tensor], vertex_positions: Tensor, vertices_per_mesh: List[int]) -> Tensor:
+    def forward(self, img_features: List[Tensor], vertex_positions: Tensor,
+                vertices_per_mesh: List[int], sizes: List[Tuple[int, int]]) -> Tensor:
         # right now it's a possibly ugly hack we iterate over individual meshes
         # and compute the projection on the respective feature maps
         # img_features is a list of batched features map
@@ -618,29 +623,30 @@ class VertexAlign(nn.Module):
         vertices = vertex_positions.split(vertices_per_mesh)
 
         feats = []
-        for idx, positions in enumerate(vertices):
+        for idx, (positions, size) in enumerate(zip(vertices, sizes)):
             sample_maps = [f_map[idx] for f_map in img_features]
-            feats.append(self.single_projection(sample_maps, positions))
+            feats.append(self.single_projection(sample_maps, positions, size))
 
         # ∑V x ∑ image channels
         return torch.cat(feats, dim=0)
 
-    def single_projection(self, img_features: List[Tensor], vertex_positions: Tensor) -> Tensor:
+    def single_projection(self, img_features: List[Tensor], vertex_positions: Tensor, size) -> Tensor:
         # perform a projection of vertex_positions accross all given feature maps
 
         # dimentions are addresed in order X,Y,Z
         # Y/ Z
         # X/ -Z
-        # TODO magic numbers 
+        # TODO magic numbers for camera intrinsics
+        # http://bigvid.fudan.edu.cn/pixel2mesh/eccv2018/Pixel2Mesh-supp.pdf
         # ∑V
         h = 248 * (vertex_positions[:, 1] / vertex_positions[:, 2]) + 111.5
         w = 248 * (vertex_positions[:, 0] / -vertex_positions[:, 2]) + 111.5
-
+        H, W = size
         # scale upto original image size
-        h = torch.clamp(h, min=0, max=self.h-1)
-        w = torch.clamp(w, min=0, max=self.w-1)
+        h = torch.clamp(h, min=0, max=H-1)
+        w = torch.clamp(w, min=0, max=W-1)
 
-        feats = [self.project(img_feat, h, w)
+        feats = [self.project(img_feat, h, w, size)
                  for img_feat in img_features]
 
         # ∑V x ∑image channels
@@ -648,13 +654,13 @@ class VertexAlign(nn.Module):
 
         return output
 
-    def project(self, img_feat: Tensor, h: Tensor, w: Tensor) -> Tensor:
+    def project(self, img_feat: Tensor, h: Tensor, w: Tensor, size) -> Tensor:
         size_y, size_x = img_feat.shape[-2:]
-
+        H, W = size
         # scale to current feature map size
         # ∑V
-        x = w / (float(self.w) / size_x)
-        y = h / (float(self.h) / size_y)
+        x = w / (float(W) / size_x)
+        y = h / (float(H) / size_y)
 
         x1, x2 = torch.floor(x).long(), torch.ceil(x).long()
         y1, y2 = torch.floor(y).long(), torch.ceil(y).long()
