@@ -1,6 +1,6 @@
 
 import numpy as np
-import scipy
+import scipy.io
 from collections import namedtuple
 
 import torch
@@ -42,7 +42,6 @@ def load_voxels(path: str, tensor=False):
     else:
         assert path.endswith(".mat")
         vxls = scipy.io.loadmat(path)['voxel']
-
     if tensor:
         return torch.from_numpy(vxls)
     return vxls

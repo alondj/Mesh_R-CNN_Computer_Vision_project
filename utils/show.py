@@ -1,6 +1,9 @@
 
-from .save import load_mesh, load_voxels
-from .normalize_mesh import normalize_mesh
+import torch
+from torch.nn.functional import adaptive_max_pool3d, interpolate
+from torch import Tensor
+from save import load_mesh, load_voxels
+from normalize_mesh import normalize_mesh
 from mpl_toolkits import mplot3d
 import numpy as np
 import matplotlib.pyplot as plt

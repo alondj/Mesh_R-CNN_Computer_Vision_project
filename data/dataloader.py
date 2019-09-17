@@ -4,9 +4,30 @@ from torch.utils.data import Dataset
 import scipy.io as sci
 import numpy as np
 from pathlib import Path
-import data.read_binvox
+from data.read_binvox import read_as_3d_array
 import torch
 import PIL.Image
+from torch import Tensor
+from torch.nn.functional import adaptive_max_pool3d, interpolate
+
+
+def fit_voxels_to_shape(voxels: Tensor, N):
+    """
+    up/downsample a BxVxVxV voxel grid to a BxNxNxN grid
+    """
+    assert voxels.ndim == 4, "expects batched input of shape BxVxVxV"
+
+    M = voxels.shape[1]
+    assert voxels.shape[1:] == torch.Size([M, M, M])
+
+    if M > N:
+        # downsample
+        return adaptive_max_pool3d(voxels, N)
+    elif M < N:
+        # upsample
+        return interpolate(voxels.unsqueeze(1), size=N).squeeze(1)
+
+    return voxels
 
 
 class pix3dDataset(Dataset):
@@ -163,7 +184,7 @@ class shapeNet_Dataset(Dataset):
 
         cloud = torch.from_numpy(np.load(pc_src))
         with open(model_src, 'rb') as binvox_file:
-            model = torch.from_numpy(data.read_binvox.read_as_3d_array(binvox_file))
+            model = torch.from_numpy(read_as_3d_array(binvox_file))
 
         return img, model, cloud, torch.tensor(label)
 
