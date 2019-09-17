@@ -248,7 +248,7 @@ class VertixRefineShapeNet(nn.Module):
 
         return new_positions, new_features
 
-
+#TODO every image in shapenet is with different shape
 class VertixRefinePix3D(nn.Module):
     ''' VertixRefine are cells which given an image feature maps and a 3D mesh\n
         outputs an updated 3D mesh and vertex features
@@ -352,8 +352,6 @@ class Cubify(nn.Module):
         self.reset_stats()
         assert voxel_probas.ndim == 4
         out_device=voxel_probas.device
-        # #TODO for now let it compute on cpu as it's faster
-        # voxel_probas=voxel_probas.to('cpu')
         N, C, H, W = voxel_probas.shape
         batched_vertex_positions, batched_faces, batched_adjacency_matrices = [], [], ([],[])
         vertice_index, faces_index = [], []

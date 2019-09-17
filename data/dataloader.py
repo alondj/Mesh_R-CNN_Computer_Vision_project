@@ -1,6 +1,6 @@
 import json
 import matplotlib.image as mpimg
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 import scipy.io as sci
 import numpy as np
 from pathlib import Path
@@ -9,6 +9,7 @@ import torch
 import PIL.Image
 from torch import Tensor
 from torch.nn.functional import adaptive_max_pool3d, interpolate
+from typing import List
 
 
 def fit_voxels_to_shape(voxels: Tensor, N):
@@ -59,14 +60,14 @@ class pix3dDataset(Dataset):
                     self.models_vox_src.append(model3d_src)
                     self.pointcloud.append(pointcloud_src)
                     self.masks.append(mask_src)
-                    self.bbox.append(torch.tensor(p['bbox']))
+                    self.bbox.append(torch.Tensor(p['bbox']))
 
                     if p["img"].find("chair") != -1:
-                        self.Class.append(torch.tensor(0))
+                        self.Class.append(torch.Tensor(0))
                     if p["img"].find("sofa") != -1:
-                        self.Class.append(torch.tensor(1))
+                        self.Class.append(torch.Tensor(1))
                     if p["img"].find("table") != -1:
-                        self.Class.append(torch.tensor(2))
+                        self.Class.append(torch.Tensor(2))
 
     def __len__(self):
         return len(self.imgs_src)
@@ -121,7 +122,7 @@ class pix3DTarget():
     keys = ['boxes', 'masks', 'labels']
 
     def __init__(self, target: dict):
-        if not (isinstance(target, dict) and all(k in target for k in self.keys)):
+        if not(isinstance(target, dict) and all(k in target for k in self.keys)):
             raise ValueError(
                 f"target must be a dictionary with keys {self.keys}")
 
@@ -140,6 +141,46 @@ class pix3DTarget():
 
     def __contains__(self, key):
         return key in self.target
+
+
+class pix3DTargetList():
+    def __init__(self, pix3d_targets: List[pix3DTarget]):
+        self.targets = targets
+
+    def to(self, *args, **kwargs):
+        self.targets = [t.to(*args, **kwargs) for t in self.targets]
+        return self
+
+    def __getitem__(self, arg):
+        return self.targets[arg]
+
+    def __setitem__(self, key, value):
+        self.targets[key] = value
+
+    def __len__(self):
+        return len(self.targets)
+
+
+def preparte_pix3dBatch(num_voxels: int):
+    def batch_input(samples: List):
+        images, voxel_gts, meshes, targets = zip(*samples)
+
+        batched_models = torch.stack(voxel_gts)
+        batched_models = fit_voxels_to_shape(batched_models, num_voxels)
+        batched_meshes = torch.stack(meshes)
+        # TODO handle meshes vertices faces and index
+
+        backbone_targets = pix3DTargetList(targets)
+
+        return images, batched_models, batched_meshes, backbone_targets
+
+    return batch_input
+
+
+def pix3dDataLoader(dataset: Dataset, batch_size: int, num_voxels: int, num_workers: int):
+    return DataLoader(dataset, batch_size=batch_size, shuffle=True,
+                      num_workers=num_workers,
+                      collate_fn=preparte_pix3dBatch(num_voxels))
 
 
 class shapeNet_Dataset(Dataset):
@@ -186,7 +227,28 @@ class shapeNet_Dataset(Dataset):
         with open(model_src, 'rb') as binvox_file:
             model = torch.from_numpy(read_as_3d_array(binvox_file))
 
-        return img, model, cloud, torch.tensor(label)
+        return img, model, cloud, torch.Tensor(label)
+
+
+def preparte_shapeNetBatch(num_voxels: int):
+    def batch_input(samples: List):
+        images, voxel_gts, meshes, targets = zip(*samples)
+        images = torch.stack(images)
+        voxels = torch.stack(voxel_gts)
+        voxels = fit_voxels_to_shape(voxels, num_voxels)
+        batched_meshes = torch.stack(meshes)
+        # TODO handle meshes vertices faces and index
+        targets = torch.cat(targets)
+
+        return images, voxels, batched_meshes, targets
+
+    return batch_input
+
+
+def shapenetDataLoader(dataset: Dataset, batch_size: int, num_voxels: int, num_workers: int):
+    return DataLoader(dataset, batch_size=batch_size, shuffle=True,
+                      num_workers=num_workers,
+                      collate_fn=preparte_shapeNetBatch(num_voxels))
 
 
 if __name__ == "__main__":

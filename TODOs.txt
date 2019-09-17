@@ -3,9 +3,6 @@
 
 5. finish eval_dataset.py and train.py demo.py
 
-13. for efficiency sake maybe add the option to load only the backbone features/only GCN features
-
-
 # TODO we can generate pix3d pointclouds on the fly
 # TODO downsample pix3d voxels can be used with torch
 # TODO upsample shapenet via torch

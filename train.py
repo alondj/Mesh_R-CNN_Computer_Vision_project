@@ -12,7 +12,7 @@ import tqdm
 from torch.optim import SGD, Adam
 from torch.utils.data import DataLoader, random_split
 
-from data.dataloader import pix3dDataset, shapeNet_Dataset
+from data.dataloader import pix3dDataset, shapeNet_Dataset, pix3dDataLoader, shapenetDataLoader
 from model import (Pix3DModel, ShapeNetModel, pretrained_MaskRcnn,
                    pretrained_ResNet50, total_loss)
 
@@ -116,8 +116,8 @@ if model_name == 'ShapeNet':
                           num_refinement_stages=options.num_refinement_stages)
 
     dataset = shapeNet_Dataset(options.dataRoot, options.num_sampels)
-    trainloader = DataLoader(
-        dataset, batch_size=options.batchSize, shuffle=True, num_workers=options.workers)
+    trainloader = shapenetDataLoader(
+        dataset, batch_size=options.batchSize, num_voxels=48, num_workers=options.workers)
 else:
     model = Pix3DModel(pretrained_MaskRcnn(num_classes=10, pretrained=True),
                        cubify_threshold=options.threshold,
@@ -125,8 +125,8 @@ else:
                        vertex_feature_dim=options.featDim,
                        num_refinement_stages=options.num_refinement_stages)
     dataset = pix3dDataset(options.dataRoot, options.num_sampels)
-    trainloader = DataLoader(
-        dataset, batch_size=options.batchSize, shuffle=True, num_workers=options.workers)
+    trainloader = pix3dDataLoader(
+        dataset, batch_size=options.batchSize, num_voxels=24, num_workers=options.workers)
 
 # load checkpoint if possible
 if options.model_path != '':
