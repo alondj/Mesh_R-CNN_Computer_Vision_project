@@ -6,7 +6,8 @@
 
 template <typename scalar_t>
 __global__ void get_faces_vertices_kernel
-   (torch::PackedTensorAccessor<scalar_t,3,torch::RestrictPtrTraits,size_t> array,
+   (torch::PackedTensorAccessor<scalar_t,4,torch::RestrictPtrTraits,size_t> array,
+    int N,
     int C,
     int H,
     int W,
@@ -15,14 +16,15 @@ __global__ void get_faces_vertices_kernel
     torch::PackedTensorAccessor<scalar_t,3,torch::RestrictPtrTraits,size_t> result2) {
 
     auto t = blockDim.x * blockIdx.x + threadIdx.x;
-    const auto per_thread = (C * H * W) / NUM_THREADS;
+    const auto per_thread = (C * H * W * N) / NUM_THREADS;
     t *= per_thread;
 
-    if (t < C * H * W) {
+    if (t < C * H * W * N) {
         for (int k = t; k < t + per_thread; k++) {
-            int channel = k % C;
-            int i = k / C % H;
-            int j = k / C / H % W;
+            int b = k % N;
+            int channel = k / N % C;
+            int i = k / N / C / H % W;
+            int j = k / N / C / H / W;
 
             int v_cell = 0;
             int f_cell = 0;
@@ -31,8 +33,8 @@ __global__ void get_faces_vertices_kernel
             scalar_t f2 = (scalar_t)i;
             scalar_t f3 = (scalar_t)j;
 
-            if (array[channel][i][j] > threshold[0]) {
-                if (channel == 0 || array[channel - 1][i][j] <= threshold[0]) {
+            if (array[b][channel][i][j] > threshold[0]) {
+                if (channel == 0 || array[b][channel - 1][i][j] <= threshold[0]) {
                      result1[k][v_cell+0][0]=(f1-0.5);
                      result1[k][v_cell+0][1]=(f2-0.5);
                      result1[k][v_cell+0][2]=(f3-0.5);
@@ -73,7 +75,7 @@ __global__ void get_faces_vertices_kernel
                      v_cell = v_cell + 4;
                      f_cell = f_cell + 2;
                 }
-                if (channel == C - 1 || array[channel + 1][i][j] <= threshold[0]) {
+                if (channel == C - 1 || array[b][channel + 1][i][j] <= threshold[0]) {
                      result1[k][v_cell+0][0]=(f1+0.5);
                      result1[k][v_cell+0][1]=(f2-0.5);
                      result1[k][v_cell+0][2]=(f3-0.5);
@@ -110,7 +112,7 @@ __global__ void get_faces_vertices_kernel
                      v_cell = v_cell + 4;
                      f_cell = f_cell + 2;
                 }
-                if (i == 0 || array[channel][i - 1][j] <= threshold[0]) {
+                if (i == 0 || array[b][channel][i - 1][j] <= threshold[0]) {
                      result1[k][v_cell+0][0]=(f1+0.5);
                      result1[k][v_cell+0][1]=(f2-0.5);
                      result1[k][v_cell+0][2]=(f3-0.5);
@@ -147,7 +149,7 @@ __global__ void get_faces_vertices_kernel
                      v_cell = v_cell + 4;
                      f_cell = f_cell + 2;
                 }
-                if (i == H - 1 || array[channel][i + 1][j] <= threshold[0]) {
+                if (i == H - 1 || array[b][channel][i + 1][j] <= threshold[0]) {
                      result1[k][v_cell+0][0]=(f1-0.5);
                      result1[k][v_cell+0][1]=(f2+0.5);
                      result1[k][v_cell+0][2]=(f3-0.5);
@@ -184,7 +186,7 @@ __global__ void get_faces_vertices_kernel
                      v_cell = v_cell + 4;
                      f_cell = f_cell + 2;
                 }
-                if (j == 0 || array[channel][i][j - 1] <= threshold[0]) {
+                if (j == 0 || array[b][channel][i][j - 1] <= threshold[0]) {
                      result1[k][v_cell+0][0]=(f1+0.5);
                      result1[k][v_cell+0][1]=(f2-0.5);
                      result1[k][v_cell+0][2]=(f3-0.5);
@@ -221,7 +223,7 @@ __global__ void get_faces_vertices_kernel
                      v_cell = v_cell + 4;
                      f_cell = f_cell + 2;
                 }
-                if (j == W - 1 || array[channel][i][j + 1] <= threshold[0]) {
+                if (j == W - 1 || array[b][channel][i][j + 1] <= threshold[0]) {
                      result1[k][v_cell+0][0]=(f1-0.5);
                      result1[k][v_cell+0][1]=(f2-0.5);
                      result1[k][v_cell+0][2]=(f3+0.5);
@@ -268,7 +270,7 @@ __global__ void get_faces_vertices_kernel
 
 
 
-void get_faces_vertices_cuda(torch::Tensor voxel, int  C, int H
+void get_faces_vertices_cuda(torch::Tensor voxel,int N, int  C, int H
             ,int W,torch::Tensor threshold ,torch::Tensor result1, torch::Tensor result2){
 
   const int threads = NUM_THREADS;
@@ -276,7 +278,8 @@ void get_faces_vertices_cuda(torch::Tensor voxel, int  C, int H
 
   AT_DISPATCH_FLOATING_TYPES(voxel.type(), "get_faces_vertices_cuda", ([&] {
     get_faces_vertices_kernel<scalar_t><<<blocks, threads>>>(
-        voxel.packed_accessor<scalar_t,3,torch::RestrictPtrTraits,size_t>(),
+        voxel.packed_accessor<scalar_t,4,torch::RestrictPtrTraits,size_t>(),
+        N,
         C,
         H,
         W,
