@@ -3,6 +3,12 @@ import zipfile
 import os
 import shutil
 import tarfile
+from pathlib import Path
+
+import torch
+from model.layers import Cubify
+from .read_binvox import read_as_3d_array
+from utils import save_mesh, normalize_mesh
 
 """
 the dataset should be built like that:
@@ -11,11 +17,11 @@ the dataset should be built like that:
 -------ShapeNet_pointclouds
 -------ShapeNetRendering
 -------ShapeNetVox32
+-------ShapeNetMeshes
 ----pix3d
 -------img
 -------mask
 -------model
--------pointclouds
 -------pix3d.json
 """
 
@@ -35,7 +41,7 @@ def download_pix3d(download_path):
         zip_ref.extractall(f"{download_path}/dataset/pix3d")
     print("deleting the zip file")
     os.remove(zip_download_path)
-
+    # TODO we do not need to download point clouds
     url = "https://drive.google.com/uc?authuser=0&id=1RZakyBu9lPbG85SyconBn4sR8r2faInV&export=download"
     zip_download_path = f"{download_path}/pointclouds.zip"
     print("downloading pix3d pointclouds zip")
@@ -66,7 +72,8 @@ def download_shapenet(download_path):
     zip_download_path = f"{download_path}/dataset/shapeNet/ShapeNetRendering.tgz"
     urllib.request.urlretrieve(url, zip_download_path)
     print("unzipping")
-    tf = tarfile.open(f"{download_path}/dataset/shapeNet/ShapeNetRendering.tgz")
+    tf = tarfile.open(
+        f"{download_path}/dataset/shapeNet/ShapeNetRendering.tgz")
     tf.extractall(f"{download_path}/dataset/shapeNet")
     print("deleting the zip file")
     os.remove(zip_download_path)
@@ -80,7 +87,7 @@ def download_shapenet(download_path):
     tf.extractall(f"{download_path}/dataset/shapeNet")
     print("deleting the zip file")
     os.remove(zip_download_path)
-
+    # TODO we do not need pointClouds
     print("downloading shapeNet pointclouds")
     url = "https://drive.google.com/uc?export=download&confirm=jbpW&id=1cfoe521iTgcB_7-g_98GYAqO553W8Y0g"
     zip_download_path = f"{download_path}/dataset/shapeNet/ShapeNet_pointclouds.zip"
@@ -91,6 +98,46 @@ def download_shapenet(download_path):
     print("deleting the zip file")
     os.remove(zip_download_path)
     print("finished shapeNet")
+
+
+def batch(iterable, n=1):
+    l = len(iterable)
+    for ndx in range(0, l, n):
+        yield iterable[ndx:min(ndx + n, l)]
+
+
+def render_shapenet_meshes(download_path):
+    # TODO we render voxels at their given size maybe we should upsample/downsample
+    renderer = Cubify(threshold=0.5).to('cuda')
+
+    pathlist = Path(download_path).glob('**/*.binvox')
+
+    with torch.no_grad():
+        # every time render 16 models
+        for b in batch(pathlist, n=16):
+            voxels = []
+            paths = [str(p) for p in b]
+            # read a batch
+            for p in paths:
+                with open(p, 'rb') as binvox_file:
+                    v = torch.from_numpy(read_as_3d_array(binvox_file))
+                    voxels.append(v)
+            v_batch = torch.stack(voxels).to('cuda')
+
+            # render and split again
+            v_index, f_index, v_pos, _, faces = renderer(v_batch)
+
+            vs = v_pos.split(v_index)
+            fs = faces.split(f_index)
+
+            # save the normalized meshes
+            for v, f, p in zip(vs, fs, paths):
+                # TODO v_path should be without file extension
+                # TODO create all folders in path
+                # TODO remove the shapenet pointClouds download and from dataset
+                v_path = p.replace("ShapeNetVox32", "ShapeNetMeshes")
+                v_path = v_path.replace(".binvox", "")
+                save_mesh(normalize_mesh(v), f, v_path)
 
 
 if __name__ == "__main__":

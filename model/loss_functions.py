@@ -59,9 +59,6 @@ def batched_mesh_loss(vertex_positions_pred: Tensor, mesh_faces_pred: Tensor, pr
                                            vertice_index, face_index,
                                            point_cloud_size)
 
-    point_cloud_pred = normalize_mesh(point_cloud_pred)
-    point_cloud_gt = normalize_mesh(point_cloud_gt)
-
     # find distance between the points
     p2p_dist = batched_point2point_distance(point_cloud_pred, point_cloud_gt)
 
@@ -122,8 +119,8 @@ def mesh_sampling(vertex_positions: Tensor, mesh_faces: Tensor, num_points: floa
     # the result is p=∑wi*vi where each wi multiplyes a different row in chosen_faces
     # we then sum accross the vertice dimention to recieve the sampled vertices
     point_cloud = torch.mul(chosen_faces, ws.transpose(1, 2)).sum(1)
-
-    return point_cloud
+    # return normalized cloud
+    return normalize_mesh(point_cloud)
 
 
 def surface_areas(vertex_positions: Tensor, mesh_faces: Tensor) -> Tensor:
