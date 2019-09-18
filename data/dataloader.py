@@ -64,7 +64,7 @@ class pix3dDataset(Dataset):
         json_path = f"{dataset_path}/pix3d.json"
         with open(json_path) as json_file:
             dataset = json.load(json_file)
-            self.models_vox_src = []
+            self.voxels_src = []
             self.imgs_src = []
             self.mesh_src = []
             self.masks = []
@@ -80,7 +80,7 @@ class pix3dDataset(Dataset):
 
                 self.mesh_src.append(mesh_src)
                 self.imgs_src.append(img_src)
-                self.models_vox_src.append(voxel_src)
+                self.voxels_src.append(voxel_src)
                 self.masks.append(mask_src)
                 self.bbox.append(torch.Tensor(p['bbox']).unsqueeze(0))
                 self.Class.append(self.get_class(p['img']))
@@ -112,7 +112,7 @@ class pix3dDataset(Dataset):
 
     def __getitem__(self, idx):
         img_src = self.imgs_src[idx]
-        voxel_src = self.models_vox_src[idx]
+        voxel_src = self.voxels_src[idx]
         mesh_src = self.mesh_src[idx]
         masks_src = self.masks[idx]
         bbox = self.bbox[idx]
@@ -194,23 +194,22 @@ class shapeNet_Dataset(Dataset):
     def __init__(self, directory_in_str, num_sampels=None):
         pathlist = Path(directory_in_str).glob('**/*.binvox')
         self.imgs_src = []
-        self.models_vox_src = []
-        self.pointcloud = []
+        self.voxels_src = []
+        self.mesh_src = []
         self.label = []
 
         for i, path in enumerate(pathlist):
             if num_sampels is not None and i == num_sampels:
                 break
             voxel_path = str(path)
-            cloud_path = voxel_path.replace(
-                "ShapeNetVox32", "ShapeNet_pointclouds")
-            cloud_path = cloud_path.replace(
-                "model.binvox", "pointcloud_1024.npy")
+            mesh_src = voxel_path.replace(
+                "ShapeNetVox32", "ShapeNetMeshes")
+            mesh_src.replace(".binvox", ".obj")
             img_path = voxel_path.replace("ShapeNetVox32", "ShapeNetRendering")
             img_path = img_path.replace("model.binvox", "rendering/00.png")
 
-            self.models_vox_src.append(voxel_path)
-            self.pointcloud.append(cloud_path)
+            self.voxels_src.append(voxel_path)
+            self.mesh_src.append(mesh_src)
             self.imgs_src.append(img_path)
             self.label.append(self.get_class(img_path))
 
@@ -249,8 +248,8 @@ class shapeNet_Dataset(Dataset):
 
     def __getitem__(self, idx):
         img_src = self.imgs_src[idx]
-        model_src = self.models_vox_src[idx]
-        pc_src = self.pointcloud[idx]
+        voxel_src = self.voxels_src[idx]
+        mesh_src = self.mesh_src[idx]
         label = self.label[idx]
 
         rgba_image = PIL.Image.open(img_src)
@@ -259,11 +258,11 @@ class shapeNet_Dataset(Dataset):
         img = img.transpose(2, 0)
         img = img.type(torch.FloatTensor)
 
-        cloud = torch.from_numpy(np.load(pc_src))
-        with open(model_src, 'rb') as binvox_file:
+        mesh = load_mesh(mesh_src, tensor=True)
+        with open(voxel_src, 'rb') as binvox_file:
             model = torch.from_numpy(read_as_3d_array(binvox_file))
 
-        return img, model, cloud, label
+        return img, model, mesh, label
 
 
 def preparte_shapeNetBatch(num_voxels: int):
