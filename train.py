@@ -194,20 +194,16 @@ for epoch in range(epochs):
     epoch_loss = []
     print(f'--- EPOCH {epoch+1}/{epochs} ---')
     with tqdm.tqdm(total=len(trainloader.batch_sampler), file=sys.stdout) as pbar:
-        for i, data in enumerate(trainloader, 0):
+        for i, batch in enumerate(trainloader, 0):
             optimizer.zero_grad()
-            images, voxel_gts, pts_gts, backbone_targets = data
-
-            images = images.to(devices[0])
-            voxel_gts = voxel_gts.to(devices[0])
-            pts_gts = pts_gts.to(devices[0])
-            backbone_targets = backbone_targets.to(devices[0])
-
+            batch = batch.to(devices[0])
+            images, backbone_targets = batch.images, batch.targets
+            voxel_gts = batch.voxels
             # predict and comput loss
             output = model(images, backbone_targets)
 
             loss = total_loss(loss_weights, output,
-                              voxel_gts, pts_gts,
+                              voxel_gts, batch,
                               train_backbone=options.train_backbone,
                               backbone_type=model_name)
 

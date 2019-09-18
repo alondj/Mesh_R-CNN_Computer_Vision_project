@@ -118,12 +118,11 @@ for epoch in range(epochs):
     # Set to Train mode
     model.train()
     with tqdm.tqdm(total=len(trainloader.batch_sampler), file=sys.stdout) as pbar:
-        for i, data in enumerate(trainloader, 0):
+        for i, batch in enumerate(trainloader, 0):
             optimizer.zero_grad()
-            images, _, _, backbone_targets = data
 
-            images = images.to(devices[0])
-            backbone_targets = backbone_targets.to(devices[0])
+            batch = batch.to(devices[0])
+            images, backbone_targets = batch.images, batch.targets
 
             # predict and comput loss
             out = model(images, backbone_targets)

@@ -10,6 +10,7 @@ import PIL.Image
 from torch import Tensor
 from torch.nn.functional import adaptive_max_pool3d, interpolate
 from typing import List
+from utils.save import Mesh
 
 
 def fit_voxels_to_shape(voxels: Tensor, N):
@@ -31,6 +32,54 @@ def fit_voxels_to_shape(voxels: Tensor, N):
     return voxels
 
 
+class Batch():
+    def __init__(self, images, voxels, num_voxels, meshes, targets):
+        # fit voxels to shape BxVxVxV
+        batched_models = torch.stack(voxels)
+        batched_models = fit_voxels_to_shape(batched_models, num_voxels)
+
+        # stack all meshes together ∑Vx3 ∑fx3
+        batched_vertices = torch.cat([m.vertices for m in meshes])
+        batched_faces = torch.cat([m.faces for m in meshes])
+        batched_meshes = Mesh(batched_vertices, batched_faces)
+
+        # create the index with which to separate the batched meshes
+        mesh_index = [1 for _ in images]
+        vertice_index = [m.vertices.shape[0] for m in meshes]
+        face_index = [m.faces.shape[0] for m in meshes]
+
+        self.images = images
+        self.voxels = batched_models
+        self.meshes = batched_meshes
+        self.mesh_index = mesh_index
+        self.vertice_index = vertice_index
+        self.face_index = face_index
+        self.targets = targets
+
+    def to(self, *args, **kwargs):
+        if self.images:
+            if isinstance(self.images, (list, tuple)):
+                self.images = type(self.images)(
+                    [i.to(*args, **kwargs) for i in self.images])
+            else:
+                assert isinstance(self.images, Tensor)
+                self.images = self.images.to(*args, **kwargs)
+        if self.voxels:
+            assert isinstance(self.voxels, torch.Tensor)
+            self.voxels = self.voxels.to(*args, **kwargs)
+        if self.meshes:
+            assert isinstance(self.meshes, Mesh)
+            assert self.face_index != None
+            assert self.vertice_index != None
+            assert self.mesh_index != None
+            self.meshes = Mesh(self.meshes.vertices.to(*args, **kwargs),
+                               self.meshes.faces.to(*args, **kwargs))
+        if self.targets:
+            self.targets = self.targets.to(*args, **kwargs)
+
+        return self
+
+
 class pix3dDataset(Dataset):
 
     def __init__(self, dataset_path, num_sampels=None):
@@ -43,7 +92,7 @@ class pix3dDataset(Dataset):
             self.masks = []
             self.bbox = []
             self.Class = []
-            for i, p in enumerate(dataset):
+            for p in dataset:
                 if num_sampels is not None and num_sampels == len(self.imgs_src):
                     break
                 if p["img"].find("chair") != -1 or p["img"].find("sofa") != -1 or p["img"].find("table") != -1:
@@ -89,35 +138,6 @@ class pix3dDataset(Dataset):
         return img, model, cloud, target
 
 
-def get_class(s: str):
-    if s.find("02691156") != -1:
-        return 0
-    if s.find("02828884") != -1:
-        return 1
-    if s.find("02933112") != -1:
-        return 2
-    if s.find("02958343") != -1:
-        return 3
-    if s.find("03001627") != -1:
-        return 4
-    if s.find("03211117") != -1:
-        return 5
-    if s.find("03636649") != -1:
-        return 6
-    if s.find("03691459") != -1:
-        return 7
-    if s.find("04090263") != -1:
-        return 8
-    if s.find("04256520") != -1:
-        return 9
-    if s.find("04379243") != -1:
-        return 10
-    if s.find("04401088") != -1:
-        return 11
-    if s.find("04530566") != -1:
-        return 12
-
-
 class pix3DTarget():
     keys = ['boxes', 'masks', 'labels']
 
@@ -145,7 +165,7 @@ class pix3DTarget():
 
 class pix3DTargetList():
     def __init__(self, pix3d_targets: List[pix3DTarget]):
-        self.targets = targets
+        self.targets = pix3d_targets
 
     def to(self, *args, **kwargs):
         self.targets = [t.to(*args, **kwargs) for t in self.targets]
@@ -162,17 +182,13 @@ class pix3DTargetList():
 
 
 def preparte_pix3dBatch(num_voxels: int):
-    def batch_input(samples: List):
+    def batch_input(samples: List) -> Batch:
         images, voxel_gts, meshes, targets = zip(*samples)
-
-        batched_models = torch.stack(voxel_gts)
-        batched_models = fit_voxels_to_shape(batched_models, num_voxels)
-        batched_meshes = torch.stack(meshes)
-        # TODO handle meshes vertices faces and index
-
         backbone_targets = pix3DTargetList(targets)
 
-        return images, batched_models, batched_meshes, backbone_targets
+        return Batch(images=images, voxels=voxel_gts,
+                     num_voxels=num_voxels, meshes=meshes,
+                     targets=backbone_targets)
 
     return batch_input
 
@@ -230,17 +246,44 @@ class shapeNet_Dataset(Dataset):
         return img, model, cloud, torch.Tensor(label)
 
 
-def preparte_shapeNetBatch(num_voxels: int):
-    def batch_input(samples: List):
-        images, voxel_gts, meshes, targets = zip(*samples)
-        images = torch.stack(images)
-        voxels = torch.stack(voxel_gts)
-        voxels = fit_voxels_to_shape(voxels, num_voxels)
-        batched_meshes = torch.stack(meshes)
-        # TODO handle meshes vertices faces and index
-        targets = torch.cat(targets)
+def get_class(s: str):
+    if s.find("02691156") != -1:
+        return 0
+    if s.find("02828884") != -1:
+        return 1
+    if s.find("02933112") != -1:
+        return 2
+    if s.find("02958343") != -1:
+        return 3
+    if s.find("03001627") != -1:
+        return 4
+    if s.find("03211117") != -1:
+        return 5
+    if s.find("03636649") != -1:
+        return 6
+    if s.find("03691459") != -1:
+        return 7
+    if s.find("04090263") != -1:
+        return 8
+    if s.find("04256520") != -1:
+        return 9
+    if s.find("04379243") != -1:
+        return 10
+    if s.find("04401088") != -1:
+        return 11
+    if s.find("04530566") != -1:
+        return 12
 
-        return images, voxels, batched_meshes, targets
+
+def preparte_shapeNetBatch(num_voxels: int):
+    def batch_input(samples: List) -> Batch:
+        images, voxel_gts, meshes, targets = zip(*samples)
+        # batch images BxCxHxW
+        images = torch.stack(images)
+
+        return Batch(images=images, voxels=voxel_gts,
+                     num_voxels=num_voxels, meshes=meshes,
+                     targets=targets)
 
     return batch_input
 
@@ -249,10 +292,3 @@ def shapenetDataLoader(dataset: Dataset, batch_size: int, num_voxels: int, num_w
     return DataLoader(dataset, batch_size=batch_size, shuffle=True,
                       num_workers=num_workers,
                       collate_fn=preparte_shapeNetBatch(num_voxels))
-
-
-if __name__ == "__main__":
-    pxd = pix3dDataset("../dataset/pix3d", 5)
-    # sdb = shapeNet_Dataset("../dataset/shapeNet/ShapeNetVox32", 9)
-    imgs, models, clouds, targets = pxd[0]
-    print(imgs.shape)

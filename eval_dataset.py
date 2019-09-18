@@ -116,17 +116,13 @@ def get_labels(targets):
 confusion_matrix = torch.zeros(num_classes, num_classes)
 with torch.no_grad():
     with tqdm.tqdm(total=len(testLoader.batch_sampler), file=sys.stdout) as pbar:
-        for i, data in enumerate(testLoader, 0):
-            images, voxel_gts, pts_gts, backbone_targets = data
-
-            images = images.to(devices[0])
-            voxels_gts = voxels_gts.to(devices[0])
-            pts_gts = pts_gts.to(devices[0])
-            backbone_targets = backbone_targets.to(devices[0])
+        for i, batch in enumerate(testLoader, 0):
+            batch = batch.to(devices[0])
+            images, backbone_targets = batch.images, batch.targets
+            voxel_gts = batch.voxels
 
             # predict and comput loss
             model_output = model(images, backbone_targets)
-
             vxl_loss = voxel_loss(model_output['voxels'], voxel_gts)
             chamfer_loss, normal_loss, edge_loss = batched_mesh_loss(
                 model_output['vertex_postions'],
@@ -134,7 +130,7 @@ with torch.no_grad():
                 model_output['edge_index'],
                 model_output['vertice_index'],
                 model_output['face_index'],
-                pts_gts
+                batch
             )
             # update losses
             losses_and_scores['chamfer'] += chamfer_loss.item()
