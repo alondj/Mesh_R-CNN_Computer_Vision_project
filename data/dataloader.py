@@ -82,7 +82,7 @@ class pix3dDataset(Dataset):
                 self.imgs_src.append(img_src)
                 self.models_vox_src.append(voxel_src)
                 self.masks.append(mask_src)
-                self.bbox.append(torch.Tensor(p['bbox']))
+                self.bbox.append(torch.Tensor(p['bbox']).unsqueeze(0))
                 self.Class.append(self.get_class(p['img']))
 
     def get_class(self, s: str):
@@ -116,12 +116,12 @@ class pix3dDataset(Dataset):
         mesh_src = self.mesh_src[idx]
         masks_src = self.masks[idx]
         bbox = self.bbox[idx]
-        label = torch.tensor(self.Class[idx])
+        label = torch.tensor(self.Class[idx]).unsqueeze(0)
 
         img = torch.from_numpy(mpimg.imread(img_src)).permute(2, 0, 1)
         model = load_voxels(voxel_src, tensor=True)
         mesh = load_mesh(mesh_src, tensor=True)
-        mask = torch.from_numpy(mpimg.imread(masks_src))
+        mask = torch.from_numpy(mpimg.imread(masks_src)).unsqueeze(0)
 
         target = pix3DTarget({'masks': mask, 'boxes': bbox, 'labels': label})
         return img, model, mesh, target
