@@ -3,10 +3,12 @@ from typing import Tuple, Optional, List
 import torch
 import torch.nn as nn
 from torch import Tensor
+from data.dataloader import Batch
+from utils.normalize_mesh import normalize_mesh
 
 
 # compute combined losses of the bacbone and GCN
-def total_loss(ws: dict, model_output: dict, voxel_gts: Tensor, pt_gts: Tensor,
+def total_loss(ws: dict, model_output: dict, voxel_gts: Tensor, batch: Batch,
                train_backbone: bool,
                backbone_type: str) -> Tensor:
     v_loss = voxel_loss(model_output['voxels'], voxel_gts)
@@ -17,7 +19,7 @@ def total_loss(ws: dict, model_output: dict, voxel_gts: Tensor, pt_gts: Tensor,
         model_output['edge_index'],
         model_output['vertice_index'],
         model_output['face_index'],
-        pt_gts
+        batch
     )
 
     # if we train the backbone just add the losses
@@ -38,7 +40,7 @@ def voxel_loss(voxel_prediction: Tensor, voxel_gts: Tensor) -> Tensor:
 
 def batched_mesh_loss(vertex_positions_pred: Tensor, mesh_faces_pred: Tensor, pred_adjacency: Tensor,
                       vertices_per_sample_pred: List[int], faces_per_sample_pred: List[int],
-                      pt_gts: Tensor,
+                      batch: Batch,
                       point_cloud_size: float = 10e3,
                       num_neighbours_for_normal_loss: int = 10) -> Tuple[Tensor, Tensor, Tensor]:
 
@@ -46,11 +48,19 @@ def batched_mesh_loss(vertex_positions_pred: Tensor, mesh_faces_pred: Tensor, pr
     p2p_dist = batched_point2point_distance(vertex_positions_pred).squeeze(0)
     edge_loss = total_edge_length(p2p_dist, pred_adjacency)
 
-    # sample point clouds from the predictions
+    # sample normalized point clouds from the predictions and gts
     point_cloud_pred = batched_mesh_sampling(vertex_positions_pred, mesh_faces_pred,
                                              vertices_per_sample_pred, faces_per_sample_pred,
                                              point_cloud_size)
-    point_cloud_gt = pt_gts
+    pos_gts, faces_gt = batch.meshes
+    vertice_index, face_index = batch.face_index, batch.face_index
+
+    point_cloud_gt = batched_mesh_sampling(pos_gts, faces_gt,
+                                           vertice_index, face_index,
+                                           point_cloud_size)
+
+    point_cloud_pred = normalize_mesh(point_cloud_pred)
+    point_cloud_gt = normalize_mesh(point_cloud_gt)
 
     # find distance between the points
     p2p_dist = batched_point2point_distance(point_cloud_pred, point_cloud_gt)
