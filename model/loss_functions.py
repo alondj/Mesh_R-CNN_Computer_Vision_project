@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 from data.dataloader import Batch
-from utils.normalize_mesh import normalize_mesh
+from utils import normalize_mesh
 
 
 # compute combined losses of the bacbone and GCN

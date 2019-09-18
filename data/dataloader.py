@@ -6,36 +6,15 @@ from pathlib import Path
 from data.read_binvox import read_as_3d_array
 import torch
 import PIL.Image
-from torch import Tensor
-from torch.nn.functional import adaptive_max_pool3d, interpolate
 from typing import List
-from utils.save import Mesh, load_mesh, load_voxels
-
-
-def fit_voxels_to_shape(voxels: Tensor, N):
-    """
-    up/downsample a BxVxVxV voxel grid to a BxNxNxN grid
-    """
-    assert voxels.ndim == 4, "expects batched input of shape BxVxVxV"
-    dtype = voxels.dtype
-    M = voxels.shape[1]
-    assert voxels.shape[1:] == torch.Size([M, M, M])
-
-    if M > N:
-        # downsample
-        return adaptive_max_pool3d(voxels.to(torch.float32), N).to(dtype)
-    elif M < N:
-        # upsample
-        return interpolate(voxels.to(torch.float32).unsqueeze(1), size=N).squeeze(1).to(dtype)
-
-    return voxels
+from utils import Mesh, load_mesh, load_voxels, resample_voxels
 
 
 class Batch():
     def __init__(self, images, voxels, num_voxels, meshes, targets):
         # fit voxels to shape BxVxVxV
         batched_models = torch.stack(voxels)
-        batched_models = fit_voxels_to_shape(batched_models, num_voxels)
+        batched_models = resample_voxels(batched_models, num_voxels)
 
         # stack all meshes together ∑Vx3 ∑fx3
         batched_vertices = torch.cat([m.vertices for m in meshes])
@@ -61,7 +40,7 @@ class Batch():
                 self.images = type(self.images)(
                     [i.to(*args, **kwargs) for i in self.images])
             else:
-                assert isinstance(self.images, Tensor)
+                assert isinstance(self.images, torch.Tensor)
                 self.images = self.images.to(*args, **kwargs)
         if not (self.voxels is None):
             assert isinstance(self.voxels, torch.Tensor)

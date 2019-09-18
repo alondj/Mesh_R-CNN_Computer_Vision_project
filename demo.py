@@ -10,7 +10,7 @@ import torch.nn as nn
 
 from model import (Pix3DModel, ShapeNetModel, pretrained_MaskRcnn,
                    pretrained_ResNet50)
-from utils.save import save_mesh, save_voxels
+from utils import save_mesh, save_voxels
 
 assert torch.cuda.is_available(), "the training process is slow and requires gpu"
 
