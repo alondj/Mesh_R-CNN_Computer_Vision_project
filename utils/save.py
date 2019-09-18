@@ -47,7 +47,7 @@ def load_voxels(path: str, tensor=False):
     return vxls
 
 
-def load_mesh(filename: str, tenosr=False) -> Mesh:
+def load_mesh(filename: str, tensor=False) -> Mesh:
     triangles = []
     vertices = []
     with open(filename) as file:
@@ -66,7 +66,7 @@ def load_mesh(filename: str, tenosr=False) -> Mesh:
 
     vertices = np.array(vertices)
     triangles = np.array(triangles)
-    if tenosr:
+    if tensor:
         vertices = torch.from_numpy(vertices)
         triangles = torch.from_numpy(triangles)
 

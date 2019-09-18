@@ -1,7 +1,6 @@
 import json
 import matplotlib.image as mpimg
 from torch.utils.data import Dataset, DataLoader
-import scipy.io as sci
 import numpy as np
 from pathlib import Path
 from data.read_binvox import read_as_3d_array
@@ -10,7 +9,7 @@ import PIL.Image
 from torch import Tensor
 from torch.nn.functional import adaptive_max_pool3d, interpolate
 from typing import List
-from utils.save import Mesh
+from utils.save import Mesh, load_mesh, load_voxels
 
 
 def fit_voxels_to_shape(voxels: Tensor, N):
@@ -18,16 +17,16 @@ def fit_voxels_to_shape(voxels: Tensor, N):
     up/downsample a BxVxVxV voxel grid to a BxNxNxN grid
     """
     assert voxels.ndim == 4, "expects batched input of shape BxVxVxV"
-
+    dtype = voxels.dtype
     M = voxels.shape[1]
     assert voxels.shape[1:] == torch.Size([M, M, M])
 
     if M > N:
         # downsample
-        return adaptive_max_pool3d(voxels, N)
+        return adaptive_max_pool3d(voxels.to(torch.float32), N).to(dtype)
     elif M < N:
         # upsample
-        return interpolate(voxels.unsqueeze(1), size=N).squeeze(1)
+        return interpolate(voxels.to(torch.float32).unsqueeze(1), size=N).squeeze(1).to(dtype)
 
     return voxels
 
@@ -57,24 +56,24 @@ class Batch():
         self.targets = targets
 
     def to(self, *args, **kwargs):
-        if self.images:
+        if not (self.images is None):
             if isinstance(self.images, (list, tuple)):
                 self.images = type(self.images)(
                     [i.to(*args, **kwargs) for i in self.images])
             else:
                 assert isinstance(self.images, Tensor)
                 self.images = self.images.to(*args, **kwargs)
-        if self.voxels:
+        if not (self.voxels is None):
             assert isinstance(self.voxels, torch.Tensor)
             self.voxels = self.voxels.to(*args, **kwargs)
-        if self.meshes:
+        if not (self.meshes is None):
             assert isinstance(self.meshes, Mesh)
             assert self.face_index != None
             assert self.vertice_index != None
             assert self.mesh_index != None
             self.meshes = Mesh(self.meshes.vertices.to(*args, **kwargs),
                                self.meshes.faces.to(*args, **kwargs))
-        if self.targets:
+        if not (self.targets is None):
             self.targets = self.targets.to(*args, **kwargs)
 
         return self
@@ -88,54 +87,65 @@ class pix3dDataset(Dataset):
             dataset = json.load(json_file)
             self.models_vox_src = []
             self.imgs_src = []
-            self.pointcloud = []
+            self.mesh_src = []
             self.masks = []
             self.bbox = []
             self.Class = []
             for p in dataset:
                 if num_sampels is not None and num_sampels == len(self.imgs_src):
                     break
-                if p["img"].find("chair") != -1 or p["img"].find("sofa") != -1 or p["img"].find("table") != -1:
-                    img_src = f"{dataset_path}/{p['img']}"
-                    model3d_src = f"{dataset_path}/{p['voxel']}"
-                    mask_src = f"{dataset_path}/{p['mask']}"
+                img_src = f"{dataset_path}/{p['img']}"
+                voxel_src = f"{dataset_path}/{p['voxel']}"
+                mesh_src = f"{dataset_path}/{p['model']}"
+                mask_src = f"{dataset_path}/{p['mask']}"
 
-                    s = p['voxel']
-                    beginning = s.find("voxel.mat")
-                    s = s[0: beginning]
-                    pointcloud_src = f"{dataset_path}/pointclouds/{s}pcl_1024.npy"
+                self.mesh_src.append(mesh_src)
+                self.imgs_src.append(img_src)
+                self.models_vox_src.append(voxel_src)
+                self.masks.append(mask_src)
+                self.bbox.append(torch.Tensor(p['bbox']))
+                self.Class.append(self.get_class(p['img']))
 
-                    self.imgs_src.append(img_src)
-                    self.models_vox_src.append(model3d_src)
-                    self.pointcloud.append(pointcloud_src)
-                    self.masks.append(mask_src)
-                    self.bbox.append(torch.Tensor(p['bbox']))
-
-                    if p["img"].find("chair") != -1:
-                        self.Class.append(torch.Tensor(0))
-                    if p["img"].find("sofa") != -1:
-                        self.Class.append(torch.Tensor(1))
-                    if p["img"].find("table") != -1:
-                        self.Class.append(torch.Tensor(2))
+    def get_class(self, s: str):
+        if s.find("bed") != -1:
+            return 1
+        if s.find("bookcase") != -1:
+            return 2
+        if s.find("chair") != -1:
+            return 3
+        if s.find("desk") != -1:
+            return 4
+        if s.find("misc") != -1:
+            return 5
+        if s.find("sofa") != -1:
+            return 6
+        if s.find("table") != -1:
+            return 7
+        if s.find("tool") != -1:
+            return 8
+        if s.find("wardrobe") != -1:
+            return 9
+        assert False, "no label found for pix3d should not happen"
+        return -1
 
     def __len__(self):
         return len(self.imgs_src)
 
     def __getitem__(self, idx):
         img_src = self.imgs_src[idx]
-        model_src = self.models_vox_src[idx]
-        pointcloud_src = self.pointcloud[idx]
+        voxel_src = self.models_vox_src[idx]
+        mesh_src = self.mesh_src[idx]
         masks_src = self.masks[idx]
         bbox = self.bbox[idx]
-        label = self.Class[idx]
+        label = torch.tensor(self.Class[idx])
 
-        img = torch.from_numpy(mpimg.imread(img_src))
-        model = torch.from_numpy(sci.loadmat(model_src)['voxel'])
-        cloud = torch.from_numpy(np.load(pointcloud_src))
+        img = torch.from_numpy(mpimg.imread(img_src)).permute(2, 0, 1)
+        model = load_voxels(voxel_src, tensor=True)
+        mesh = load_mesh(mesh_src, tensor=True)
         mask = torch.from_numpy(mpimg.imread(masks_src))
 
         target = pix3DTarget({'masks': mask, 'boxes': bbox, 'labels': label})
-        return img, model, cloud, target
+        return img, model, mesh, target
 
 
 class pix3DTarget():
@@ -149,9 +159,10 @@ class pix3DTarget():
         self.target = target
 
     def to(self, *args, **kwargs):
+        target = {}
         for k in self.keys:
-            self.target[k] = self.target[k].to(*args, **kwargs)
-        return self
+            target[k] = self.target[k].to(*args, **kwargs)
+        return pix3DTarget(target)
 
     def __getitem__(self, key):
         return self.target[key]
@@ -168,8 +179,8 @@ class pix3DTargetList():
         self.targets = pix3d_targets
 
     def to(self, *args, **kwargs):
-        self.targets = [t.to(*args, **kwargs) for t in self.targets]
-        return self
+        targets = [t.to(*args, **kwargs) for t in self.targets]
+        return pix3DTargetList(targets)
 
     def __getitem__(self, arg):
         return self.targets[arg]
@@ -222,7 +233,37 @@ class shapeNet_Dataset(Dataset):
             self.models_vox_src.append(voxel_path)
             self.pointcloud.append(cloud_path)
             self.imgs_src.append(img_path)
-            self.label.append(get_class(img_path))
+            self.label.append(self.get_class(img_path))
+
+    def get_class(self, s: str):
+        if s.find("02691156") != -1:
+            return 0
+        if s.find("02828884") != -1:
+            return 1
+        if s.find("02933112") != -1:
+            return 2
+        if s.find("02958343") != -1:
+            return 3
+        if s.find("03001627") != -1:
+            return 4
+        if s.find("03211117") != -1:
+            return 5
+        if s.find("03636649") != -1:
+            return 6
+        if s.find("03691459") != -1:
+            return 7
+        if s.find("04090263") != -1:
+            return 8
+        if s.find("04256520") != -1:
+            return 9
+        if s.find("04379243") != -1:
+            return 10
+        if s.find("04401088") != -1:
+            return 11
+        if s.find("04530566") != -1:
+            return 12
+        assert False, "no label found for shapenet should not happen"
+        return -1
 
     def __len__(self):
         return len(self.imgs_src)
@@ -243,36 +284,7 @@ class shapeNet_Dataset(Dataset):
         with open(model_src, 'rb') as binvox_file:
             model = torch.from_numpy(read_as_3d_array(binvox_file))
 
-        return img, model, cloud, torch.Tensor(label)
-
-
-def get_class(s: str):
-    if s.find("02691156") != -1:
-        return 0
-    if s.find("02828884") != -1:
-        return 1
-    if s.find("02933112") != -1:
-        return 2
-    if s.find("02958343") != -1:
-        return 3
-    if s.find("03001627") != -1:
-        return 4
-    if s.find("03211117") != -1:
-        return 5
-    if s.find("03636649") != -1:
-        return 6
-    if s.find("03691459") != -1:
-        return 7
-    if s.find("04090263") != -1:
-        return 8
-    if s.find("04256520") != -1:
-        return 9
-    if s.find("04379243") != -1:
-        return 10
-    if s.find("04401088") != -1:
-        return 11
-    if s.find("04530566") != -1:
-        return 12
+        return img, model, cloud, label
 
 
 def preparte_shapeNetBatch(num_voxels: int):
@@ -280,6 +292,7 @@ def preparte_shapeNetBatch(num_voxels: int):
         images, voxel_gts, meshes, targets = zip(*samples)
         # batch images BxCxHxW
         images = torch.stack(images)
+        targets = torch.Tensor(targets)
 
         return Batch(images=images, voxels=voxel_gts,
                      num_voxels=num_voxels, meshes=meshes,

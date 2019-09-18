@@ -8,8 +8,6 @@
 
 8. for pix3D handle ROI_ALIGN and in general handle the backbone during training
 
-1.ensure we always use x,y,z as coords
-
 12.evaluation metrics for pix3d and shapeNet
 
 14. in general how to train and validate mask rcnn
