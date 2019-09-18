@@ -9,6 +9,8 @@ from torch.utils.model_zoo import load_url
 from torchvision.models import ResNet
 # MaskRCNN FasterRCNN, GeneralizedRCNN, RoIHeads MultiScaleRoIAlign RoIAlign
 from torchvision.models.detection import MaskRCNN
+from torchvision.models.detection.roi_heads import RoIHeads
+from torchvision.models.detection.transform import GeneralizedRCNNTransform
 from torchvision.models.detection.backbone_utils import resnet_fpn_backbone
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.models.detection.image_list import ImageList
@@ -211,6 +213,11 @@ class Pix3DMask_RCNN(MaskRCNN):
         self.mesh_ROI = MultiScaleRoIAlign(featmap_names=[0, 1, 2, 3],
                                            output_size=12,
                                            sampling_ratio=1)
+        # TODO we can always return boxes if we change RoiHeads
+        # also we can limit the number of predictions per image
+        # if we can correlate between boxes and ROI features then we can filter graphs
+        # based on box IOU with gt box
+        # during training as we have only one annotated object per image
 
     def forward(self, images: List[Tensor], targets: Optional[List[Dict]] = None):
         """
@@ -234,17 +241,17 @@ class Pix3DMask_RCNN(MaskRCNN):
         if isinstance(features, torch.Tensor):
             features = OrderedDict([(0, features)])
         proposals, proposal_losses = self.rpn(images, features, targets)
-
         # additional ROI features for pix3d
         graphs_per_image = [p.shape[0] for p in proposals]
         pix3d_input = self.mesh_ROI(features, proposals, images.image_sizes)
 
         detections, detector_losses = self.roi_heads(
             features, proposals, images.image_sizes, targets)
-
+        print(detections[0]['boxes'].max())
+        print(pix3d_input.shape)
         detections = self.transform.postprocess(
             detections, images.image_sizes, original_image_sizes)
-
+        print(detections[0]['boxes'].max())
         losses = {}
         losses.update(detector_losses)
         losses.update(proposal_losses)

@@ -4,7 +4,7 @@ import torch.nn as nn
 from typing import Tuple, Optional, List
 import datetime
 import math
-from .utils import aggregate_neighbours, dummy
+from .utils import aggregate_neighbours
 
 # data representation for graphs:
 # adjacency matrix: we just save occupied indices in coo format
@@ -126,8 +126,8 @@ class ResVertixRefineShapenet(nn.Module):
 
     def forward(self, vertice_index: List[int], img_feature_maps: List[Tensor],
                 vertex_adjacency: Tensor, vertex_positions: Tensor,
-                sizes: List,
-                vertex_features: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
+                image_sizes: List, vertex_features: Optional[Tensor] = None,
+                meshes_index: List[int] = None) -> Tuple[Tensor, Tensor]:
 
         # note that vertex_features is the concatination of all feature matrices of the batch
         # along the vertex dimension (we stack them vertically)
@@ -140,10 +140,14 @@ class ResVertixRefineShapenet(nn.Module):
 
         # note that the conv_feature are batched NxCxHxW
 
+        # unless specified otherwise only one mesh per image
+        if meshes_index is None:
+            meshes_index = [1 for _ in image_sizes]
+
         # project the 3D mesh to the 2D feature planes and pool new features
         # ∑Vx3840
         aligned_vertices = self.vertAlign(img_feature_maps, vertex_positions,
-                                          vertice_index, sizes)
+                                          vertice_index, image_sizes, meshes_index)
 
         # ∑Vx128
         projected = self.linear(aligned_vertices)
@@ -200,7 +204,7 @@ class VertixRefineShapeNet(nn.Module):
 
     def forward(self, vertice_index: List[int], img_feature_maps: List[Tensor],
                 vertex_adjacency: Tensor, vertex_positions: Tensor,
-                sizes: List,
+                image_sizes: List, meshes_index: List[int] = None,
                 vertex_features: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
 
         # note that vertex_features is the concatination of all feature matrices of the batch
@@ -214,10 +218,13 @@ class VertixRefineShapeNet(nn.Module):
 
         # note that the conv_feature are batched NxCxHxW
 
+        if meshes_index is None:
+            meshes_index = [1 for _ in image_sizes]
+
         # project the 3D mesh to the 2D feature planes and pool new features
         # ∑Vx3840
         aligned_vertices = self.vertAlign(img_feature_maps, vertex_positions,
-                                          vertice_index, sizes)
+                                          vertice_index, image_sizes, meshes_index)
         # ∑Vx128
         projected = self.linear0(aligned_vertices)
 
@@ -280,7 +287,8 @@ class VertixRefinePix3D(nn.Module):
 
     def forward(self, vertice_index: List[int], back_bone_features: Tensor,
                 vertex_adjacency: Tensor, vertex_positions: Tensor,
-                sizes: List, vertex_features: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
+                image_sizes: List, mesh_index: List[int] = None,
+                vertex_features: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
 
         # note that vertex_features is the concatination of all feature matrices of the batch
         # along the vertex dimension (we stack them vertically)
@@ -292,10 +300,12 @@ class VertixRefinePix3D(nn.Module):
         # as block on the diagonal and all off diagonal blocks are zero blocks
 
         # note that the back_bone_features are batched NxCxHxW
+        if mesh_index is None:
+            mesh_index = [1 for _ in image_sizes]
 
         # project the 3D mesh to the 2D feature planes and pool new features
         algined = self.vertAlign([back_bone_features], vertex_positions,
-                                 vertice_index, sizes)
+                                 vertice_index, image_sizes, mesh_index)
 
         # ∑Vx387 if there are initial vertex_features
         # and ∑Vx259 otherwise
@@ -613,18 +623,24 @@ class VertexAlign(nn.Module):
     """
 
     def forward(self, img_features: List[Tensor], vertex_positions: Tensor,
-                vertices_per_mesh: List[int], sizes: List[Tuple[int, int]]) -> Tensor:
+                vertices_per_mesh: List[int], image_sizes: List[Tuple[int, int]],
+                mesh_index: List[int]) -> Tensor:
         # right now it's a possibly ugly hack we iterate over individual meshes
         # and compute the projection on the respective feature maps
         # img_features is a list of batched features map
         # so for eg. the first mesh will be projected into img_features[0][0],...img_features[len(img_features)-1][0]
-        assert len(vertices_per_mesh) == img_features[0].shape[0]
+        assert len(mesh_index) == img_features[0].shape[0]
+        assert sum(mesh_index) == len(vertices_per_mesh)
         vertices = vertex_positions.split(vertices_per_mesh)
 
+        i = 0
         feats = []
-        for idx, (positions, size) in enumerate(zip(vertices, sizes)):
-            sample_maps = [f_map[idx] for f_map in img_features]
-            feats.append(self.single_projection(sample_maps, positions, size))
+        for idx, (num_meshes, size) in enumerate(zip(mesh_index, image_sizes)):
+            for positions in vertices[i:i+num_meshes]:
+                sample_maps = [f_map[idx] for f_map in img_features]
+                feats.append(self.single_projection(sample_maps,
+                                                    positions, size))
+            i += num_meshes
 
         # ∑V x ∑ image channels
         return torch.cat(feats, dim=0)

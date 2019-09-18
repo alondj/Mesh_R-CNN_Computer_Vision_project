@@ -44,13 +44,13 @@ def test_align(device):
     align = VertexAlign()
     pos = torch.randint(0, 137, (100, 3)).float().to(device)
     vert_per_m = [49, 51]
-    c = align(f_maps, pos, vert_per_m, [i.shape[1:] for i in img])
+    c = align(f_maps, pos, vert_per_m, [i.shape[1:] for i in img], [1, 1])
     assert c.shape == torch.Size([100, 3840])
 
     # check multiple graphs with one feature_map size
     f_map = torch.randn(2, 256, 224, 224).to(device)
     align = VertexAlign()
-    c = align([f_map], pos, vert_per_m, [(224, 224), (224, 224)])
+    c = align([f_map], pos, vert_per_m, [(224, 224), (224, 224)], [1, 1])
     assert c.shape == torch.Size([100, 256])
 
 
