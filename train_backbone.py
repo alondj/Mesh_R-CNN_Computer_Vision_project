@@ -3,7 +3,7 @@ import datetime
 import os
 import platform
 import sys
-
+from pathlib import Path
 import numpy as np
 import torch
 import torch.nn as nn
@@ -106,7 +106,7 @@ now = datetime.datetime.now()
 save_path = now.isoformat()
 dir_name = os.path.join('checkpoints', options.model, 'backbone', save_path)
 if not os.path.exists(dir_name):
-    os.mkdir(dir_name)
+    Path(dir_name).mkdir(parents=True, exist_ok=True)
 
 # Train model on the dataset
 losses = []

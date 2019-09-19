@@ -6,7 +6,7 @@ import matplotlib.image as mpimg
 import numpy as np
 import torch
 import torch.nn as nn
-
+from pathlib import Path
 
 from model import (Pix3DModel, ShapeNetModel, pretrained_MaskRcnn,
                    pretrained_ResNet50)
@@ -76,6 +76,9 @@ voxels = output['voxels']
 graphs_per_image = output['graphs_per_image']
 
 print(f"saving output to {options.savePath}")
+
+if not os.path.exists(options.savePath):
+    Path(options.savePath).mkdir(parents=True, exist_ok=True)
 
 filename = os.path.basename(options.imgPath).split('.')[0]
 # save voxels

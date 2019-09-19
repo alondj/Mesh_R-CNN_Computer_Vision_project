@@ -4,7 +4,7 @@ import os
 import platform
 import sys
 from itertools import chain
-
+from pathlib import Path
 import numpy as np
 import torch
 import torch.nn as nn
@@ -174,18 +174,9 @@ GCN_path = os.path.join('checkpoints', model_name, 'GCN', save_path)
 backbone_path = os.path.join('checkpoints', options.model,
                              'backbone', save_path)
 if not os.path.exists(GCN_path):
-    os.mkdir(os.path.join('checkpoints'))
-    os.mkdir(os.path.join('checkpoints', model_name))
-    os.mkdir(os.path.join('checkpoints', model_name, 'GCN'))
-    os.mkdir(GCN_path)
+    Path(GCN_path).mkdir(parents=True, exist_ok=True)
 if options.train_backbone and not os.path.exists(backbone_path):
-    if not os.path.exists('checkpoints'):
-        os.mkdir(os.path.join('checkpoints'))
-    if not os.path.exists(os.path.join('checkpoints', options.model)):
-        os.mkdir(os.path.join('checkpoints', options.model))
-    if not os.path.exists(os.path.join('checkpoints', options.model, 'backbone')):
-        os.mkdir(os.path.join('checkpoints', options.model, 'backbone'))
-    os.mkdir(backbone_path)
+    Path(backbone_path).mkdir(parents=True, exist_ok=True)
 
 # Train model on the dataset
 losses = []
