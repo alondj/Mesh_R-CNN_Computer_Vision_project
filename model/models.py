@@ -244,11 +244,13 @@ class Pix3DMask_RCNN(MaskRCNN):
         # additional ROI features for pix3d
         graphs_per_image = [p.shape[0] for p in proposals]
         pix3d_input = self.mesh_ROI(features, proposals, images.image_sizes)
+
         detections, detector_losses = self.roi_heads(
             features, proposals, images.image_sizes, targets)
-
+        print(detections)
         detections = self.transform.postprocess(
             detections, images.image_sizes, original_image_sizes)
+        print(detections)
         losses = {}
         losses.update(detector_losses)
         losses.update(proposal_losses)

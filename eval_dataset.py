@@ -18,7 +18,7 @@ from data.dataloader import (pix3dDataset, pix3DTarget, pix3DTargetList,
 from model import (Pix3DModel, ShapeNetModel, pretrained_MaskRcnn,
                    pretrained_ResNet50)
 from model.loss_functions import batched_mesh_loss, voxel_loss
-from utils import batch_iou, f_score
+from utils import f_score
 
 assert torch.cuda.is_available(), "the training process is slow and requires gpu"
 
