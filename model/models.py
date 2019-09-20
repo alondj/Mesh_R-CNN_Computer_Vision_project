@@ -22,6 +22,7 @@ from torchvision.ops import MultiScaleRoIAlign, RoIAlign
 
 from .layers import (Cubify, ResVertixRefineShapenet, VertixRefinePix3D,
                      VertixRefineShapeNet, VoxelBranch)
+from model.our_roi_head import build_RoI_head
 
 
 class ShapeNetModel(nn.Module):
@@ -42,7 +43,7 @@ class ShapeNetModel(nn.Module):
                               use_input_features=False,
                               num_features=vertex_feature_dim)]
 
-        for _ in range(num_refinement_stages-1):
+        for _ in range(num_refinement_stages - 1):
             stages.append(refineClass(alignment_size=alignmenet_channels,
                                       num_features=vertex_feature_dim,
                                       use_input_features=True))
@@ -154,7 +155,7 @@ class Pix3DModel(nn.Module):
                                     use_input_features=False,
                                     num_features=vertex_feature_dim)]
 
-        for _ in range(num_refinement_stages-1):
+        for _ in range(num_refinement_stages - 1):
             stages.append(VertixRefinePix3D(alignment_size=alignmenet_channels,
                                             num_features=vertex_feature_dim,
                                             use_input_features=True))
@@ -213,6 +214,8 @@ class Pix3DMask_RCNN(MaskRCNN):
         self.mesh_ROI = MultiScaleRoIAlign(featmap_names=[0, 1, 2, 3],
                                            output_size=12,
                                            sampling_ratio=1)
+
+        self.our_roi_heads = build_RoI_head(backbone.out_channels, num_classes=num_classes, box_detections_per_img=2)
         # TODO we can always return boxes if we change RoiHeads
         # also we can limit the number of predictions per image
         # if we can correlate between boxes and ROI features then we can filter graphs
@@ -243,8 +246,10 @@ class Pix3DMask_RCNN(MaskRCNN):
         proposals, proposal_losses = self.rpn(images, features, targets)
         # additional ROI features for pix3d
         graphs_per_image = [p.shape[0] for p in proposals]
+
         pix3d_input = self.mesh_ROI(features, proposals, images.image_sizes)
-        detections, detector_losses = self.roi_heads(
+
+        detections, detector_losses = self.our_roi_heads(
             features, proposals, images.image_sizes, targets)
 
         detections = self.transform.postprocess(
