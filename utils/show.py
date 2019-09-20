@@ -24,7 +24,9 @@ def show_mesh(mesh):
     vertices, triangles = mesh
     if vertices.abs().max() > 1:
         vertices = normalize_mesh(vertices)
-
+    if not isinstance(vertices, np.ndarray):
+        vertices = vertices.cpu().numpy()
+        triangles = triangles.cpu().numpy()
     triangles -= 1
     x = vertices[:, 0]
     y = vertices[:, 1]
@@ -33,13 +35,15 @@ def show_mesh(mesh):
     ax.set_xlim([-1, 1])
     ax.set_ylim([-1, 1])
     ax.set_zlim([-1, 1])
-    ax.plot_trisurf(x, z, triangles, y, shade=True, color='white')
+    ax.plot_trisurf(x, z, triangles, y, color='grey')
     plt.show()
 
 
 def show_voxels(voxel_mask):
     if isinstance(voxel_mask, str):
         voxel_mask = load_voxels(voxel_mask)
+    if not isinstance(voxel_mask, np.ndarray):
+        voxel_mask = voxel_mask.cpu().numpy()
 
     fig = plt.figure()
     ax = fig.gca(projection='3d')

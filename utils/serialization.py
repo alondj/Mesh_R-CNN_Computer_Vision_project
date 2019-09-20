@@ -11,7 +11,7 @@ Mesh = namedtuple('Mesh', ['vertices', 'faces'])
 
 
 def save_voxels(voxels, filename: str, threshold: float = 0.5):
-    if isinstance(voxels, Tensor):
+    if not isinstance(voxels, np.ndarray):
         voxels = voxels.cpu().data.numpy()
     # create voxel mask
     voxels = (voxels > threshold).astype(np.int32)
@@ -25,11 +25,11 @@ def save_mesh(vertices, faces, filename: str):
     # Polygonal face element
     # f 1 2 3
     # f ...
-    if isinstance(vertices, Tensor):
+    if not isinstance(vertices, np.ndarray):
         vertices = vertices.cpu().data.numpy()
     vertices = np.hstack((np.full([vertices.shape[0], 1], 'v'), vertices))
 
-    if isinstance(faces, Tensor):
+    if not isinstance(faces, np.ndarray):
         faces = faces.cpu().data.numpy()
     faces = np.hstack((np.full([faces.shape[0], 1], 'f'), faces))
     mesh = np.vstack((vertices, faces))

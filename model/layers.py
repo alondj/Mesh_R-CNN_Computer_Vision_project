@@ -2,10 +2,10 @@ import torch
 from torch import Tensor
 import torch.nn as nn
 from typing import Tuple, Optional, List
-import datetime
+from datetime import datetime
 import math
 from .utils import aggregate_neighbours
-
+import numpy as np
 # data representation for graphs:
 # adjacency matrix: we just save occupied indices in coo format
 # vertex features matrix: we concatenate over the vertex dim resulting in total_vertices x Num_features
@@ -342,251 +342,153 @@ class VertixRefinePix3D(nn.Module):
 # there is also the marching cube algorithm https://github.com/pmneila/PyMCubes
 # explained https://medium.com/zeg-ai/voxel-to-mesh-conversion-marching-cube-algorithm-43dbb0801359
 # we might want to compare between them
-class Cubify(nn.Module):
-    ''' Cubify is the process which takes a voxel occupancy probabilities grid and a threshold for binarizing occupancy.
-        and outputing a list of 3D meshes.
-        \n each occupied voxel is replaced with a cuboid triangle mesh with 8 vertices, 18 edges, and 12 faces.
-    '''
-    remove_shared_vertices_time = []
-    create_undirected_adjacency_matrix_time = []
-    iter_time = []
-    # I assume that z,y,x is the center of the cube so the vertices are at
-    # bottom face z-0.5,y+-0.5,x+-0.5
-    # top face z+0.5,y+-0.5,x+-0.5
 
-    # Cubify will generate a mesh for each grid given we can think of a mesh as a group of disjoint graphs
-    def __init__(self, threshold: float):
+
+class Cubify(nn.Module):
+    ''' 
+    Cubify is the process which takes a voxel occupancy probabilities grid and a threshold for binarizing occupancy.
+    and outputing a list of 3D meshes.\n each occupied voxel is replaced with a cuboid triangle mesh with 8 vertices, 18 edges, and 12 faces.
+    '''
+
+    def __init__(self, threshold: float = 0.5):
         super(Cubify, self).__init__()
-        assert 0.0 <= threshold <= 1.0
         self.threshold = threshold
 
-    def forward(self, voxel_probas: Tensor) -> Tuple[List[int], List[int], Tensor, Tensor, Tensor]:
-        # output is vertices Vx3 , faces Fx3
-        self.reset_stats()
-        assert voxel_probas.ndim == 4
-        out_device = voxel_probas.device
-        N, C, H, W = voxel_probas.shape
-        batched_vertex_positions, batched_faces = [], []
-        batched_adjacency_matrices = ([], [])
-        vertice_index, faces_index = [], []
-        offset = 0
+        # neighbours kernel
+        w = torch.zeros(6, 3, 3, 3, requires_grad=False).float()
+        w[:, 1, 1, 1] = 1
+        # surrounding pixels
+        # F  z  y  x
+        w[0, 0, 1, 1] = -1  # center-back
+        w[1, 2, 1, 1] = -1  # center-front
+        w[2, 1, 2, 1] = -1  # center-top
+        w[3, 1, 0, 1] = -1  # center-bottom
+        w[4, 1, 1, 0] = -1  # center-left
+        w[5, 1, 1, 2] = -1  # center-right
 
-        start = datetime.datetime.now()
-        # slow implementation just to know what I'm doing
-        for n in range(N):
-            vertices, faces = [], []
-            iter_start = datetime.datetime.now()
-            # TODO the problem is literlly this for loop
-            for z in range(C):
-                for y in range(H):
-                    for x in range(W):
-                        # we predicted a voxel at z,y,x
-                        if voxel_probas[n, z, y, x] > self.threshold:
-                            # this sections determines which vertices and cube faces to add
-                            # the idea is if an ajacent cell has no voxel
-                            # then the current voxel resides on the edge of the mesh
-                            # so we add the 4 vertices and 2 traingle faces that are shared with
-                            # the adjacent cell (they represent the border between the background and the object)
-                            if z == 0 or voxel_probas[n, z-1, y, x] <= self.threshold:
-                                # we predicted there is no voxel at z-1 ,y ,x
-                                # add back faces
-                                v0, v1, v2, v3 = [(z-0.5, y-0.5, x-0.5),
-                                                  (z-0.5, y-0.5, x+0.5),
-                                                  (z-0.5, y+0.5, x-0.5),
-                                                  (z-0.5, y+0.5, x+0.5)]
-                                vertices.extend([
-                                    v0, v1, v2, v3
-                                ])
-                                faces.extend([
-                                    (v0, v1, v2),
-                                    (v1, v2, v3)
-                                ])
-                            if z == C-1 or voxel_probas[n, z+1, y, x] <= self.threshold:
-                                # we predicted there is no voxel at z+1 ,y ,x
-                                # add front faces
-                                v0, v1, v2, v3 = [
-                                    (z+0.5, y-0.5, x-0.5),
-                                    (z+0.5, y-0.5, x+0.5),
-                                    (z+0.5, y+0.5, x-0.5),
-                                    (z+0.5, y+0.5, x+0.5),
-                                ]
-                                vertices.extend([v0, v1, v2, v3])
-                                faces.extend([
-                                    (v0, v1, v2),
-                                    (v1, v2, v3)
-                                ])
-                            if y == 0 or voxel_probas[n, z, y-1, x] <= self.threshold:
-                                # we predicted there is no voxel at z ,y-1 ,x
-                                # add top faces
-                                v0, v1, v2, v3 = [
-                                    (z+0.5, y-0.5, x-0.5),
-                                    (z+0.5, y-0.5, x+0.5),
-                                    (z-0.5, y-0.5, x-0.5),
-                                    (z-0.5, y-0.5, x+0.5),
-                                ]
-                                vertices.extend([v0, v1, v2, v3])
-                                faces.extend([
-                                    (v0, v1, v2),
-                                    (v1, v2, v3)
-                                ])
-                            if y == H - 1 or voxel_probas[n, z, y+1, x] <= self.threshold:
-                                # we predicted there is no voxel at z ,y+1 ,x
-                                # add bottom faces
-                                v0, v1, v2, v3 = [
-                                    (z-0.5, y+0.5, x-0.5),
-                                    (z-0.5, y+0.5, x+0.5),
-                                    (z+0.5, y+0.5, x-0.5),
-                                    (z+0.5, y+0.5, x+0.5),
-                                ]
-                                vertices.extend([v0, v1, v2, v3])
-                                faces.extend([
-                                    (v0, v1, v2),
-                                    (v1, v2, v3)
-                                ])
-                            if x == 0 or voxel_probas[n, z, y, x-1] <= self.threshold:
-                                # we predicted there is no voxel at z ,y ,x-1
-                                # add left faces
-                                v0, v1, v2, v3 = [
-                                    (z+0.5, y-0.5, x-0.5),
-                                    (z-0.5, y-0.5, x-0.5),
-                                    (z+0.5, y+0.5, x-0.5),
-                                    (z-0.5, y+0.5, x-0.5),
-                                ]
-                                vertices.extend([v0, v1, v2, v3])
-                                faces.extend([
-                                    (v0, v1, v2),
-                                    (v1, v2, v3)
-                                ])
-                            if x == W-1 or voxel_probas[n, z, y, x+1] <= self.threshold:
-                                # we predicted there is no voxel at z ,y ,x+1
-                                # add right faces
-                                v0, v1, v2, v3 = [
-                                    (z-0.5, y-0.5, x+0.5),
-                                    (z+0.5, y-0.5, x+0.5),
-                                    (z-0.5, y+0.5, x+0.5),
-                                    (z+0.5, y+0.5, x+0.5),
-                                ]
-                                vertices.extend([v0, v1, v2, v3])
-                                faces.extend([
-                                    (v0, v1, v2),
-                                    (v1, v2, v3)
-                                ])
+        w = w.unsqueeze(1)
+        self.register_buffer("kernel", w)
 
-            iter_end = datetime.datetime.now()
-            self.iter_time.append(iter_end-iter_start)
-            vertices, faces = self.remove_shared_vertices(
-                vertices, faces, out_device)
-            batched_vertex_positions.append(vertices)
-            batched_faces.append(faces)
-            adj_i, adj_j = self.create_undirected_adjacency_matrix(
-                faces, offset)
-            batched_adjacency_matrices[0].append(adj_i)
-            batched_adjacency_matrices[1].append(adj_j)
-            vertice_index.append(vertices.shape[0])
-            faces_index.append(faces.shape[0])
-            offset += vertices.shape[0]
+        # matrix that converts voxel coord to vertices coord
+        # 6 4 5
+        #    B F z y x
+        deltas = torch.Tensor([
+            [[0, 0, -0.5, -0.5, -0.5],  # back
+             [0, 0, -0.5, -0.5, +0.5],
+             [0, 0, -0.5, +0.5, -0.5],
+             [0, 0, -0.5, +0.5, +0.5]],
 
-        # merge all meshes
-        vertex_positions = torch.cat(batched_vertex_positions)
-        mesh_faces = torch.cat(batched_faces)
-        # we have a list of lists of i indices and a list of lists of j indices
-        # just reduce to i indices and j indices
-        idx_i, idx_j = batched_adjacency_matrices
-        idx_i = torch.cat(idx_i, dim=0)
-        idx_j = torch.cat(idx_j, dim=0)
-        edge_index = torch.stack([idx_i, idx_j])
+            [[0, 0, +0.5, -0.5, -0.5],  # front
+             [0, 0, +0.5, -0.5, +0.5],
+             [0, 0, +0.5, +0.5, -0.5],
+             [0, 0, +0.5, +0.5, +0.5]],
 
-        fin = datetime.datetime.now()
+            [[0, 0, +0.5, -0.5, -0.5],  # top
+             [0, 0, +0.5, -0.5, +0.5],
+             [0, 0, -0.5, -0.5, -0.5],
+             [0, 0, -0.5, -0.5, +0.5]],
 
-        delta = fin-start
+            [[0, 0, -0.5, +0.5, -0.5],  # bottom
+             [0, 0, -0.5, +0.5, +0.5],
+             [0, 0, +0.5, +0.5, -0.5],
+             [0, 0, +0.5, +0.5, +0.5]],
 
-        self.exec_time = delta
+            [[0, 0, +0.5, -0.5, -0.5],  # left
+             [0, 0, -0.5, -0.5, -0.5],
+             [0, 0, +0.5, +0.5, -0.5],
+             [0, 0, -0.5, +0.5, -0.5]],
 
-        assert sum(vertice_index) == vertex_positions.shape[0]
-        assert sum(faces_index) == mesh_faces.shape[0]
+            [[0, 0, -0.5, -0.5, +0.5],  # right
+             [0, 0, +0.5, -0.5, +0.5],
+             [0, 0, -0.5, +0.5, +0.5],
+             [0, 0, +0.5, +0.5, +0.5]],
+        ])
+        self.register_buffer("deltas", deltas.requires_grad_(False))
 
-        self.summary(N)
-        return vertice_index, faces_index, vertex_positions, edge_index, mesh_faces
+    def forward(self, t: Tensor):
+        t = (t > self.threshold).float()
 
-    def remove_shared_vertices(self, vertices: List[Point], faces: List[Face], out_device: torch.device) -> Tuple[Tensor, Tensor]:
-        # for performence reasons in the construction phase we duplicate shared vertices
-        # and also we save the vertices coordinates explicitly inside the faces (each face is a tuple of 3 3D coordinates)
+        t = t.unsqueeze(1)
+        print(f"there are {t.sum()} voxels")
+        start = datetime.now()
+        # find for each voxel which faces we need to add
+        # Bx6xVxVxV
+        t = torch.nn.functional.conv3d(t, self.kernel, padding=1)
 
-        # in this function we remove duplicate vertices and construct memory efficient face representaion
-        # f(v0,v1,v2) => f(i0,i1,i2) such as vertices[i0]=v0 vertices[i1]=v1 vertices[i2]=v2
-        # remember v0,v1,... are 3d points represented as 3 numbers
-        # so the new representation uses ~3x less memory
+        # fetch indices that correspond to added cube faces
+        # Nx1x5 B,F,z,y,x
+        t = (t == 1).nonzero().float().unsqueeze(1)
 
-        # in this stage we output tensor representation of vertices positions and faces
-        # where the faces is represented as a shortTensor 16 bits per v_idx is plenty
-        start = datetime.datetime.now()
-        cannonic_vertices = list(dict.fromkeys(vertices))
-        vertex_indices = {v: i for i, v in enumerate(cannonic_vertices)}
+        # for each face add vertices
+        vs = []
+        faces = []
+        for i, d in enumerate(self.deltas):
+            # 4xfx5
+            pos = t[t[:, :, 1] == i] + d.unsqueeze(1)
+            # order by coords
+            pos = pos.permute(1, 0, 2).contiguous()
+            # vx4
+            pos = pos.view(-1, 5)[:, [0, 2, 3, 4]]
+            vs.append(pos)
 
-        efficient_faces = [[vertex_indices[v] for v in f] for f in faces]
+        # del t
+        # remove duplicate vertices and create inefficient faces
+        # Vx4
+        vs = torch.cat(vs)
 
-        pos_class = torch.Tensor if out_device == torch.device(
-            'cpu') else torch.cuda.FloatTensor
-        idx_class = torch.LongTensor if out_device == torch.device(
-            'cpu') else torch.cuda.LongTensor
+        # order by batch
+        vs = vs[vs[:, 0].argsort()]
 
-        mesh_vertices = pos_class(cannonic_vertices, device=out_device)
-        mesh_faces = idx_class(efficient_faces, device=out_device)
+        # fx3x4
+        faces = torch.cat([torch.stack([vs[0::4], vs[1::4], vs[2::4]], dim=1),
+                           torch.stack([vs[0::4], vs[2::4], vs[3::4]], dim=1)],
+                          dim=1).view(-1, 4)
 
-        fin = datetime.datetime.now()
-        self.remove_shared_vertices_time.extend([fin-start])
-        return mesh_vertices, mesh_faces
+        f_index = (faces[:, 0].long().bincount()//3).tolist()
+        # vx4
+        vs = vs.unique(dim=0, sorted=False)
+        v_index = vs[:, 0].long().bincount().tolist()
 
-    def create_undirected_adjacency_matrix(self, faces: Tensor, offset: int) -> List:
-        start = datetime.datetime.now()
+        # efficient faces includes the necessary offsets
+        # perform conversion cpu side and return to device
+        # TODO this is a huge bottleneck
+        v_hash = {tuple(v): i for i, v in enumerate(vs.tolist())}
+        f_class = torch.cuda.LongTensor if self.kernel.is_cuda else torch.LongTensor
+        faces = f_class([v_hash[tuple(v)]
+                         for v in faces.tolist()], device=self.kernel.device).view(-1, 3)
 
+        # fast but memory inefficient
+        # faces = (faces == vs.unsqueeze(1)).all(dim=2)\
+        #     .t().nonzero()[:, 1].view(-1, 3)
+
+        # hash based solution slow as hell but solves memory problems
+        # if device == 'cpu':
+        #     faces = torch.LongTensor([v_hash[str(v)] for v in faces]).view(-1, 3)
+        # else:
+        #     faces = torch.cuda.LongTensor(
+        #         [v_hash[str(v)] for v in faces]).view(-1, 3)
+        vs = vs[:, 1:]
+
+        # create adj_matrix
         faces_t = faces.t()
-
         # get all directed edges
         idx_i, idx_j = torch.cat(
-            [faces_t[:2], faces_t[1:], faces_t[::2]], dim=1)+offset
+            [faces_t[:2], faces_t[1:], faces_t[::2]], dim=1)
 
         # duplicate to get undirected edges
         idx_i, idx_j = torch.cat([idx_i, idx_j], dim=0), torch.cat(
             [idx_j, idx_i], dim=0)
 
-        fin = datetime.datetime.now()
+        adj_index = torch.stack([idx_i, idx_j], dim=0).unique(dim=1)
 
-        self.create_undirected_adjacency_matrix_time.extend([fin-start])
+        # negate offsets
+        offsets = -1+np.cumsum(v_index)-v_index
+        faces = torch.cat(
+            [f-off for f, off in zip(faces.split(f_index), offsets)])
 
-        return idx_i, idx_j
+        print(datetime.now()-start)
 
-    def summary(self, b_size):
-        total_remove_shared_time = self.remove_shared_vertices_time[0]
-        total_remove_shared_time = sum(self.remove_shared_vertices_time[1:],
-                                       total_remove_shared_time)
-
-        total_adj_creation_time = self.create_undirected_adjacency_matrix_time[0]
-        total_adj_creation_time = sum(self.create_undirected_adjacency_matrix_time[1:],
-                                      total_adj_creation_time)
-
-        total_iter_time = self.iter_time[0]
-        total_iter_time = sum(self.iter_time[1:], total_iter_time)
-
-        assert len(self.iter_time) == b_size
-        assert len(self.remove_shared_vertices_time) == b_size
-        assert len(self.create_undirected_adjacency_matrix_time) == b_size
-
-        loop_time = self.exec_time - \
-            (total_adj_creation_time+total_remove_shared_time)
-
-        print(f"total {self.exec_time}")
-        print(f"loop time {loop_time}")
-        print(f"total iter time {total_iter_time}")
-        print(f"avg iter time {total_iter_time/b_size}")
-        print(f"face and pos creation {total_remove_shared_time}")
-        print(f"adj creation {total_adj_creation_time}\n")
-
-    def reset_stats(self):
-        self.remove_shared_vertices_time = []
-        self.create_undirected_adjacency_matrix_time = []
-        self.merge_index_time = []
-        self.iter_time = []
+        return vs, v_index, faces, f_index, adj_index
 
 
 class VoxelBranch(nn.Sequential):
