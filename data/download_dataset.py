@@ -41,21 +41,6 @@ def download_pix3d(download_path):
         zip_ref.extractall(f"{download_path}/dataset/pix3d")
     print("deleting the zip file")
     os.remove(zip_download_path)
-    # TODO we do not need to download point clouds
-    url = "https://drive.google.com/uc?authuser=0&id=1RZakyBu9lPbG85SyconBn4sR8r2faInV&export=download"
-    zip_download_path = f"{download_path}/pointclouds.zip"
-    print("downloading pix3d pointclouds zip")
-    urllib.request.urlretrieve(url, zip_download_path)
-    print("unzipping pix3d_pointclouds.zip")
-    with zipfile.ZipFile(zip_download_path, 'r') as zip_ref:
-        zip_ref.extractall(f"{download_path}/dataset/pix3d")
-    print("deleting the zip file")
-    os.remove(zip_download_path)
-    src_dic = f"{download_path}/dataset/pix3d/data/pix3d/pointclouds"
-    dest_dic = f"{download_path}/dataset/pix3d"
-    shutil.move(src_dic, dest_dic)
-    os.rmdir(f"{download_path}/dataset/pix3d/data/pix3d")
-    os.rmdir(f"{download_path}/dataset/pix3d/data")
     print("finished pix3d")
 
 
@@ -85,16 +70,6 @@ def download_shapenet(download_path):
     print("unzipping")
     tf = tarfile.open(f"{download_path}/dataset/shapeNet/ShapeNetVox32.tgz")
     tf.extractall(f"{download_path}/dataset/shapeNet")
-    print("deleting the zip file")
-    os.remove(zip_download_path)
-    # TODO we do not need pointClouds
-    print("downloading shapeNet pointclouds")
-    url = "https://drive.google.com/uc?export=download&confirm=jbpW&id=1cfoe521iTgcB_7-g_98GYAqO553W8Y0g"
-    zip_download_path = f"{download_path}/dataset/shapeNet/ShapeNet_pointclouds.zip"
-    urllib.request.urlretrieve(url, zip_download_path)
-    print("unzipping")
-    with zipfile.ZipFile(zip_download_path, 'r') as zip_ref:
-        zip_ref.extractall(f"{download_path}/dataset/shapeNet")
     print("deleting the zip file")
     os.remove(zip_download_path)
     print("finished shapeNet")
