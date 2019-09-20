@@ -345,7 +345,7 @@ class VertixRefinePix3D(nn.Module):
 
 
 class Cubify(nn.Module):
-    ''' 
+    '''
     Cubify is the process which takes a voxel occupancy probabilities grid and a threshold for binarizing occupancy.
     and outputing a list of 3D meshes.\n each occupied voxel is replaced with a cuboid triangle mesh with 8 vertices, 18 edges, and 12 faces.
     '''
@@ -448,25 +448,27 @@ class Cubify(nn.Module):
         # vx4
         vs = vs.unique(dim=0, sorted=False)
         v_index = vs[:, 0].long().bincount().tolist()
+        f_class = torch.cuda.LongTensor if vs.is_cuda else torch.LongTensor
 
-        # efficient faces includes the necessary offsets
-        # perform conversion cpu side and return to device
-        # TODO this is a huge bottleneck
-        v_hash = {tuple(v): i for i, v in enumerate(vs.tolist())}
-        f_class = torch.cuda.LongTensor if self.kernel.is_cuda else torch.LongTensor
-        faces = f_class([v_hash[tuple(v)]
-                         for v in faces.tolist()], device=self.kernel.device).view(-1, 3)
+        # hash based on random vector
+        # TODO fast but has collisions
 
-        # fast but memory inefficient
-        # faces = (faces == vs.unsqueeze(1)).all(dim=2)\
-        #     .t().nonzero()[:, 1].view(-1, 3)
+        key = torch.rand(4, 1, device=vs.device)
+        h_table = {v: i for i, v in enumerate(
+            vs.mm(key).squeeze(1).tolist())}
+        hash_keys = faces.mm(key).squeeze(1).tolist()
+        faces = f_class([h_table[k] for k in hash_keys],
+                        device=vs.device).view(-1, 3)
 
-        # hash based solution slow as hell but solves memory problems
-        # if device == 'cpu':
-        #     faces = torch.LongTensor([v_hash[str(v)] for v in faces]).view(-1, 3)
-        # else:
-        #     faces = torch.cuda.LongTensor(
-        #         [v_hash[str(v)] for v in faces]).view(-1, 3)
+        # # efficient faces includes the necessary offsets
+        # # perform conversion cpu side and return to device
+        # # TODO this is a huge bottleneck
+        # v_hash = {tuple(v): i for i, v in enumerate(vs.tolist())}
+        # f_class = torch.cuda.LongTensor if self.kernel.is_cuda else torch.LongTensor
+        # faces = f_class([v_hash[tuple(v)]
+        #                  for v in faces.tolist()], device=self.kernel.device).view(-1, 3)
+
+        # discard batch idx
         vs = vs[:, 1:]
 
         # create adj_matrix
