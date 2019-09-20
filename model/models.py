@@ -211,11 +211,11 @@ class Pix3DMask_RCNN(MaskRCNN):
         # output(Tensor[K, C, output_size[0], output_size[1]])
         # how will it work with the voxel branch?
         # this layer has no parameters which is nice
-        self.mesh_ROI = MultiScaleRoIAlign(featmap_names=[0, 1, 2, 3],
-                                           output_size=12,
-                                           sampling_ratio=1)
 
-        self.our_roi_heads = build_RoI_head(backbone.out_channels, num_classes=num_classes, box_detections_per_img=2)
+        self.our_roi_heads = build_RoI_head(backbone.out_channels, num_classes=num_classes, box_detections_per_img=2,
+                                            box_roi_pool=MultiScaleRoIAlign(featmap_names=[0, 1, 2, 3],
+                                                                            output_size=12,
+                                                                            sampling_ratio=1))
         # TODO we can always return boxes if we change RoiHeads
         # also we can limit the number of predictions per image
         # if we can correlate between boxes and ROI features then we can filter graphs
@@ -247,9 +247,7 @@ class Pix3DMask_RCNN(MaskRCNN):
         # additional ROI features for pix3d
         graphs_per_image = [p.shape[0] for p in proposals]
 
-        pix3d_input = self.mesh_ROI(features, proposals, images.image_sizes)
-
-        detections, detector_losses = self.our_roi_heads(
+        detections, pix3d_input, detector_losses = self.our_roi_heads(
             features, proposals, images.image_sizes, targets)
 
         detections = self.transform.postprocess(

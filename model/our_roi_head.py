@@ -271,8 +271,8 @@ class RoIHeadsOur(torch.nn.Module):
         if self.training:
             proposals, matched_idxs, labels, regression_targets = self.select_training_samples(proposals, targets)
 
-        box_features = self.box_roi_pool(features, proposals, image_shapes)
-        box_features = self.box_head(box_features)
+        box_features_return = self.box_roi_pool(features, proposals, image_shapes)
+        box_features = self.box_head(box_features_return)
         class_logits, box_regression = self.box_predictor(box_features)
         # this is where we changed the code so that boxes will be returned in training too
         result, losses = [], {}
@@ -369,7 +369,7 @@ class RoIHeadsOur(torch.nn.Module):
 
             losses.update(loss_keypoint)
 
-        return result, losses
+        return result, box_features_return, losses
 
 
 def build_RoI_head(out_channels, num_classes=None, box_roi_pool=None, box_head=None, box_predictor=None,
