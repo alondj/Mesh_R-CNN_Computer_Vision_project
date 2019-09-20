@@ -431,7 +431,7 @@ class Cubify(nn.Module):
                                 ])
                             if y == H - 1 or voxel_probas[n, z, y+1, x] <= self.threshold:
                                 # we predicted there is no voxel at z ,y+1 ,x
-                                # add front faces
+                                # add bottom faces
                                 v0, v1, v2, v3 = [
                                     (z-0.5, y+0.5, x-0.5),
                                     (z-0.5, y+0.5, x+0.5),
