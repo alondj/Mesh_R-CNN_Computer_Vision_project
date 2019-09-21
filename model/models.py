@@ -61,27 +61,27 @@ class ShapeNetModel(nn.Module):
 
         voxelGrid = self.voxelBranch(upscaled)
 
-        vertice_index, faces_index, vertex_positions0, edge_index, mesh_faces = self.cubify(
+        vertex_positions0, vertice_index, faces, face_index, adj_index = self.cubify(
             voxelGrid)
 
         vertex_features, vertex_positions1 = self.refineStages[0](vertice_index, feature_maps,
-                                                                  edge_index, vertex_positions0,
+                                                                  adj_index, vertex_positions0,
                                                                   sizes)
 
         vertex_positions = [vertex_positions0, vertex_positions1]
 
         for stage in self.refineStages[1:]:
             vertex_features, new_positions = stage(vertice_index, feature_maps,
-                                                   edge_index, vertex_positions[-1],
+                                                   adj_index, vertex_positions[-1],
                                                    sizes, vertex_features=vertex_features)
             vertex_positions.append(new_positions)
 
         output = dict()
         output['vertex_postions'] = vertex_positions
-        output['edge_index'] = edge_index
-        output['face_index'] = faces_index
+        output['edge_index'] = adj_index
+        output['face_index'] = face_index
         output['vertice_index'] = vertice_index
-        output['faces'] = mesh_faces
+        output['faces'] = faces
         output['voxels'] = voxelGrid
         output['backbone'] = backbone_out
         output['graphs_per_image'] = [1]
@@ -171,28 +171,28 @@ class Pix3DModel(nn.Module):
 
         voxelGrid = self.voxelBranch(roiAlign)
 
-        vertice_index, faces_index, vertex_positions0, edge_index, mesh_faces = self.cubify(
+        vertex_positions0, vertice_index, faces, face_index, adj_index = self.cubify(
             voxelGrid)
 
         sizes = [i.shape[1:] for i in images]
         vertex_features, vertex_positions1 = self.refineStages[0](vertice_index, roiAlign,
-                                                                  edge_index, vertex_positions0,
+                                                                  adj_index, vertex_positions0,
                                                                   sizes)
 
         vertex_positions = [vertex_positions0, vertex_positions1]
 
         for stage in self.refineStages[1:]:
             vertex_features, new_positions = stage(vertice_index, roiAlign,
-                                                   edge_index, vertex_positions[-1], sizes,
+                                                   adj_index, vertex_positions[-1], sizes,
                                                    vertex_features=vertex_features)
             vertex_positions.append(new_positions)
 
         output = dict()
         output['vertex_postions'] = vertex_positions
-        output['edge_index'] = edge_index
-        output['face_index'] = faces_index
+        output['edge_index'] = adj_index
+        output['face_index'] = face_index
         output['vertice_index'] = vertice_index
-        output['faces'] = mesh_faces
+        output['faces'] = faces
         output['voxels'] = voxelGrid
         output['backbone'] = backbone_out
         output['roi_input'] = roiAlign
@@ -215,7 +215,8 @@ class Pix3DMask_RCNN(MaskRCNN):
                                            output_size=12,
                                            sampling_ratio=1)
 
-        self.our_roi_heads = build_RoI_head(backbone.out_channels, num_classes=num_classes, box_detections_per_img=2)
+        self.our_roi_heads = build_RoI_head(
+            backbone.out_channels, num_classes=num_classes, box_detections_per_img=2)
         # TODO we can always return boxes if we change RoiHeads
         # also we can limit the number of predictions per image
         # if we can correlate between boxes and ROI features then we can filter graphs

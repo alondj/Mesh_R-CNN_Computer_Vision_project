@@ -97,12 +97,12 @@ def render_shapenet_meshes(download_path):
                 with open(p, 'rb') as binvox_file:
                     v = torch.from_numpy(read_as_3d_array(binvox_file))
                     voxels.append(v)
-            v_batch = torch.stack(voxels).to('cuda')
+            v_batch = torch.stack(voxels).float().to('cuda')
 
             # render and split again
-            v_index, f_index, v_pos, _, faces = renderer(v_batch)
+            vs, v_index, faces, f_index, _ = renderer(v_batch)
 
-            vs = v_pos.split(v_index)
+            vs = vs.split(v_index)
             fs = faces.split(f_index)
 
             # save the normalized meshes
