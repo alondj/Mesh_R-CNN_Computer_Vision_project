@@ -248,8 +248,8 @@ class Pix3DMask_RCNN(MaskRCNN):
             features, proposals, images.image_sizes, targets)
 
         if self.training:
-            filtered_input = filter_pix3d_input(detections, proposals, pix3d_input)
-            print(filtered_input)
+            filtered_input = filter_pix3d_input(targets, proposals, pix3d_input)
+            print(filtered_input.shape)
 
         detections = self.transform.postprocess(
             detections, images.image_sizes, original_image_sizes)
