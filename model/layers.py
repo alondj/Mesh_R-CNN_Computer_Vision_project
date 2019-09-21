@@ -484,7 +484,7 @@ class Cubify(nn.Module):
         adj_index = torch.stack([idx_i, idx_j], dim=0).unique(dim=1)
 
         # negate offsets
-        offsets = -1+np.cumsum(v_index)-v_index
+        offsets = np.cumsum(v_index)-v_index
         faces = torch.cat(
             [f-off for f, off in zip(faces.split(f_index), offsets)])
 

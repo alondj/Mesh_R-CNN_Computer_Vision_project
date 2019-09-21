@@ -107,8 +107,6 @@ def render_shapenet_meshes(download_path):
 
             # save the normalized meshes
             for v, f, p in zip(vs, fs, paths):
-                # TODO v_path should be without file extension
-                # TODO remove the shapenet pointClouds download and from dataset
                 v_path = p.replace("ShapeNetVox32", "ShapeNetMeshes")
                 v_path = v_path.replace(".binvox", "")
                 Path(v_path).parent.mkdir(parents=True, exist_ok=True)

@@ -4,6 +4,7 @@ from torch.nn.functional import adaptive_max_pool3d, interpolate
 from torch import Tensor
 from .serialization import load_mesh, load_voxels
 from .process import normalize_mesh
+from .mesh_sampling import sample
 from mpl_toolkits import mplot3d
 import numpy as np
 import matplotlib.pyplot as plt
@@ -27,7 +28,10 @@ def show_mesh(mesh):
     if not isinstance(vertices, np.ndarray):
         vertices = vertices.cpu().numpy()
         triangles = triangles.cpu().numpy()
-    triangles -= 1
+
+    if triangles.min() == 1:
+        triangles -= 1
+
     x = vertices[:, 0]
     y = vertices[:, 1]
     z = vertices[:, 2]
@@ -49,4 +53,22 @@ def show_voxels(voxel_mask):
     ax = fig.gca(projection='3d')
     ax.voxels(voxel_mask, facecolors='grey', edgecolor='black', shade=True)
 
+    plt.show()
+
+
+def show_mesh_pointCloud(mesh):
+    if isinstance(mesh, str):
+        mesh = load_mesh(mesh, tensor=False)
+
+    if isinstance(mesh, tuple):
+        points = sample(*mesh)
+
+    if not isinstance(points, np.ndarray):
+        points = points.cpu().numpy()
+
+    ax = plt.axes(projection='3d')
+    x = points[:, 0]
+    y = points[:, 1]
+    z = points[:, 2]
+    ax.scatter(x, y, z, linewidth=1)
     plt.show()

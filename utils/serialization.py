@@ -31,6 +31,10 @@ def save_mesh(vertices, faces, filename: str):
 
     if not isinstance(faces, np.ndarray):
         faces = faces.cpu().data.numpy()
+
+    if faces.min() == 0:
+        faces += 1
+
     faces = np.hstack((np.full([faces.shape[0], 1], 'f'), faces))
     mesh = np.vstack((vertices, faces))
     np.savetxt(filename + ".obj", mesh, fmt='%s', delimiter=' ')
@@ -66,6 +70,9 @@ def load_mesh(filename: str, tensor=False) -> Mesh:
 
     vertices = np.array(vertices)
     triangles = np.array(triangles)
+    if triangles.min() == 1:
+        triangles -= 1
+
     if tensor:
         vertices = torch.from_numpy(vertices)
         triangles = torch.from_numpy(triangles)
