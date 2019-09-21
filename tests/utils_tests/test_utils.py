@@ -7,8 +7,7 @@ import numpy as np
 def test_save_load_mesh():
     m = load_mesh(os.path.join(os.path.dirname(
         os.path.realpath(__file__)), "teapot.obj"))
-    save_mesh(torch.from_numpy(m.vertices), torch.from_numpy(m.faces),
-              os.path.join(os.path.dirname(os.path.realpath(__file__)), "test"))
+    save_mesh(*m, os.path.join(os.path.dirname(os.path.realpath(__file__)), "test"))
     m2 = load_mesh(os.path.join(os.path.dirname(
         os.path.realpath(__file__)), "test.obj"))
     os.remove(os.path.join(os.path.dirname(
