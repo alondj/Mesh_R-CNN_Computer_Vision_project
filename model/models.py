@@ -1,6 +1,6 @@
 from collections import OrderedDict
 from typing import Dict, List, Optional, Tuple
-from model.utils import bbox_iou
+from model.utils import filter_pix3d_input
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -165,7 +165,7 @@ class Pix3DModel(nn.Module):
     def forward(self, images: List[Tensor], targets: Optional[List[Dict]] = None) -> dict:
         if self.training and targets is None:
             raise ValueError("In training mode, targets should be passed")
-
+        print(images[0].shape)
         backbone_out, roiAlign, graphs_per_image = self.backbone(
             images, targets)
 
@@ -212,10 +212,6 @@ class Pix3DMask_RCNN(MaskRCNN):
         # how will it work with the voxel branch?
         # this layer has no parameters which is nice
 
-        self.our_roi_heads = build_RoI_head(backbone.out_channels, num_classes=num_classes, box_detections_per_img=2,
-                                            box_roi_pool=MultiScaleRoIAlign(featmap_names=[0, 1, 2, 3],
-                                                                            output_size=12,
-                                                                            sampling_ratio=1))
         # TODO we can always return boxes if we change RoiHeads
         # also we can limit the number of predictions per image
         # if we can correlate between boxes and ROI features then we can filter graphs
@@ -239,6 +235,7 @@ class Pix3DMask_RCNN(MaskRCNN):
         if self.training and targets is None:
             raise ValueError("In training mode, targets should be passed")
         original_image_sizes = [img.shape[-2:] for img in images]
+        print(images[0].shape)
         images, targets = self.transform(images, targets)
         features = self.backbone(images.tensors)
         if isinstance(features, torch.Tensor):
@@ -247,17 +244,22 @@ class Pix3DMask_RCNN(MaskRCNN):
         # additional ROI features for pix3d
         graphs_per_image = [p.shape[0] for p in proposals]
 
-        detections, pix3d_input, detector_losses = self.our_roi_heads(
+        detections, pix3d_input, detector_losses = self.roi_heads(
             features, proposals, images.image_sizes, targets)
+
+        if self.training:
+            filtered_input = filter_pix3d_input(detections, proposals, pix3d_input)
+            print(filtered_input)
 
         detections = self.transform.postprocess(
             detections, images.image_sizes, original_image_sizes)
+
         losses = {}
         losses.update(detector_losses)
         losses.update(proposal_losses)
 
         if self.training:
-            return losses, pix3d_input, graphs_per_image
+            return losses, filtered_input, graphs_per_image
 
         return detections, pix3d_input, graphs_per_image
 
@@ -270,17 +272,25 @@ def pretrained_MaskRcnn(num_classes=10, pretrained=True):
     if pretrained:
         model.load_state_dict(load_url(url, progress=True))
 
-    # get the number of input features for the classifier
-    in_features = model.roi_heads.box_predictor.cls_score.in_features
-    # replace the pre-trained head with a new one
-    model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
-
-    # now get the number of input features for the mask classifier
     in_features_mask = model.roi_heads.mask_predictor.conv5_mask.in_channels
     hidden_layer = 256
+    backbone = resnet_fpn_backbone('resnet50', False)
+    model.roi_heads = build_RoI_head(backbone.out_channels, num_classes=num_classes, box_detections_per_img=1,
+                                     box_roi_pool=MultiScaleRoIAlign(featmap_names=[0, 1, 2, 3],
+                                                                     output_size=12,
+                                                                     sampling_ratio=1),
+                                     mask_predictor=MaskRCNNPredictor(in_features_mask, hidden_layer, num_classes))
+    # get the number of input features for the classifier
+    # in_features = model.roi_heads.box_predictor.cls_score.in_features
+    # replace the pre-trained head with a new one
+    # model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
+
+    # now get the number of input features for the mask classifier
+    # in_features_mask = model.roi_heads.mask_predictor.conv5_mask.in_channels
+    # hidden_layer = 256
     # and replace the mask predictor with a new one
-    model.roi_heads.mask_predictor = MaskRCNNPredictor(in_features_mask,
-                                                       hidden_layer,
-                                                       num_classes)
+    # model.roi_heads.mask_predictor = MaskRCNNPredictor(in_features_mask,
+    #       hidden_layer,
+    #     num_classes)
 
     return model

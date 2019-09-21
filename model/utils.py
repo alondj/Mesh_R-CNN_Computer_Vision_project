@@ -16,11 +16,12 @@ def conv_output(h: int, w: int, kernel: int = 3, padding: int = 0, dilation: int
 
 
 def _dim(h: int, k: int, p: int, s: int, d: int):
-    return int((h+2*p-d*(k-1)-1)/s) + 1
+    return int((h + 2 * p - d * (k - 1) - 1) / s) + 1
 
 
 # ------------------------------------------------------------------------------------------------------
-def convT_output(h: int, w: int, kernel: int = 3, padding: int = 0, dilation: int = 1, stride: int = 1, output_padding: int = 0):
+def convT_output(h: int, w: int, kernel: int = 3, padding: int = 0, dilation: int = 1, stride: int = 1,
+                 output_padding: int = 0):
     '''calculates the feature map height and width given the transposed convolution parameters
     '''
     kh, kw = _tuple(kernel)
@@ -32,7 +33,7 @@ def convT_output(h: int, w: int, kernel: int = 3, padding: int = 0, dilation: in
 
 
 def _dimT(h: int, k: int, p: int, s: int, d: int, pout: int):
-    return (h-1)*s-2*p+d*(k-1)+pout+1
+    return (h - 1) * s - 2 * p + d * (k - 1) + pout + 1
 
 
 def _tuple(n):
@@ -104,3 +105,51 @@ def dummy(*dims):
         s *= d
 
     return torch.arange(s).float().reshape(*dims)
+
+
+# ------------------------------------------------------------------------------------------------------
+def bbox_iou(box1, box2):
+    """
+    Returns the IoU of two bounding boxes
+
+
+    """
+    # Get the coordinates of bounding boxes
+    b1_x1, b1_y1, b1_x2, b1_y2 = box1[:, 0], box1[:, 1], box1[:, 2], box1[:, 3]
+    b2_x1, b2_y1, b2_x2, b2_y2 = box2[:, 0], box2[:, 1], box2[:, 2], box2[:, 3]
+
+    # get the corrdinates of the intersection rectangle
+    inter_rect_x1 = torch.max(b1_x1, b2_x1)
+    inter_rect_y1 = torch.max(b1_y1, b2_y1)
+    inter_rect_x2 = torch.min(b1_x2, b2_x2)
+    inter_rect_y2 = torch.min(b1_y2, b2_y2)
+
+    # Intersection area
+    if torch.cuda.is_available():
+        inter_area = torch.max(inter_rect_x2 - inter_rect_x1 + 1, torch.zeros(inter_rect_x2.shape).cuda()) * torch.max(
+            inter_rect_y2 - inter_rect_y1 + 1, torch.zeros(inter_rect_x2.shape).cuda())
+    else:
+        inter_area = torch.max(inter_rect_x2 - inter_rect_x1 + 1, torch.zeros(inter_rect_x2.shape)) * torch.max(
+            inter_rect_y2 - inter_rect_y1 + 1, torch.zeros(inter_rect_x2.shape))
+
+    # Union Area
+    b1_area = (b1_x2 - b1_x1 + 1) * (b1_y2 - b1_y1 + 1)
+    b2_area = (b2_x2 - b2_x1 + 1) * (b2_y2 - b2_y1 + 1)
+
+    iou = inter_area / (b1_area + b2_area - inter_area)
+
+    return iou
+
+
+def filter_pix3d_input(detections, proposals, pix3d_input):
+    max_score = 0
+    max_prop_idx = -1
+    the_box = detections[0]["boxes"][0]
+
+    for i in range(proposals.shape[0]):
+        area = bbox_iou(the_box, proposals[i])
+        if area > max_score:
+            max_score = area
+            max_prop_idx = i
+
+    return pix3d_input[max_prop_idx]
