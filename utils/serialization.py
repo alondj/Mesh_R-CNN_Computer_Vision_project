@@ -26,13 +26,14 @@ def save_mesh(vertices, faces, filename: str):
     # f 1 2 3
     # f ...
     if not isinstance(vertices, np.ndarray):
-        vertices = vertices.cpu().data.numpy()
+        vertices = vertices.cpu().numpy()
     vertices = np.hstack((np.full([vertices.shape[0], 1], 'v'), vertices))
 
     if not isinstance(faces, np.ndarray):
-        faces = faces.cpu().data.numpy()
+        faces = faces.cpu().numpy()
 
     if faces.min() == 0:
+        faces = faces.copy()
         faces += 1
 
     faces = np.hstack((np.full([faces.shape[0], 1], 'f'), faces))
@@ -72,6 +73,8 @@ def load_mesh(filename: str, tensor=False) -> Mesh:
     triangles = np.array(triangles)
     if triangles.min() == 1:
         triangles -= 1
+
+    assert triangles.min() == 0
 
     if tensor:
         vertices = torch.from_numpy(vertices)

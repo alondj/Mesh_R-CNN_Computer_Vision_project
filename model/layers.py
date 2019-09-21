@@ -450,7 +450,8 @@ class Cubify(nn.Module):
         f_class = torch.cuda.LongTensor if vs.is_cuda else torch.LongTensor
 
         # create an effiecient face to vertice mapping
-        # using a projection to a 1d
+        # using a projection to a 1d dimention where each voxel grid position
+        # is mapped to a unique idx
         projection = torch.Tensor(
             [8*Z*Y*X, 4*Y*X, 2*X, 1]).to(torch.float64).to(vs.device)
 
