@@ -395,7 +395,7 @@ def build_RoI_head(out_channels, num_classes=None, box_roi_pool=None, box_head=N
         box_predictor = FastRCNNPredictor(
             representation_size,
             num_classes)
-    roi_heads = RoIHeads(
+    roi_heads = RoIHeadsOur(
         # Box
         box_roi_pool, box_head, box_predictor,
         box_fg_iou_thresh, box_bg_iou_thresh,
