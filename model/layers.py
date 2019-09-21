@@ -406,11 +406,11 @@ class Cubify(nn.Module):
         self.register_buffer("deltas", deltas.requires_grad_(False))
 
     def forward(self, t: Tensor):
+        B, Z, Y, X = t.shape
         t = (t > self.threshold).float()
 
         t = t.unsqueeze(1)
-        print(f"there are {t.sum()} voxels")
-        start = datetime.now()
+
         # find for each voxel which faces we need to add
         # Bx6xVxVxV
         t = torch.nn.functional.conv3d(t, self.kernel, padding=1)
@@ -431,7 +431,6 @@ class Cubify(nn.Module):
             pos = pos.view(-1, 5)[:, [0, 2, 3, 4]]
             vs.append(pos)
 
-        # del t
         # remove duplicate vertices and create inefficient faces
         # Vx4
         vs = torch.cat(vs)
@@ -450,23 +449,16 @@ class Cubify(nn.Module):
         v_index = vs[:, 0].long().bincount().tolist()
         f_class = torch.cuda.LongTensor if vs.is_cuda else torch.LongTensor
 
-        # hash based on random vector
-        # TODO fast but has collisions
+        # create an effiecient face to vertice mapping
+        # using a projection to a 1d
+        projection = torch.Tensor(
+            [8*Z*Y*X, 4*Y*X, 2*X, 1]).to(torch.float64).to(vs.device)
 
-        key = torch.rand(4, 1, device=vs.device)
-        h_table = {v: i for i, v in enumerate(
-            vs.mm(key).squeeze(1).tolist())}
-        hash_keys = faces.mm(key).squeeze(1).tolist()
-        faces = f_class([h_table[k] for k in hash_keys],
+        h_table = {p: i for i, p in enumerate(
+            (2*vs+1).to(torch.float64).mv(projection).long().flatten().tolist())}
+
+        faces = f_class([h_table[k] for k in (2*faces+1).to(torch.float64).mv(projection).long().flatten().tolist()],
                         device=vs.device).view(-1, 3)
-
-        # # efficient faces includes the necessary offsets
-        # # perform conversion cpu side and return to device
-        # # TODO this is a huge bottleneck
-        # v_hash = {tuple(v): i for i, v in enumerate(vs.tolist())}
-        # f_class = torch.cuda.LongTensor if self.kernel.is_cuda else torch.LongTensor
-        # faces = f_class([v_hash[tuple(v)]
-        #                  for v in faces.tolist()], device=self.kernel.device).view(-1, 3)
 
         # discard batch idx
         vs = vs[:, 1:]
@@ -487,8 +479,6 @@ class Cubify(nn.Module):
         offsets = np.cumsum(v_index)-v_index
         faces = torch.cat(
             [f-off for f, off in zip(faces.split(f_index), offsets)])
-
-        print(datetime.now()-start)
 
         return vs, v_index, faces, f_index, adj_index
 
