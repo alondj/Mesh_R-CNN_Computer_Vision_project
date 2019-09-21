@@ -142,14 +142,16 @@ def bbox_iou(box1, box2):
 
 
 def filter_pix3d_input(detections, proposals, pix3d_input):
-    max_score = 0
-    max_prop_idx = -1
-    the_box = detections[0]["boxes"][0]
-
-    for i in range(proposals.shape[0]):
-        area = bbox_iou(the_box, proposals[i])
-        if area > max_score:
-            max_score = area
-            max_prop_idx = i
-
-    return pix3d_input[max_prop_idx]
+    max_prop_idx = [-1 for _ in range(len(proposals))]
+    for img in range(len(proposals)):
+        max_score = 0
+        the_box = detections[img]["boxes"][0]
+        for i in range(proposals[img].shape[0]):
+            area = bbox_iou(the_box, proposals[img][i])
+            if area > max_score:
+                max_score = area
+                max_prop_idx[img] = i
+    filtered_output = []
+    for img in range(len(proposals)):
+        filtered_output.append(pix3d_input[img][max_prop_idx[img]])
+    return filtered_output
