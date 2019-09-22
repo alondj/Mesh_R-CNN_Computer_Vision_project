@@ -14,7 +14,7 @@ def total_loss(ws: dict, model_output: dict, voxel_gts: Tensor, batch: Batch,
     v_loss = voxel_loss(model_output['voxels'], voxel_gts)
 
     chamfer_loss, normal_loss, edge_loss = batched_mesh_loss(
-        model_output['vertex_postions'],
+        model_output['vertex_positions'],
         model_output['faces'],
         model_output['edge_index'],
         model_output['vertice_index'],

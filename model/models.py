@@ -1,28 +1,27 @@
 from collections import OrderedDict
 from typing import Dict, List, Optional, Tuple
-from model.utils import filter_pix3d_input
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 from torch.utils.model_zoo import load_url
-from torchvision.models import ResNet
-# MaskRCNN FasterRCNN, GeneralizedRCNN, RoIHeads MultiScaleRoIAlign RoIAlign
+from torchvision.models.resnet import ResNet, Bottleneck, model_urls as res_urls
 from torchvision.models.detection import MaskRCNN
-from torchvision.models.detection.roi_heads import RoIHeads
-from torchvision.models.detection.transform import GeneralizedRCNNTransform
 from torchvision.models.detection.backbone_utils import resnet_fpn_backbone
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.models.detection.image_list import ImageList
 from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
 from torchvision.models.detection.mask_rcnn import model_urls as mask_urls
-from torchvision.models.resnet import Bottleneck
-from torchvision.models.resnet import model_urls as res_urls
+from torchvision.models.detection.roi_heads import RoIHeads
+from torchvision.models.detection.transform import GeneralizedRCNNTransform
 from torchvision.ops import MultiScaleRoIAlign, RoIAlign
+
+from model.our_roi_head import build_RoI_head
+from model.utils import filter_pix3d_input
 
 from .layers import (Cubify, ResVertixRefineShapenet, VertixRefinePix3D,
                      VertixRefineShapeNet, VoxelBranch)
-from model.our_roi_head import build_RoI_head
 
 
 class ShapeNetModel(nn.Module):
@@ -60,24 +59,23 @@ class ShapeNetModel(nn.Module):
                                  mode='bilinear', align_corners=True)
 
         voxelGrid = self.voxelBranch(upscaled)
-
         vertex_positions0, vertice_index, faces, face_index, adj_index = self.cubify(
             voxelGrid)
 
-        vertex_features, vertex_positions1 = self.refineStages[0](vertice_index, feature_maps,
+        vertex_positions1, vertex_features = self.refineStages[0](vertice_index, feature_maps,
                                                                   adj_index, vertex_positions0,
                                                                   sizes)
 
         vertex_positions = [vertex_positions0, vertex_positions1]
 
         for stage in self.refineStages[1:]:
-            vertex_features, new_positions = stage(vertice_index, feature_maps,
+            new_positions, vertex_features = stage(vertice_index, feature_maps,
                                                    adj_index, vertex_positions[-1],
                                                    sizes, vertex_features=vertex_features)
             vertex_positions.append(new_positions)
 
         output = dict()
-        output['vertex_postions'] = vertex_positions
+        output['vertex_positions'] = vertex_positions
         output['edge_index'] = adj_index
         output['face_index'] = face_index
         output['vertice_index'] = vertice_index
@@ -175,20 +173,20 @@ class Pix3DModel(nn.Module):
             voxelGrid)
 
         sizes = [i.shape[1:] for i in images]
-        vertex_features, vertex_positions1 = self.refineStages[0](vertice_index, roiAlign,
+        vertex_positions1, vertex_features = self.refineStages[0](vertice_index, roiAlign,
                                                                   adj_index, vertex_positions0,
                                                                   sizes)
 
         vertex_positions = [vertex_positions0, vertex_positions1]
 
         for stage in self.refineStages[1:]:
-            vertex_features, new_positions = stage(vertice_index, roiAlign,
+            new_positions, vertex_features = stage(vertice_index, roiAlign,
                                                    adj_index, vertex_positions[-1], sizes,
                                                    vertex_features=vertex_features)
             vertex_positions.append(new_positions)
 
         output = dict()
-        output['vertex_postions'] = vertex_positions
+        output['vertex_positions'] = vertex_positions
         output['edge_index'] = adj_index
         output['face_index'] = face_index
         output['vertice_index'] = vertice_index
@@ -256,8 +254,6 @@ class Pix3DMask_RCNN(MaskRCNN):
         losses = {}
         losses.update(detector_losses)
         losses.update(proposal_losses)
-        print(pix3d_input.shape)
-        print(detections)
         if self.training:
             return losses, pix3d_input, graphs_per_image
 
@@ -274,23 +270,10 @@ def pretrained_MaskRcnn(num_classes=10, pretrained=True):
 
     in_features_mask = model.roi_heads.mask_predictor.conv5_mask.in_channels
     hidden_layer = 256
-    backbone = resnet_fpn_backbone('resnet50', False)
-    model.roi_heads = build_RoI_head(backbone.out_channels, num_classes=num_classes, box_detections_per_img=1,
+    model.roi_heads = build_RoI_head(model.backbone.out_channels, num_classes=num_classes, box_detections_per_img=1,
                                      box_roi_pool=MultiScaleRoIAlign(featmap_names=[0, 1, 2, 3],
                                                                      output_size=12,
                                                                      sampling_ratio=1),
                                      mask_predictor=MaskRCNNPredictor(in_features_mask, hidden_layer, num_classes))
-    # get the number of input features for the classifier
-    # in_features = model.roi_heads.box_predictor.cls_score.in_features
-    # replace the pre-trained head with a new one
-    # model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
-
-    # now get the number of input features for the mask classifier
-    # in_features_mask = model.roi_heads.mask_predictor.conv5_mask.in_channels
-    # hidden_layer = 256
-    # and replace the mask predictor with a new one
-    # model.roi_heads.mask_predictor = MaskRCNNPredictor(in_features_mask,
-    #       hidden_layer,
-    #     num_classes)
 
     return model

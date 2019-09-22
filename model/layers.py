@@ -435,6 +435,9 @@ class Cubify(nn.Module):
         # Vx4
         vs = torch.cat(vs)
 
+        # if we have no vertices then error
+        assert len(vs) > 0
+
         # order by batch
         vs = vs[vs[:, 0].argsort()]
 
