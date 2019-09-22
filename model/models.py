@@ -235,7 +235,6 @@ class Pix3DMask_RCNN(MaskRCNN):
         if self.training and targets is None:
             raise ValueError("In training mode, targets should be passed")
         original_image_sizes = [img.shape[-2:] for img in images]
-        print(images[0].shape)
         images, targets = self.transform(images, targets)
         features = self.backbone(images.tensors)
         if isinstance(features, torch.Tensor):
@@ -248,8 +247,8 @@ class Pix3DMask_RCNN(MaskRCNN):
             features, proposals, images.image_sizes, targets)
 
         if self.training:
-            filtered_input = filter_pix3d_input(targets, proposals, pix3d_input)
-            print(filtered_input.shape)
+            pix3d_input = filter_pix3d_input(targets, proposals,
+                                             pix3d_input)
 
         detections = self.transform.postprocess(
             detections, images.image_sizes, original_image_sizes)
@@ -257,9 +256,10 @@ class Pix3DMask_RCNN(MaskRCNN):
         losses = {}
         losses.update(detector_losses)
         losses.update(proposal_losses)
-
+        print(pix3d_input.shape)
+        print(detections)
         if self.training:
-            return losses, filtered_input, graphs_per_image
+            return losses, pix3d_input, graphs_per_image
 
         return detections, pix3d_input, graphs_per_image
 

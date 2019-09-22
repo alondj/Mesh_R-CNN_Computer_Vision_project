@@ -452,6 +452,7 @@ class Cubify(nn.Module):
         # create an effiecient face to vertice mapping
         # using a projection to a 1d dimention where each voxel grid position
         # is mapped to a unique idx
+        # uses double precision because the index can be very big
         projection = torch.Tensor(
             [8*Z*Y*X, 4*Y*X, 2*X, 1]).to(torch.float64).to(vs.device)
 
@@ -606,14 +607,3 @@ class VertexAlign(nn.Module):
         output = Q11 + Q21 + Q12 + Q22
 
         return output
-
-
-def tesst_cubify():
-    cube = Cubify(0.2)
-
-    inp = torch.randn(1, 48, 48, 48, device='cuda:0')
-    _ = cube(inp)
-
-
-if __name__ == "__main__":
-    tesst_cubify()

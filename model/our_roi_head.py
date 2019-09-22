@@ -1,55 +1,11 @@
 import torch
 from torchvision.ops import MultiScaleRoIAlign
-from torchvision.models.detection.roi_heads import *
-
-
-class TwoMLPHead(nn.Module):
-    """
-    Standard heads for FPN-based models
-
-    Arguments:
-        in_channels (int): number of input channels
-        representation_size (int): size of the intermediate representation
-    """
-
-    def __init__(self, in_channels, representation_size):
-        super(TwoMLPHead, self).__init__()
-
-        self.fc6 = nn.Linear(in_channels, representation_size)
-        self.fc7 = nn.Linear(representation_size, representation_size)
-
-    def forward(self, x):
-        x = x.flatten(start_dim=1)
-
-        x = F.relu(self.fc6(x))
-        x = F.relu(self.fc7(x))
-
-        return x
-
-
-class FastRCNNPredictor(nn.Module):
-    """
-    Standard classification + bounding box regression layers
-    for Fast R-CNN.
-
-    Arguments:
-        in_channels (int): number of input channels
-        num_classes (int): number of output classes (including background)
-    """
-
-    def __init__(self, in_channels, num_classes):
-        super(FastRCNNPredictor, self).__init__()
-        self.cls_score = nn.Linear(in_channels, num_classes)
-        self.bbox_pred = nn.Linear(in_channels, num_classes * 4)
-
-    def forward(self, x):
-        if x.ndimension() == 4:
-            assert list(x.shape[2:]) == [1, 1]
-        x = x.flatten(start_dim=1)
-        scores = self.cls_score(x)
-        bbox_deltas = self.bbox_pred(x)
-
-        return scores, bbox_deltas
+from torchvision.models.detection.faster_rcnn import TwoMLPHead, FastRCNNPredictor
+from torchvision.ops import boxes as box_ops
+from torchvision.models.detection import _utils as det_utils
+import torch.nn.functional as F
+from torchvision.models.detection.roi_heads import fastrcnn_loss, maskrcnn_inference, \
+    keypointrcnn_inference, keypointrcnn_loss, maskrcnn_loss
 
 
 class RoIHeadsOur(torch.nn.Module):
@@ -130,7 +86,8 @@ class RoIHeadsOur(torch.nn.Module):
         matched_idxs = []
         labels = []
         for proposals_in_image, gt_boxes_in_image, gt_labels_in_image in zip(proposals, gt_boxes, gt_labels):
-            match_quality_matrix = self.box_similarity(gt_boxes_in_image, proposals_in_image)
+            match_quality_matrix = self.box_similarity(
+                gt_boxes_in_image, proposals_in_image)
             matched_idxs_in_image = self.proposal_matcher(match_quality_matrix)
 
             clamped_matched_idxs_in_image = matched_idxs_in_image.clamp(min=0)
@@ -156,7 +113,8 @@ class RoIHeadsOur(torch.nn.Module):
         for img_idx, (pos_inds_img, neg_inds_img) in enumerate(
                 zip(sampled_pos_inds, sampled_neg_inds)
         ):
-            img_sampled_inds = torch.nonzero(pos_inds_img | neg_inds_img).squeeze(1)
+            img_sampled_inds = torch.nonzero(
+                pos_inds_img | neg_inds_img).squeeze(1)
             sampled_inds.append(img_sampled_inds)
         return sampled_inds
 
@@ -185,7 +143,8 @@ class RoIHeadsOur(torch.nn.Module):
         proposals = self.add_gt_proposals(proposals, gt_boxes)
 
         # get matching gt indices for each proposal
-        matched_idxs, labels = self.assign_targets_to_proposals(proposals, gt_boxes, gt_labels)
+        matched_idxs, labels = self.assign_targets_to_proposals(
+            proposals, gt_boxes, gt_labels)
         # sample a fixed proportion of positive-negative proposals
         sampled_inds = self.subsample(labels)
         matched_gt_boxes = []
@@ -269,9 +228,11 @@ class RoIHeadsOur(torch.nn.Module):
                     assert t["keypoints"].dtype == torch.float32, 'target keypoints must of float type'
 
         if self.training:
-            proposals, matched_idxs, labels, regression_targets = self.select_training_samples(proposals, targets)
+            proposals, matched_idxs, labels, regression_targets = self.select_training_samples(
+                proposals, targets)
 
-        box_features_return = self.box_roi_pool(features, proposals, image_shapes)
+        box_features_return = self.box_roi_pool(
+            features, proposals, image_shapes)
         box_features = self.box_head(box_features_return)
         class_logits, box_regression = self.box_predictor(box_features)
         # this is where we changed the code so that boxes will be returned in training too
@@ -292,10 +253,12 @@ class RoIHeadsOur(torch.nn.Module):
 
             loss_classifier, loss_box_reg = fastrcnn_loss(
                 class_logits, box_regression, labels, regression_targets)
-            losses = dict(loss_classifier=loss_classifier, loss_box_reg=loss_box_reg)
+            losses = dict(loss_classifier=loss_classifier,
+                          loss_box_reg=loss_box_reg)
 
         else:
-            boxes, scores, labels = self.postprocess_detections(class_logits, box_regression, proposals, image_shapes)
+            boxes, scores, labels = self.postprocess_detections(
+                class_logits, box_regression, proposals, image_shapes)
             num_images = len(boxes)
             for i in range(num_images):
                 result.append(
@@ -318,7 +281,8 @@ class RoIHeadsOur(torch.nn.Module):
                     mask_proposals.append(proposals[img_id][pos])
                     pos_matched_idxs.append(matched_idxs[img_id][pos])
 
-            mask_features = self.mask_roi_pool(features, mask_proposals, image_shapes)
+            mask_features = self.mask_roi_pool(
+                features, mask_proposals, image_shapes)
             mask_features = self.mask_head(mask_features)
             mask_logits = self.mask_predictor(mask_features)
 
@@ -350,7 +314,8 @@ class RoIHeadsOur(torch.nn.Module):
                     keypoint_proposals.append(proposals[img_id][pos])
                     pos_matched_idxs.append(matched_idxs[img_id][pos])
 
-            keypoint_features = self.keypoint_roi_pool(features, keypoint_proposals, image_shapes)
+            keypoint_features = self.keypoint_roi_pool(
+                features, keypoint_proposals, image_shapes)
             keypoint_features = self.keypoint_head(keypoint_features)
             keypoint_logits = self.keypoint_predictor(keypoint_features)
 
@@ -362,7 +327,8 @@ class RoIHeadsOur(torch.nn.Module):
                     gt_keypoints, pos_matched_idxs)
                 loss_keypoint = dict(loss_keypoint=loss_keypoint)
             else:
-                keypoints_probs, kp_scores = keypointrcnn_inference(keypoint_logits, keypoint_proposals)
+                keypoints_probs, kp_scores = keypointrcnn_inference(
+                    keypoint_logits, keypoint_proposals)
                 for keypoint_prob, kps, r in zip(keypoints_probs, kp_scores, result):
                     r["keypoints"] = keypoint_prob
                     r["keypoints_scores"] = kps
