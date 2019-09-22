@@ -1,13 +1,11 @@
 import torch
 from torch import Tensor
 from .process import normalize_mesh
-from datetime import datetime
 
 
 def sample(vertex_positions: Tensor, mesh_faces: Tensor, num_points: float = 10e3) -> Tensor:
     # described originally here https://arxiv.org/pdf/1901.11461.pdf
     # given a mesh sample a point cloud to be used in the loss functions
-    start = datetime.now()
     f, d = mesh_faces.shape
     v, p = vertex_positions.shape
     num_points = int(num_points)
@@ -35,12 +33,10 @@ def sample(vertex_positions: Tensor, mesh_faces: Tensor, num_points: float = 10e
     # return normalized cloud
     point_cloud = normalize_mesh(point_cloud)
 
-    print(f"sample {datetime.now()-start}")
     return point_cloud
 
 
 def surface_areas(vertex_positions: Tensor, mesh_faces: Tensor) -> Tensor:
-    start = datetime.now()
     # given triangle ABC the area is |AB x AC|/2
     p, d = vertex_positions.shape
     f, nv = mesh_faces.shape
@@ -58,5 +54,4 @@ def surface_areas(vertex_positions: Tensor, mesh_faces: Tensor) -> Tensor:
 
     # |AB x AC|/2
     areas = norm_vecs.norm(p=2, dim=1) / 2
-    print(f"sufrace area {datetime.now()-start}")
     return areas
