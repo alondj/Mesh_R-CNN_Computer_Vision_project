@@ -1,5 +1,4 @@
 from itertools import repeat
-from typing import List, Tuple
 import torch
 from torch import Tensor
 
@@ -112,10 +111,10 @@ def dummy(*dims):
 # ------------------------------------------------------------------------------------------------------
 def filter_pix3d_input(targets, proposals, pix3d_input):
     filtered_output = []
-    for img in range(len(proposals)):
-        the_box = targets[img]["boxes"]
-        scores = box_iou(the_box, proposals[img])
-        _, indices = torch.max(scores, 0)
-        filtered_output.append(pix3d_input[indices[0]])
+    for target, proposal in zip(targets, proposals):
+        the_box = target["boxes"]
+        scores = box_iou(the_box, proposal)
+        max_idx = torch.argmax(scores, dim=0)[0]
+        filtered_output.append(pix3d_input[max_idx])
     filtered_output = torch.stack(filtered_output, dim=0)
     return filtered_output

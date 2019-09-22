@@ -240,10 +240,8 @@ class Pix3DMask_RCNN(MaskRCNN):
         proposals, proposal_losses = self.rpn(images, features, targets)
         # additional ROI features for pix3d
         graphs_per_image = [p.shape[0] for p in proposals]
-
         detections, pix3d_input, detector_losses = self.roi_heads(
             features, proposals, images.image_sizes, targets)
-
         if self.training:
             pix3d_input = filter_pix3d_input(targets, proposals,
                                              pix3d_input)
