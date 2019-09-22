@@ -163,7 +163,7 @@ class Pix3DModel(nn.Module):
     def forward(self, images: List[Tensor], targets: Optional[List[Dict]] = None) -> dict:
         if self.training and targets is None:
             raise ValueError("In training mode, targets should be passed")
-        print(images[0].shape)
+
         backbone_out, roiAlign, graphs_per_image = self.backbone(
             images, targets)
 
