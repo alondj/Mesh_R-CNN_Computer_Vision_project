@@ -48,7 +48,7 @@ def batched_mesh_loss(vertex_positions_pred: Tensor, mesh_faces_pred: Tensor, pr
                       vertices_per_sample_pred: List[int], faces_per_sample_pred: List[int],
                       batch: Batch,
                       point_cloud_size: float = 1e3,
-                      num_neighbours_for_normal_loss: int = 10) -> Tuple[Tensor, Tensor, Tensor]:
+                      num_neighbours_for_normal_loss: int = 4) -> Tuple[Tensor, Tensor, Tensor]:
     # #print("batched mesh loss")
     # #print("iter 0")
     #start = datetime.now()
@@ -76,7 +76,7 @@ def mesh_loss(vertex_positions_pred: Tensor, mesh_faces_pred: Tensor, pred_adjac
               vertices_per_sample_pred: List[int], faces_per_sample_pred: List[int],
               batch: Batch,
               point_cloud_size: float = 1e3,
-              num_neighbours_for_normal_loss: int = 10) -> Tuple[Tensor, Tensor, Tensor]:
+              num_neighbours_for_normal_loss: int = 4) -> Tuple[Tensor, Tensor, Tensor]:
     # #print("mesh loss")
     # #print(vertex_positions_pred.shape)
     # #print(sum(vertices_per_sample_pred))
@@ -146,22 +146,22 @@ def batched_chamfer_distance(p2p_distance: Tensor) -> Tuple[Tensor, Tensor, Tens
         which is defined by the summed distance of each point in cloud A to it's nearest neighbour in cload B\n
         and vice versa
     '''
-    #start = datetime.now()
+    # start = datetime.now()
     mins, idx1 = torch.min(p2p_distance, 2)
     loss_1 = torch.sum(mins)
     mins, idx2 = torch.min(p2p_distance, 1)
     loss_2 = torch.sum(mins)
-    #print(f"batched chamfer distance {datetime.now()-start}")
+    # print(f"batched chamfer distance {datetime.now()-start}")
     return loss_1, idx1, loss_2, idx2
 
 
 # ------------------------------------------------------------------------------------------------------
-def batched_normal_distance(p: Tensor, pgt: Tensor, p2p_distance: Tensor, idx_p: Tensor, idx_gt: Tensor, k=10) -> Tuple[Tensor, Tensor]:
+def batched_normal_distance(p: Tensor, pgt: Tensor, p2p_distance: Tensor, idx_p: Tensor, idx_gt: Tensor, k=4) -> Tuple[Tensor, Tensor]:
     ''' calculate the normal distance between point clouds p and pgt\n
         p2p_distance is a matrix where p2p_distance[i,j]=|pi-pj|^2\n
         k is the number of neighbours used in order to estimate the normal to each point
     '''
-    #start = datetime.now()
+    # start = datetime.now()
     b_size = p.shape[0]
     # batch x size_p x 3 , batch x size_pgt x 3
     p_normals = compute_normals(p, p2p_distance, k=k)
@@ -176,17 +176,17 @@ def batched_normal_distance(p: Tensor, pgt: Tensor, p2p_distance: Tensor, idx_p:
     # expand the batch_idx and broadcast with idx_gt of shape batch x size_pgt
     nn_normals = p_normals[torch.arange(b_size).view(-1, 1), idx_gt]
     loss_1 = torch.mul(pgt_normals, nn_normals).sum(2).abs().sum()
-    #print(f"batched normal distance {datetime.now()-start}")
+    # print(f"batched normal distance {datetime.now()-start}")
     return loss_0, loss_1
 
 
-def compute_normals(pt: Tensor, p2p_distance: Tensor, k: int = 10) -> Tensor:
+def compute_normals(pt: Tensor, p2p_distance: Tensor, k: int = 4) -> Tensor:
     # for each point find closest k neighbourhood
     # for each neighbourhood find center of mass M
     # for each neighbourhood compute scatter matrix Si= Yi.t() where Yi is xi-M
     # use pca to find the vector with least correlativity aka corresponds to smallest eigen value
     # as it's the best approximation of the normal to the plane approximated by the neighbourhood
-    #start = datetime.now()
+    # start = datetime.now()
     b, p, d = pt.shape
     # pt batch x num_points x 3
     # p2p_distance batch x num_points x num_points
@@ -221,7 +221,7 @@ def compute_normals(pt: Tensor, p2p_distance: Tensor, k: int = 10) -> Tensor:
     normals = eigen_vectors[torch.arange(b).view(b, 1),
                             torch.arange(p).view(1, p).expand(b, p),
                             smallest_eigen_values]
-    #print(f"compute normals {datetime.now()-start}")
+    # print(f"compute normals {datetime.now()-start}")
     return normals
 
 
@@ -232,7 +232,6 @@ def total_edge_length(p2p_distance: Tensor, vertex_adjacency: Tensor,) -> Tensor
     ''' compute the edge loss as denoted by L(V,E) =1/|E| * ∑(v,v′)∈E ‖v−v′‖^2\n
         vertex_adjacency can be many adjacency matrices stacked together in block diagonal format
     '''
-    #start = datetime.now()
     # we mask only (v,v′)∈E
     masked_p2p_distance = p2p_distance[vertex_adjacency[0],
                                        vertex_adjacency[1]]
@@ -242,7 +241,6 @@ def total_edge_length(p2p_distance: Tensor, vertex_adjacency: Tensor,) -> Tensor
 
     # we count each edge twice so when we normalize it cancels out 2*s /2|E|
     loss = masked_p2p_distance.sum() / normalize_factor
-    #print(f"edge loss {datetime.now()-start}")
     return loss
 
 
@@ -252,7 +250,6 @@ def batched_point2point_distance(pt0: Tensor, pt1: Optional[Tensor] = None) -> T
         the operation is batched and if a batch dim will be added if given 2d input
         returns matrix M such that M[i][j][k] = |pt0[i,j] - pt1[i,k]|^2
     '''
-    #start = datetime.now()
     if pt0.ndim == 2:
         pt0 = pt0.unsqueeze(0)
 
@@ -260,7 +257,6 @@ def batched_point2point_distance(pt0: Tensor, pt1: Optional[Tensor] = None) -> T
         xx = torch.bmm(pt0, pt0.transpose(2, 1))
         rx = xx.diagonal(dim1=1, dim2=2).unsqueeze(1).expand(xx.shape)
         p2p = rx.transpose(2, 1) + rx - 2*xx
-        #print(f"batched p2p {datetime.now()-start}")
         return p2p
 
     if pt1.ndim == 2:
@@ -276,6 +272,4 @@ def batched_point2point_distance(pt0: Tensor, pt1: Optional[Tensor] = None) -> T
 
     ry = yy.diagonal(dim1=1, dim2=2).unsqueeze(1).expand_as(zz)
     P = (rx.transpose(2, 1) + ry - 2*zz)
-
-    #print(f"batched p2p {datetime.now()-start}")
     return P

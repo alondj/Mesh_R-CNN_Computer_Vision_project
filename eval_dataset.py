@@ -64,7 +64,7 @@ if model_name == 'ShapeNet':
     num_classes = 13
     model = ShapeNetModel(pretrained_ResNet50(nn.functional.nll_loss,
                                               num_classes=13,
-                                              pretrained=True),
+                                              pretrained=False),
                           residual=options.residual,
                           cubify_threshold=options.threshold,
                           vertex_feature_dim=options.featDim,
@@ -74,7 +74,7 @@ if model_name == 'ShapeNet':
     trainloader = shapenetDataLoader(
         dataset, batch_size=options.batchSize, num_voxels=48, num_workers=options.workers)
 else:
-    model = Pix3DModel(pretrained_MaskRcnn(num_classes=10, pretrained=True),
+    model = Pix3DModel(pretrained_MaskRcnn(num_classes=10, pretrained=False),
                        cubify_threshold=options.threshold,
                        vertex_feature_dim=options.featDim,
                        num_refinement_stages=options.num_refinement_stages)

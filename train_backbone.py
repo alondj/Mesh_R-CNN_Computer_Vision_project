@@ -70,17 +70,17 @@ print('system information\n python: %s, torch: %s, cudnn: %s, cuda: %s, \ngpus: 
 print("\n")
 
 print(f"options were:\n{options}\n")
-
+pretrained = options.backbone_path != ''
 # model and datasets/loaders definition
 if options.model == 'ShapeNet':
     model = pretrained_ResNet50(nn.functional.nll_loss, num_classes=13,
-                                pretrained=True)
+                                pretrained=pretrained)
 
     dataset = shapeNet_Dataset(options.dataRoot, options.num_sampels)
     trainloader = shapenetDataLoader(
         dataset, options.batchSize, 48, options.num_workers)
 else:
-    model = pretrained_MaskRcnn(num_classes=10, pretrained=True)
+    model = pretrained_MaskRcnn(num_classes=10, pretrained=pretrained)
     dataset = pix3dDataset(options.dataRoot, options.num_sampels)
     trainloader = pix3dDataLoader(
         dataset, options.batchSize, 24, options.num_workers)

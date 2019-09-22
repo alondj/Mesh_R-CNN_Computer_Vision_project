@@ -41,13 +41,13 @@ options = parser.parse_args()
 # model definition
 if options.model == 'ShapeNet':
     model = ShapeNetModel(pretrained_ResNet50(nn.functional.nll_loss, num_classes=13,
-                                              pretrained=True),
+                                              pretrained=False),
                           residual=options.residual,
                           cubify_threshold=options.threshold,
                           vertex_feature_dim=options.featDim,
                           num_refinement_stages=options.num_refinement_stages)
 else:
-    model = Pix3DModel(pretrained_MaskRcnn(num_classes=10, pretrained=True),
+    model = Pix3DModel(pretrained_MaskRcnn(num_classes=10, pretrained=False),
                        cubify_threshold=options.threshold,
                        vertex_feature_dim=options.featDim,
                        num_refinement_stages=options.num_refinement_stages)
@@ -61,10 +61,6 @@ model: nn.Module = model.to('cuda').eval()
 img = torch.from_numpy(mpimg.imread(options.imagePath))
 
 output = model(img)
-
-
-if not os.path.exists(options.savePath):
-    os.mkdir(options.savePath)
 
 
 vertex_positions = output['vertex_postions']
