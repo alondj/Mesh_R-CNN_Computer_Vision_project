@@ -77,8 +77,8 @@ def load_mesh(filename: str, tensor=False) -> Mesh:
     assert triangles.min() == 0
 
     if tensor:
-        vertices = torch.from_numpy(vertices)
-        triangles = torch.from_numpy(triangles)
+        vertices = torch.from_numpy(vertices).float()
+        triangles = torch.from_numpy(triangles).long()
 
     return Mesh(vertices, triangles)
 

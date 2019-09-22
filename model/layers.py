@@ -484,7 +484,6 @@ class Cubify(nn.Module):
         offsets = np.cumsum(v_index)-v_index
         faces = torch.cat(
             [f-off for f, off in zip(faces.split(f_index), offsets)])
-
         return vs, v_index, faces, f_index, adj_index
 
 
@@ -504,8 +503,9 @@ class VoxelBranch(nn.Sequential):
             nn.ConvTranspose2d(hidden_channels, hidden_channels,
                                kernel_size=2, stride=2),
             # N x 256 x V x V
-            nn.Conv2d(hidden_channels, out_channels, kernel_size=1)
+            nn.Conv2d(hidden_channels, out_channels, kernel_size=1),
             # N x out_channels x V x V
+            nn.Sigmoid()
         )
 
 
