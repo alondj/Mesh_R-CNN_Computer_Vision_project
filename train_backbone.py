@@ -9,9 +9,8 @@ import torch
 import torch.nn as nn
 import tqdm
 from torch.optim import SGD, Adam
-from torch.utils.data import DataLoader, random_split
 
-from data.dataloader import pix3dDataset, shapeNet_Dataset
+from data.dataloader import pix3dDataset, shapeNet_Dataset, pix3dDataLoader, shapenetDataLoader
 from model import pretrained_MaskRcnn, pretrained_ResNet50
 
 assert torch.cuda.is_available(), "the training process is slow and requires gpu"
@@ -78,13 +77,13 @@ if options.model == 'ShapeNet':
                                 pretrained=True)
 
     dataset = shapeNet_Dataset(options.dataRoot, options.num_sampels)
-    trainloader = DataLoader(
-        dataset, batch_size=options.batchSize, shuffle=True, num_workers=options.workers)
+    trainloader = shapenetDataLoader(
+        dataset, options.batchSize, 48, options.num_workers)
 else:
     model = pretrained_MaskRcnn(num_classes=10, pretrained=True)
     dataset = pix3dDataset(options.dataRoot, options.num_sampels)
-    trainloader = DataLoader(
-        dataset, batch_size=options.batchSize, shuffle=True, num_workers=options.workers)
+    trainloader = pix3dDataLoader(
+        dataset, options.batchSize, 24, options.num_workers)
 
 # use data parallel if possible
 # TODO i do not know if it will work for mask rcnn
