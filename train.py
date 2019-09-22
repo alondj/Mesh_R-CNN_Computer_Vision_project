@@ -43,6 +43,8 @@ parser.add_argument('--num_refinement_stages', "-nr", type=int,
                     default=3, help='number of mesh refinement stages')
 parser.add_argument('--threshold', '-th',
                     help='Cubify threshold', type=float, default=0.2)
+parser.add_argument('--voxel_only', default=False, action='store_true',
+                    help='whether to return only the cubified mesh resulting from cubify')
 parser.add_argument("--residual", default=False,
                     action="store_true", help="whether to use residual refinement for ShapeNet")
 parser.add_argument("--train_backbone", default=False, action="store_true",
@@ -112,7 +114,8 @@ if model_name == 'ShapeNet':
                           residual=options.residual,
                           cubify_threshold=options.threshold,
                           vertex_feature_dim=options.featDim,
-                          num_refinement_stages=options.num_refinement_stages)
+                          num_refinement_stages=options.num_refinement_stages,
+                          voxel_only=options.voxel_only)
 
     dataset = shapeNet_Dataset(options.dataRoot, options.num_sampels)
     trainloader = shapenetDataLoader(
@@ -121,7 +124,8 @@ else:
     model = Pix3DModel(pretrained_MaskRcnn(num_classes=10, pretrained=pretrained),
                        cubify_threshold=options.threshold,
                        vertex_feature_dim=options.featDim,
-                       num_refinement_stages=options.num_refinement_stages)
+                       num_refinement_stages=options.num_refinement_stages,
+                       voxel_only=options.voxel_only)
     dataset = pix3dDataset(options.dataRoot, options.num_sampels)
     trainloader = pix3dDataLoader(
         dataset, batch_size=options.batchSize, num_voxels=24, num_workers=options.workers)
@@ -131,9 +135,12 @@ if options.model_path != '':
     model.load_state_dict(torch.load(options.model_path))
 
 # select trainable parameters
-trained_parameters = chain(model.refineStages.parameters(),
-                           model.voxelBranch.parameters())
-model.refineStages.train()
+trained_parameters = model.voxelBranch.parameters()
+if not options.voxel_only:
+    trained_parameters = chain(trained_parameters,
+                               model.refineStages.parameters())
+    model.refineStages.train()
+
 model.voxelBranch.train()
 if options.train_backbone:
     trained_parameters = chain(trained_parameters, model.backbone.parameters())

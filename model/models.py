@@ -30,24 +30,26 @@ class ShapeNetModel(nn.Module):
                  voxelBranchChannels: Tuple[int, int] = (2048, 48),
                  alignmenet_channels: int = 3840,
                  vertex_feature_dim: int = 128,
-                 num_refinement_stages: int = 3):
+                 num_refinement_stages: int = 3,
+                 voxel_only: bool = False):
         super(ShapeNetModel, self).__init__()
         self.backbone = backbone
         self.voxelBranch = VoxelBranch(*voxelBranchChannels)
         self.cubify = Cubify(cubify_threshold)
+        self.voxel_only = voxel_only
+        if not voxel_only:
+            refineClass = ResVertixRefineShapenet if residual else VertixRefineShapeNet
 
-        refineClass = ResVertixRefineShapenet if residual else VertixRefineShapeNet
+            stages = [refineClass(alignment_size=alignmenet_channels,
+                                  use_input_features=False,
+                                  num_features=vertex_feature_dim)]
 
-        stages = [refineClass(alignment_size=alignmenet_channels,
-                              use_input_features=False,
-                              num_features=vertex_feature_dim)]
+            for _ in range(num_refinement_stages - 1):
+                stages.append(refineClass(alignment_size=alignmenet_channels,
+                                          num_features=vertex_feature_dim,
+                                          use_input_features=True))
 
-        for _ in range(num_refinement_stages - 1):
-            stages.append(refineClass(alignment_size=alignmenet_channels,
-                                      num_features=vertex_feature_dim,
-                                      use_input_features=True))
-
-        self.refineStages = nn.ModuleList(stages)
+            self.refineStages = nn.ModuleList(stages)
 
     def forward(self, images: Tensor, targets=None) -> dict:
         if self.training and targets is None:
@@ -62,6 +64,20 @@ class ShapeNetModel(nn.Module):
         vertex_positions0, vertice_index, faces, face_index, adj_index = self.cubify(
             voxelGrid)
 
+        output = dict()
+
+        output['edge_index'] = adj_index
+        output['face_index'] = face_index
+        output['vertice_index'] = vertice_index
+        output['faces'] = faces
+        output['voxels'] = voxelGrid
+        output['backbone'] = backbone_out
+        output['graphs_per_image'] = [1]
+
+        if self.voxel_only:
+            output['vertex_positions'] = [vertex_positions0]
+            return output
+
         vertex_positions1, vertex_features = self.refineStages[0](vertice_index, feature_maps,
                                                                   adj_index, vertex_positions0,
                                                                   sizes)
@@ -74,15 +90,7 @@ class ShapeNetModel(nn.Module):
                                                    sizes, vertex_features=vertex_features)
             vertex_positions.append(new_positions)
 
-        output = dict()
         output['vertex_positions'] = vertex_positions
-        output['edge_index'] = adj_index
-        output['face_index'] = face_index
-        output['vertice_index'] = vertice_index
-        output['faces'] = faces
-        output['voxels'] = voxelGrid
-        output['backbone'] = backbone_out
-        output['graphs_per_image'] = [1]
 
         return output
 
@@ -142,23 +150,25 @@ class Pix3DModel(nn.Module):
                  voxelBranchChannels: Tuple[int, int] = (256, 24),
                  alignmenet_channels: int = 256,
                  vertex_feature_dim: int = 128,
-                 num_refinement_stages: int = 3):
+                 num_refinement_stages: int = 3,
+                 voxel_only: bool = False):
 
         super(Pix3DModel, self).__init__()
         self.backbone = backbone
         self.voxelBranch = VoxelBranch(*voxelBranchChannels)
         self.cubify = Cubify(cubify_threshold)
+        self.voxel_only = voxel_only
+        if not voxel_only:
+            stages = [VertixRefinePix3D(alignment_size=alignmenet_channels,
+                                        use_input_features=False,
+                                        num_features=vertex_feature_dim)]
 
-        stages = [VertixRefinePix3D(alignment_size=alignmenet_channels,
-                                    use_input_features=False,
-                                    num_features=vertex_feature_dim)]
+            for _ in range(num_refinement_stages - 1):
+                stages.append(VertixRefinePix3D(alignment_size=alignmenet_channels,
+                                                num_features=vertex_feature_dim,
+                                                use_input_features=True))
 
-        for _ in range(num_refinement_stages - 1):
-            stages.append(VertixRefinePix3D(alignment_size=alignmenet_channels,
-                                            num_features=vertex_feature_dim,
-                                            use_input_features=True))
-
-        self.refineStages = nn.ModuleList(stages)
+            self.refineStages = nn.ModuleList(stages)
 
     def forward(self, images: List[Tensor], targets: Optional[List[Dict]] = None) -> dict:
         if self.training and targets is None:
@@ -171,6 +181,21 @@ class Pix3DModel(nn.Module):
 
         vertex_positions0, vertice_index, faces, face_index, adj_index = self.cubify(
             voxelGrid)
+
+        output = dict()
+
+        output['edge_index'] = adj_index
+        output['face_index'] = face_index
+        output['vertice_index'] = vertice_index
+        output['faces'] = faces
+        output['voxels'] = voxelGrid
+        output['backbone'] = backbone_out
+        output['roi_input'] = roiAlign
+        output['graphs_per_image'] = graphs_per_image
+
+        if self.voxel_only:
+            output['vertex_positions'] = [vertex_positions0]
+            return output
 
         sizes = [i.shape[1:] for i in images]
         vertex_positions1, vertex_features = self.refineStages[0](vertice_index, roiAlign,
@@ -185,16 +210,7 @@ class Pix3DModel(nn.Module):
                                                    vertex_features=vertex_features)
             vertex_positions.append(new_positions)
 
-        output = dict()
         output['vertex_positions'] = vertex_positions
-        output['edge_index'] = adj_index
-        output['face_index'] = face_index
-        output['vertice_index'] = vertice_index
-        output['faces'] = faces
-        output['voxels'] = voxelGrid
-        output['backbone'] = backbone_out
-        output['roi_input'] = roiAlign
-        output['graphs_per_image'] = graphs_per_image
 
         return output
 
