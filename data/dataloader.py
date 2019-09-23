@@ -86,7 +86,7 @@ class pix3dDataset(Dataset):
                 self.masks.append(mask_src)
                 self.bbox.append(torch.Tensor(p['bbox']).unsqueeze(0))
                 self.Class.append(self.get_class(p['img']))
-                print(p["category"])
+
     def get_class(self, s: str):
         if s.find("bed") != -1:
             return 1
