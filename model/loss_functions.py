@@ -14,14 +14,17 @@ def total_loss(ws: dict, model_output: dict, voxel_gts: Tensor, batch: Batch,
                backbone_type: str) -> Tensor:
     v_loss = voxel_loss(model_output['voxels'], voxel_gts)
 
-    chamfer_loss, normal_loss, edge_loss = batched_mesh_loss(
-        model_output['vertex_positions'],
-        model_output['faces'],
-        model_output['edge_index'],
-        model_output['vertice_index'],
-        model_output['face_index'],
-        batch
-    )
+    if 'edge_index' in model_output:
+        chamfer_loss, normal_loss, edge_loss = batched_mesh_loss(
+            model_output['vertex_positions'],
+            model_output['faces'],
+            model_output['edge_index'],
+            model_output['vertice_index'],
+            model_output['face_index'],
+            batch
+        )
+    else:
+        chamfer_loss, normal_loss, edge_loss = 0, 0, 0
 
     # if we train the backbone just add the losses
     backbone_loss = 0
@@ -68,7 +71,7 @@ def mesh_loss(vertex_positions_pred: Tensor, mesh_faces_pred: Tensor, pred_adjac
               vertices_per_sample_pred: List[int], faces_per_sample_pred: List[int],
               batch: Batch,
               point_cloud_size: float = 1e3,
-              num_neighbours_for_normal_loss: int = 4) -> Tuple[Tensor, Tensor, Tensor]:
+              num_neighbours_for_normal_loss: int = 10) -> Tuple[Tensor, Tensor, Tensor]:
 
     # edge loss
     p2p_dist = batched_point2point_distance(vertex_positions_pred).squeeze(0)
@@ -153,7 +156,7 @@ def batched_normal_distance(p: Tensor, pgt: Tensor, p2p_distance: Tensor, idx_p:
     return loss_0, loss_1
 
 
-def compute_normals(pt: Tensor, p2p_distance: Tensor, k: int = 4) -> Tensor:
+def compute_normals(pt: Tensor, p2p_distance: Tensor, k: int = 10) -> Tensor:
     # for each point find closest k neighbourhood
     # for each neighbourhood find center of mass M
     # for each neighbourhood compute scatter matrix Si= Yi.t() where Yi is xi-M
