@@ -37,19 +37,18 @@ class ShapeNetModel(nn.Module):
         self.voxelBranch = VoxelBranch(*voxelBranchChannels)
         self.cubify = Cubify(cubify_threshold)
         self.voxel_only = voxel_only
-        if not voxel_only:
-            refineClass = ResVertixRefineShapenet if residual else VertixRefineShapeNet
+        refineClass = ResVertixRefineShapenet if residual else VertixRefineShapeNet
 
-            stages = [refineClass(alignment_size=alignmenet_channels,
-                                  use_input_features=False,
-                                  num_features=vertex_feature_dim)]
+        stages = [refineClass(alignment_size=alignmenet_channels,
+                              use_input_features=False,
+                              num_features=vertex_feature_dim)]
 
-            for _ in range(num_refinement_stages - 1):
-                stages.append(refineClass(alignment_size=alignmenet_channels,
-                                          num_features=vertex_feature_dim,
-                                          use_input_features=True))
+        for _ in range(num_refinement_stages - 1):
+            stages.append(refineClass(alignment_size=alignmenet_channels,
+                                      num_features=vertex_feature_dim,
+                                      use_input_features=True))
 
-            self.refineStages = nn.ModuleList(stages)
+        self.refineStages = nn.ModuleList(stages)
 
     def forward(self, images: Tensor, targets=None) -> dict:
         if self.training and targets is None:
@@ -159,17 +158,16 @@ class Pix3DModel(nn.Module):
         self.voxelBranch = VoxelBranch(*voxelBranchChannels)
         self.cubify = Cubify(cubify_threshold)
         self.voxel_only = voxel_only
-        if not voxel_only:
-            stages = [VertixRefinePix3D(alignment_size=alignmenet_channels,
-                                        use_input_features=False,
-                                        num_features=vertex_feature_dim)]
+        stages = [VertixRefinePix3D(alignment_size=alignmenet_channels,
+                                    use_input_features=False,
+                                    num_features=vertex_feature_dim)]
 
-            for _ in range(num_refinement_stages - 1):
-                stages.append(VertixRefinePix3D(alignment_size=alignmenet_channels,
-                                                num_features=vertex_feature_dim,
-                                                use_input_features=True))
+        for _ in range(num_refinement_stages - 1):
+            stages.append(VertixRefinePix3D(alignment_size=alignmenet_channels,
+                                            num_features=vertex_feature_dim,
+                                            use_input_features=True))
 
-            self.refineStages = nn.ModuleList(stages)
+        self.refineStages = nn.ModuleList(stages)
 
     def forward(self, images: List[Tensor], targets: Optional[List[Dict]] = None) -> dict:
         if self.training and targets is None:
