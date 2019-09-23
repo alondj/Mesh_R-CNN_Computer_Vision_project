@@ -221,17 +221,6 @@ class Pix3DMask_RCNN(MaskRCNN):
         super(Pix3DMask_RCNN, self).__init__(
             backbone, num_classes=num_classes, **MaskRCNN_kwargs)
 
-        # TODO the output shape of this layer is
-        # output(Tensor[K, C, output_size[0], output_size[1]])
-        # how will it work with the voxel branch?
-        # this layer has no parameters which is nice
-
-        # TODO we can always return boxes if we change RoiHeads
-        # also we can limit the number of predictions per image
-        # if we can correlate between boxes and ROI features then we can filter graphs
-        # based on box IOU with gt box
-        # during training as we have only one annotated object per image
-
     def forward(self, images: List[Tensor], targets: Optional[List[Dict]] = None):
         """
         Arguments:
@@ -259,6 +248,8 @@ class Pix3DMask_RCNN(MaskRCNN):
         detections, pix3d_input, detector_losses = self.roi_heads(
             features, proposals, images.image_sizes, targets)
         if self.training:
+            # during training we limit the nuber of roi features
+            # that are passed to the GCN as each feature creates a graph
             pix3d_input = filter_pix3d_input(targets, proposals,
                                              pix3d_input)
 

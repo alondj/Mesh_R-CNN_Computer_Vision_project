@@ -51,7 +51,7 @@ def show_voxels(voxel_mask):
 
     fig = plt.figure()
     ax = fig.gca(projection='3d')
-    ax.voxels(voxel_mask, facecolors='grey', edgecolor='black', shade=True)
+    ax.voxels(voxel_mask, facecolors='grey', edgecolor='black')
 
     plt.show()
 
