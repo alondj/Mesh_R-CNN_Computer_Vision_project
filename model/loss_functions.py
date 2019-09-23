@@ -5,11 +5,10 @@ import torch.nn as nn
 from torch import Tensor
 from data import Batch
 from utils import sample
-from datetime import datetime
+from utils.time_decorator import time
+
 
 # compute combined losses of the bacbone and GCN
-
-
 def total_loss(ws: dict, model_output: dict, voxel_gts: Tensor, batch: Batch,
                train_backbone: bool,
                backbone_type: str) -> Tensor:
@@ -37,10 +36,8 @@ def total_loss(ws: dict, model_output: dict, voxel_gts: Tensor, batch: Batch,
 
 def voxel_loss(voxel_prediction: Tensor, voxel_gts: Tensor) -> Tensor:
     # minimize binary cross entropy between predicted voxel occupancy probabilities and true voxel occupancies.
-    #start = datetime.now()
     loss = nn.functional.binary_cross_entropy(voxel_prediction, voxel_gts.float(),
                                               reduction='mean')
-    #print(f"voxel loss {datetime.now()-start}")
     return loss
 
 
@@ -48,17 +45,14 @@ def batched_mesh_loss(vertex_positions_pred: Tensor, mesh_faces_pred: Tensor, pr
                       vertices_per_sample_pred: List[int], faces_per_sample_pred: List[int],
                       batch: Batch,
                       point_cloud_size: float = 1e3,
-                      num_neighbours_for_normal_loss: int = 4) -> Tuple[Tensor, Tensor, Tensor]:
-    # #print("batched mesh loss")
-    # #print("iter 0")
-    #start = datetime.now()
+                      num_neighbours_for_normal_loss: int = 10) -> Tuple[Tensor, Tensor, Tensor]:
+
     chamfer, normal, edge = mesh_loss(vertex_positions_pred[0], mesh_faces_pred, pred_adjacency,
                                       vertices_per_sample_pred, faces_per_sample_pred,
                                       batch, point_cloud_size,
                                       num_neighbours_for_normal_loss)
-    # print()
+
     for idx, pos in enumerate(vertex_positions_pred[1:]):
-        # #print(f"iter {idx+1}")
         c, n, e = mesh_loss(pos, mesh_faces_pred, pred_adjacency,
                             vertices_per_sample_pred, faces_per_sample_pred,
                             batch, point_cloud_size,
@@ -66,9 +60,7 @@ def batched_mesh_loss(vertex_positions_pred: Tensor, mesh_faces_pred: Tensor, pr
         chamfer += c
         normal += n
         edge += e
-        # print()
 
-    #print(f"batched mesh loss {datetime.now()-start}")
     return chamfer, normal, edge
 
 
@@ -77,25 +69,18 @@ def mesh_loss(vertex_positions_pred: Tensor, mesh_faces_pred: Tensor, pred_adjac
               batch: Batch,
               point_cloud_size: float = 1e3,
               num_neighbours_for_normal_loss: int = 4) -> Tuple[Tensor, Tensor, Tensor]:
-    # #print("mesh loss")
-    # #print(vertex_positions_pred.shape)
-    # #print(sum(vertices_per_sample_pred))
-    # #print(mesh_faces_pred.shape)
-    # #print(sum(faces_per_sample_pred))
-    #start = datetime.now()
+
     # edge loss
     p2p_dist = batched_point2point_distance(vertex_positions_pred).squeeze(0)
     edge_loss = total_edge_length(p2p_dist, pred_adjacency)
 
     # sample normalized point clouds from the predictions and gts
-    # #print("sample pred")
     point_cloud_pred = batched_mesh_sampling(vertex_positions_pred, mesh_faces_pred,
                                              vertices_per_sample_pred, faces_per_sample_pred,
                                              point_cloud_size)
     pos_gts, faces_gt = batch.meshes
     vertice_index, face_index = batch.vertice_index, batch.face_index
 
-    # #print("sample gt")
     point_cloud_gt = batched_mesh_sampling(pos_gts, faces_gt,
                                            vertice_index, face_index,
                                            point_cloud_size)
@@ -113,7 +98,6 @@ def mesh_loss(vertex_positions_pred: Tensor, mesh_faces_pred: Tensor, pred_adjac
                                                             k=num_neighbours_for_normal_loss)
     normal_loss = -(normal_dist_p + normal_dist_gt) / point_cloud_size
 
-    #print(f"mesh loss {datetime.now()-start}")
     return chamfer_loss, normal_loss, edge_loss
 
     # ------------------------------------------------------------------------------------------------------
@@ -126,17 +110,9 @@ def batched_mesh_sampling(vertex_positions: Tensor, mesh_faces: Tensor,
     ''' given vertex positions and mesh faces sample point clouds to be used in the loss functions
         vertices_per sample and faces_per sample specify how to split the input along dimention 0
     '''
-    # #print("batched sampling")
-    # #print(vertex_positions.shape)
-    # #print(sum(vertices_per_sample))
-    # #print(mesh_faces.shape)
-    # #print(sum(faces_per_sample))
-    # #print()
-    #start = datetime.now()
     point_clouds = [sample(*mesh, num_points=num_points)for mesh in
                     zip(vertex_positions.split(vertices_per_sample), mesh_faces.split(faces_per_sample))]
     clouds = torch.stack(point_clouds)
-    #print(f"batched mesh sampling {datetime.now()-start}")
     return clouds
 # ------------------------------------------------------------------------------------------------------
 
@@ -146,22 +122,20 @@ def batched_chamfer_distance(p2p_distance: Tensor) -> Tuple[Tensor, Tensor, Tens
         which is defined by the summed distance of each point in cloud A to it's nearest neighbour in cload B\n
         and vice versa
     '''
-    # start = datetime.now()
     mins, idx1 = torch.min(p2p_distance, 2)
     loss_1 = torch.sum(mins)
     mins, idx2 = torch.min(p2p_distance, 1)
     loss_2 = torch.sum(mins)
-    # print(f"batched chamfer distance {datetime.now()-start}")
     return loss_1, idx1, loss_2, idx2
 
 
 # ------------------------------------------------------------------------------------------------------
+
 def batched_normal_distance(p: Tensor, pgt: Tensor, p2p_distance: Tensor, idx_p: Tensor, idx_gt: Tensor, k=4) -> Tuple[Tensor, Tensor]:
     ''' calculate the normal distance between point clouds p and pgt\n
         p2p_distance is a matrix where p2p_distance[i,j]=|pi-pj|^2\n
         k is the number of neighbours used in order to estimate the normal to each point
     '''
-    # start = datetime.now()
     b_size = p.shape[0]
     # batch x size_p x 3 , batch x size_pgt x 3
     p_normals = compute_normals(p, p2p_distance, k=k)
@@ -176,7 +150,6 @@ def batched_normal_distance(p: Tensor, pgt: Tensor, p2p_distance: Tensor, idx_p:
     # expand the batch_idx and broadcast with idx_gt of shape batch x size_pgt
     nn_normals = p_normals[torch.arange(b_size).view(-1, 1), idx_gt]
     loss_1 = torch.mul(pgt_normals, nn_normals).sum(2).abs().sum()
-    # print(f"batched normal distance {datetime.now()-start}")
     return loss_0, loss_1
 
 
@@ -186,15 +159,13 @@ def compute_normals(pt: Tensor, p2p_distance: Tensor, k: int = 4) -> Tensor:
     # for each neighbourhood compute scatter matrix Si= Yi.t() where Yi is xi-M
     # use pca to find the vector with least correlativity aka corresponds to smallest eigen value
     # as it's the best approximation of the normal to the plane approximated by the neighbourhood
-    # start = datetime.now()
+
     b, p, d = pt.shape
     # pt batch x num_points x 3
     # p2p_distance batch x num_points x num_points
 
     # batch x num_points x K
     nn_idxs = p2p_distance.topk(k, dim=2, largest=False, sorted=False).indices
-    assert p == 1e3
-    assert nn_idxs.shape == torch.Size([b, p, k])
     # pts batch x num_points x 3
     # idx batch x num_points x K
 
@@ -212,8 +183,9 @@ def compute_normals(pt: Tensor, p2p_distance: Tensor, k: int = 4) -> Tensor:
 
     # find the normal as eigen vector with smallest eigen value
     # aka the eigen vector which most different than the approximated plane
+    # it's faster to compute this part on the cpu (including data transfer)
     # batch x points x 3 , batch x points x 3 x 3
-    eigen_values, eigen_vectors = torch.symeig(S, eigenvectors=True)
+    eigen_values, eigen_vectors = torch.symeig(S.cpu(), eigenvectors=True)
     # b x points
     smallest_eigen_values = eigen_values.argmin(2)
 
@@ -221,11 +193,10 @@ def compute_normals(pt: Tensor, p2p_distance: Tensor, k: int = 4) -> Tensor:
     normals = eigen_vectors[torch.arange(b).view(b, 1),
                             torch.arange(p).view(1, p).expand(b, p),
                             smallest_eigen_values]
-    # print(f"compute normals {datetime.now()-start}")
-    return normals
 
-
+    return normals.to(S.device)
 # ------------------------------------------------------------------------------------------------------
+
 
 #  normalizes as a whole and not per sample
 def total_edge_length(p2p_distance: Tensor, vertex_adjacency: Tensor,) -> Tensor:
@@ -241,6 +212,7 @@ def total_edge_length(p2p_distance: Tensor, vertex_adjacency: Tensor,) -> Tensor
 
     # we count each edge twice so when we normalize it cancels out 2*s /2|E|
     loss = masked_p2p_distance.sum() / normalize_factor
+
     return loss
 
 

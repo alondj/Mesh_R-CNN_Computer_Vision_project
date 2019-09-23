@@ -56,7 +56,7 @@ parser.add_argument("--chamfer", help="weight of the chamfer loss",
 parser.add_argument("--voxel", help="weight of the voxel loss",
                     type=float, default=1.0)
 parser.add_argument("--normal", help="weight of the normal loss",
-                    type=float, default=0)
+                    type=float, default=0.1)
 parser.add_argument("--edge", help="weight of the edge loss",
                     type=float, default=0.5)
 parser.add_argument("--backbone", help="weight of the backbone loss",
