@@ -24,12 +24,12 @@ parser.add_argument('--backbone_path', '-bp', type=str, default='',
                     help='path of a pretrained backbone if we wish to continue training from checkpoint must be provided with GCN_path')
 
 # dataset/loader arguments
-parser.add_argument('--num_samples', type=int,
+parser.add_argument('--num_sampels', type=int,
                     help='number of sampels to dataset', default=None)
 parser.add_argument('--dataRoot', type=str, help='file root')
 
 parser.add_argument('--batchSize', '-b', type=int,
-                    defaults=16, help='batch size')
+                    default=16, help='batch size')
 parser.add_argument('--workers', type=int,
                     help='number of data loading workers', default=4)
 
@@ -70,20 +70,22 @@ print('system information\n python: %s, torch: %s, cudnn: %s, cuda: %s, \ngpus: 
 print("\n")
 
 print(f"options were:\n{options}\n")
-pretrained = options.backbone_path != ''
+
 # model and datasets/loaders definition
 if options.model == 'ShapeNet':
     model = pretrained_ResNet50(nn.functional.nll_loss, num_classes=13,
-                                pretrained=pretrained)
-
+                                pretrained=True)
     dataset = shapeNet_Dataset(options.dataRoot, options.num_sampels)
     trainloader = shapenetDataLoader(
-        dataset, options.batchSize, 48, options.num_workers)
+        dataset, options.batchSize, 48, options.workers)
 else:
-    model = pretrained_MaskRcnn(num_classes=10, pretrained=pretrained)
+    model = pretrained_MaskRcnn(num_classes=10, pretrained=True)
     dataset = pix3dDataset(options.dataRoot, options.num_sampels)
     trainloader = pix3dDataLoader(
-        dataset, options.batchSize, 24, options.num_workers)
+        dataset, options.batchSize, 24, options.workers)
+
+if options.backbone_path!= '':
+      model.load_state_dict(torch.load(options.backbone_path))
 
 # use data parallel if possible
 # TODO i do not know if it will work for mask rcnn
