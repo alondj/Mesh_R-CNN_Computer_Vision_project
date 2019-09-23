@@ -117,8 +117,12 @@ class pix3dDataset(Dataset):
         masks_src = self.masks[idx]
         bbox = self.bbox[idx]
         label = torch.tensor(self.Class[idx]).unsqueeze(0)
-
-        img = torch.from_numpy(mpimg.imread(img_src)).permute(2, 0, 1)
+        img = torch.from_numpy(mpimg.imread(img_src))
+        if len(img.shape) == 3:
+               img=img.permute(2, 0, 1)
+        else:
+               img = img.unsqueeze(0)
+        img = img.type(torch.FloatTensor)
         model = load_voxels(voxel_src, tensor=True)
         mesh = load_mesh(mesh_src, tensor=True)
         mask = torch.from_numpy(mpimg.imread(masks_src)).unsqueeze(0)
@@ -261,8 +265,7 @@ class shapeNet_Dataset(Dataset):
         mesh = load_mesh(mesh_src, tensor=True)
         with open(voxel_src, 'rb') as binvox_file:
             model = torch.from_numpy(read_as_3d_array(binvox_file))
-
-        return img, model, mesh, label
+        return img, model, mesh, float(label)
 
 
 def preparte_shapeNetBatch(num_voxels: int):

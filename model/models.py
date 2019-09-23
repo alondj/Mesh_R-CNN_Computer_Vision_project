@@ -124,6 +124,7 @@ class ShapeNetResNet50(ResNet):
         x = F.softmax(x, -1)
 
         if self.training:
+            targets = targets.type(torch.cuda.LongTensor)
             return self.loss(x, targets), [img0, img1, img2, img3]
 
         return x, [img0, img1, img2, img3]

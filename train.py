@@ -39,6 +39,8 @@ parser.add_argument('--featDim', type=int, default=128,
                     help='number of vertex features')
 parser.add_argument(
     "--model_path", help="path of a pretrained model to cintinue training", default='')
+parser.add_argument('--backbone_path', '-bp', type=str, default='',
+                    help='path of a pretrained backbone if we wish to continue training from checkpoint must be provided with GCN_path')
 parser.add_argument('--num_refinement_stages', "-nr", type=int,
                     default=3, help='number of mesh refinement stages')
 parser.add_argument('--threshold', '-th',
@@ -108,9 +110,11 @@ print(f"options were:\n{options}\n")
 pretrained = options.model_path != ''
 # model and datasets/loaders definition
 if model_name == 'ShapeNet':
-    model = ShapeNetModel(pretrained_ResNet50(nn.functional.nll_loss,
+    backbone = pretrained_ResNet50(nn.functional.nll_loss,
                                               num_classes=13,
-                                              pretrained=pretrained),
+                                              pretrained=pretrained)
+    backbone.load_state_dict(torch.load(options.backbone_path))
+    model = ShapeNetModel(backbone,
                           residual=options.residual,
                           cubify_threshold=options.threshold,
                           vertex_feature_dim=options.featDim,
@@ -121,7 +125,9 @@ if model_name == 'ShapeNet':
     trainloader = shapenetDataLoader(
         dataset, batch_size=options.batchSize, num_voxels=48, num_workers=options.workers)
 else:
-    model = Pix3DModel(pretrained_MaskRcnn(num_classes=10, pretrained=pretrained),
+    backbone = pretrained_MaskRcnn(num_classes=10, pretrained=pretrained)
+    backbone.load_state_dict(torch.load(options.backbone_path))
+    model = Pix3DModel(backbone,
                        cubify_threshold=options.threshold,
                        vertex_feature_dim=options.featDim,
                        num_refinement_stages=options.num_refinement_stages,
