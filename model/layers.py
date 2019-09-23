@@ -6,6 +6,7 @@ from datetime import datetime
 import math
 from .utils import aggregate_neighbours
 import numpy as np
+from utils.rotation import rotation
 # data representation for graphs:
 # adjacency matrix: we just save occupied indices in coo format
 # vertex features matrix: we concatenate over the vertex dim resulting in total_vertices x Num_features
@@ -467,7 +468,8 @@ class Cubify(nn.Module):
 
         # discard batch idx
         vs = vs[:, 1:]
-
+        vs = vs.mm(rotation(90, tensor=True).to(device=vs.device,
+                                                dtype=vs.dtype))
         # create adj_matrix
         faces_t = faces.t()
         # get all directed edges

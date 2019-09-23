@@ -60,22 +60,16 @@ class ShapeNetModel(nn.Module):
                                  mode='bilinear', align_corners=True)
 
         voxelGrid = self.voxelBranch(upscaled)
-        vertex_positions0, vertice_index, faces, face_index, adj_index = self.cubify(
-            voxelGrid)
 
         output = dict()
-
-        output['edge_index'] = adj_index
-        output['face_index'] = face_index
-        output['vertice_index'] = vertice_index
-        output['faces'] = faces
         output['voxels'] = voxelGrid
         output['backbone'] = backbone_out
-        output['graphs_per_image'] = [1]
 
         if self.voxel_only:
-            output['vertex_positions'] = [vertex_positions0]
             return output
+
+        vertex_positions0, vertice_index, faces, face_index, adj_index = self.cubify(
+            voxelGrid)
 
         vertex_positions1, vertex_features = self.refineStages[0](vertice_index, feature_maps,
                                                                   adj_index, vertex_positions0,
@@ -90,6 +84,11 @@ class ShapeNetModel(nn.Module):
             vertex_positions.append(new_positions)
 
         output['vertex_positions'] = vertex_positions
+        output['edge_index'] = adj_index
+        output['face_index'] = face_index
+        output['vertice_index'] = vertice_index
+        output['faces'] = faces
+        output['graphs_per_image'] = [1]
 
         return output
 
@@ -178,23 +177,16 @@ class Pix3DModel(nn.Module):
 
         voxelGrid = self.voxelBranch(roiAlign)
 
-        vertex_positions0, vertice_index, faces, face_index, adj_index = self.cubify(
-            voxelGrid)
-
         output = dict()
-
-        output['edge_index'] = adj_index
-        output['face_index'] = face_index
-        output['vertice_index'] = vertice_index
-        output['faces'] = faces
         output['voxels'] = voxelGrid
         output['backbone'] = backbone_out
         output['roi_input'] = roiAlign
-        output['graphs_per_image'] = graphs_per_image
 
         if self.voxel_only:
-            output['vertex_positions'] = [vertex_positions0]
             return output
+
+        vertex_positions0, vertice_index, faces, face_index, adj_index = self.cubify(
+            voxelGrid)
 
         sizes = [i.shape[1:] for i in images]
         vertex_positions1, vertex_features = self.refineStages[0](vertice_index, roiAlign,
@@ -210,6 +202,11 @@ class Pix3DModel(nn.Module):
             vertex_positions.append(new_positions)
 
         output['vertex_positions'] = vertex_positions
+        output['edge_index'] = adj_index
+        output['face_index'] = face_index
+        output['vertice_index'] = vertice_index
+        output['faces'] = faces
+        output['graphs_per_image'] = graphs_per_image
 
         return output
 
