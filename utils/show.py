@@ -5,7 +5,9 @@ from torch import Tensor
 from .serialization import load_mesh, load_voxels
 from .process import normalize_mesh
 from .mesh_sampling import sample
+from .rotation import rotation
 from mpl_toolkits import mplot3d
+
 import numpy as np
 import matplotlib.pyplot as plt
 plt.rcParams["figure.figsize"] = 12.8, 9.6
@@ -18,7 +20,7 @@ plt.rcParams["figure.figsize"] = 12.8, 9.6
 # https://matplotlib.org/3.1.1/gallery/mplot3d/voxels_rgb.html
 
 
-def show_mesh(mesh):
+def show_mesh(mesh, alpha=0):
     if isinstance(mesh, str):
         mesh = load_mesh(mesh)
 
@@ -32,6 +34,7 @@ def show_mesh(mesh):
     if triangles.min() == 1:
         triangles -= 1
 
+    vertices = np.matmul(vertices, rotation(alpha))
     x = vertices[:, 0]
     y = vertices[:, 1]
     z = vertices[:, 2]
@@ -56,7 +59,7 @@ def show_voxels(voxel_mask):
     plt.show()
 
 
-def show_mesh_pointCloud(mesh):
+def show_mesh_pointCloud(mesh, alpha=0):
     if isinstance(mesh, str):
         mesh = load_mesh(mesh, tensor=False)
 
@@ -66,6 +69,7 @@ def show_mesh_pointCloud(mesh):
     if not isinstance(points, np.ndarray):
         points = points.cpu().numpy()
 
+    points = np.matmul(points, rotation(alpha))
     ax = plt.axes(projection='3d')
     x = points[:, 0]
     y = points[:, 1]
