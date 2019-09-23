@@ -60,7 +60,7 @@ class Batch():
 
 class pix3dDataset(Dataset):
 
-    def __init__(self, dataset_path, num_sampels=None):
+    def __init__(self, dataset_path, num_sampels=None, classes=None):
         json_path = f"{dataset_path}/pix3d.json"
         with open(json_path) as json_file:
             dataset = json.load(json_file)
@@ -71,6 +71,8 @@ class pix3dDataset(Dataset):
             self.bbox = []
             self.Class = []
             for p in dataset:
+                if classes is not None and p['category'] not in classes:
+                    continue
                 if num_sampels is not None and num_sampels == len(self.imgs_src):
                     break
                 img_src = f"{dataset_path}/{p['img']}"
@@ -84,7 +86,7 @@ class pix3dDataset(Dataset):
                 self.masks.append(mask_src)
                 self.bbox.append(torch.Tensor(p['bbox']).unsqueeze(0))
                 self.Class.append(self.get_class(p['img']))
-
+                print(p["category"])
     def get_class(self, s: str):
         if s.find("bed") != -1:
             return 1
@@ -119,9 +121,9 @@ class pix3dDataset(Dataset):
         label = torch.tensor(self.Class[idx]).unsqueeze(0)
         img = torch.from_numpy(mpimg.imread(img_src))
         if len(img.shape) == 3:
-               img=img.permute(2, 0, 1)
+            img = img.permute(2, 0, 1)
         else:
-               img = img.unsqueeze(0)
+            img = img.unsqueeze(0)
         img = img.type(torch.FloatTensor)
         model = load_voxels(voxel_src, tensor=True)
         mesh = load_mesh(mesh_src, tensor=True)
@@ -135,7 +137,7 @@ class pix3DTarget():
     keys = ['boxes', 'masks', 'labels']
 
     def __init__(self, target: dict):
-        if not(isinstance(target, dict) and all(k in target for k in self.keys)):
+        if not (isinstance(target, dict) and all(k in target for k in self.keys)):
             raise ValueError(
                 f"target must be a dictionary with keys {self.keys}")
 
@@ -195,7 +197,7 @@ def pix3dDataLoader(dataset: Dataset, batch_size: int, num_voxels: int, num_work
 
 class shapeNet_Dataset(Dataset):
 
-    def __init__(self, directory_in_str, num_sampels=None):
+    def __init__(self, directory_in_str, num_sampels=None, classes=None):
         pathlist = Path(directory_in_str).glob('**/*.binvox')
         self.imgs_src = []
         self.voxels_src = []
@@ -203,7 +205,7 @@ class shapeNet_Dataset(Dataset):
         self.label = []
 
         for i, path in enumerate(pathlist):
-            if num_sampels is not None and i == num_sampels:
+            if num_sampels is not None and len(self.voxels_src) == num_sampels:
                 break
             voxel_path = str(path)
             mesh_src = voxel_path.replace(
@@ -211,7 +213,8 @@ class shapeNet_Dataset(Dataset):
             mesh_src.replace(".binvox", ".obj")
             img_path = voxel_path.replace("ShapeNetVox32", "ShapeNetRendering")
             img_path = img_path.replace("model.binvox", "rendering/00.png")
-
+            if classes is not None and self.get_class_by_name(img_path) not in classes:
+                continue
             self.voxels_src.append(voxel_path)
             self.mesh_src.append(mesh_src)
             self.imgs_src.append(img_path)
@@ -244,6 +247,36 @@ class shapeNet_Dataset(Dataset):
             return 11
         if s.find("04530566") != -1:
             return 12
+        assert False, "no label found for shapenet should not happen"
+        return -1
+
+    def get_class_by_name(self, s: str):
+        if s.find("02691156") != -1:
+            return "airplain"
+        if s.find("02828884") != -1:
+            return "bench"
+        if s.find("02933112") != -1:
+            return "closet"
+        if s.find("02958343") != -1:
+            return "car"
+        if s.find("03001627") != -1:
+            return "chair"
+        if s.find("03211117") != -1:
+            return "tv"
+        if s.find("03636649") != -1:
+            return "lamp"
+        if s.find("03691459") != -1:
+            return "sterio"
+        if s.find("04090263") != -1:
+            return "gun"
+        if s.find("04256520") != -1:
+            return "sofa"
+        if s.find("04379243") != -1:
+            return "table"
+        if s.find("04401088") != -1:
+            return "phone"
+        if s.find("04530566") != -1:
+            return "ship"
         assert False, "no label found for shapenet should not happen"
         return -1
 
@@ -286,3 +319,7 @@ def shapenetDataLoader(dataset: Dataset, batch_size: int, num_voxels: int, num_w
     return DataLoader(dataset, batch_size=batch_size, shuffle=True,
                       num_workers=num_workers,
                       collate_fn=preparte_shapeNetBatch(num_voxels))
+
+
+if __name__ == "__main__":
+    dataset = pix3dDataset("../dataset/pix3d", classes=["bed","desk"])
