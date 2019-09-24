@@ -12,7 +12,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 plt.rcParams["figure.figsize"] = 12.8, 9.6
 
-
+# code based on examples from
 # visualize meshes pointclouds
 # https://medium.com/@yzhong.cs/beyond-data-scientist-3d-plots-in-python-with-examples-2a8bd7aa654b
 
@@ -59,15 +59,17 @@ def show_voxels(voxel_mask):
     plt.show()
 
 
-def show_mesh_pointCloud(mesh, alpha=0):
+def show_mesh_pointCloud(mesh, alpha=-90):
     if isinstance(mesh, str):
-        mesh = load_mesh(mesh, tensor=False)
+        mesh = load_mesh(mesh, tensor=True)
 
-    if isinstance(mesh, tuple):
-        points = sample(*mesh)
+    vertices, faces = mesh
 
-    if not isinstance(points, np.ndarray):
-        points = points.cpu().numpy()
+    if isinstance(vertices, np.ndarray):
+        vertices = torch.from_numpy(vertices)
+        faces = torch.from_numpy(faces)
+
+    points = sample(vertices, faces).cpu().numpy()
 
     points = np.matmul(points, rotation(alpha))
     ax = plt.axes(projection='3d')
