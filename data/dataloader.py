@@ -121,7 +121,7 @@ class pix3dDataset(Dataset):
         label = torch.tensor(self.Class[idx]).unsqueeze(0)
         img = torch.from_numpy(mpimg.imread(img_src))
         if len(img.shape) == 3:
-            img = img.permute(2, 0, 1)
+            img = img.permute(2, 1, 0)
         else:
             img = img.unsqueeze(0)
         img = img.type(torch.FloatTensor)
@@ -219,6 +219,7 @@ class shapeNet_Dataset(Dataset):
             self.mesh_src.append(mesh_src)
             self.imgs_src.append(img_path)
             self.label.append(self.get_class(img_path))
+            print(self.get_class_by_name(img_path))
 
     def get_class(self, s: str):
         if s.find("02691156") != -1:
@@ -322,4 +323,4 @@ def shapenetDataLoader(dataset: Dataset, batch_size: int, num_voxels: int, num_w
 
 
 if __name__ == "__main__":
-    dataset = pix3dDataset("../dataset/pix3d", classes=["bed","desk"])
+    dataset = pix3dDataset("../dataset/pix3d", classes=["bed"])
