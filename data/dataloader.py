@@ -253,7 +253,7 @@ class shapeNet_Dataset(Dataset):
 
     def get_class_by_name(self, s: str):
         if s.find("02691156") != -1:
-            return "airplain"
+            return "airplane"
         if s.find("02828884") != -1:
             return "bench"
         if s.find("02933112") != -1:
@@ -267,7 +267,7 @@ class shapeNet_Dataset(Dataset):
         if s.find("03636649") != -1:
             return "lamp"
         if s.find("03691459") != -1:
-            return "sterio"
+            return "stereo"
         if s.find("04090263") != -1:
             return "gun"
         if s.find("04256520") != -1:

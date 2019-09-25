@@ -37,7 +37,7 @@ def show_mesh(mesh, alpha=0):
     vertices = np.matmul(vertices, rotation(alpha))
     x = vertices[:, 0]
     y = vertices[:, 1]
-    z = vertices[:, 2]
+    z = vertices[:, 2]*-1
     ax = plt.axes(projection='3d')
     ax.set_xlim([-1, 1])
     ax.set_ylim([-1, 1])
@@ -54,6 +54,7 @@ def show_voxels(voxel_mask):
 
     fig = plt.figure()
     ax = fig.gca(projection='3d')
+
     ax.voxels(voxel_mask, facecolors='grey', edgecolor='black')
 
     plt.show()
