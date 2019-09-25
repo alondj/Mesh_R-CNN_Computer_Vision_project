@@ -14,7 +14,6 @@ from utils import save_mesh, save_voxels
 
 assert torch.cuda.is_available(), "the training process is slow and requires gpu"
 
-
 parser = argparse.ArgumentParser()
 
 # model args
@@ -27,10 +26,11 @@ parser.add_argument('--modelPath', type=str, required=True,
 parser.add_argument('--num_refinement_stages', "-nr", type=int,
                     default=3, help='number of mesh refinement stages')
 parser.add_argument('--threshold', '-th',
-                    help='Cubify threshold', type=float, default=0.2)
+                    help='Cubify threshold', type=float, default=0.5)
 parser.add_argument("--residual", default=False,
                     action="store_true", help="whether to use residual refinement for ShapeNet")
-
+parser.add_argument('--voxel_only', default=False, action='store_true',
+                    help='whether to return only the cubified mesh resulting from cubify')
 # sample to evaluate and output paths
 parser.add_argument('--imagePath', type=str, help='the path to find the data')
 parser.add_argument('--savePath', type=str, default='eval/',
@@ -45,25 +45,29 @@ if options.model == 'ShapeNet':
                           residual=options.residual,
                           cubify_threshold=options.threshold,
                           vertex_feature_dim=options.featDim,
-                          num_refinement_stages=options.num_refinement_stages)
+                          num_refinement_stages=options.num_refinement_stages, voxel_only=options.voxel_only)
 else:
     model = Pix3DModel(pretrained_MaskRcnn(num_classes=10, pretrained=False),
                        cubify_threshold=options.threshold,
                        vertex_feature_dim=options.featDim,
-                       num_refinement_stages=options.num_refinement_stages)
-
+                       num_refinement_stages=options.num_refinement_stages, voxel_only=options.voxel_only)
 
 # load checkpoint
-model.load_state_dict(torch.load(options.model_path))
+model.load_state_dict(torch.load(options.modelPath))
 model: nn.Module = model.to('cuda').eval()
 
+import PIL.Image
 
-img = torch.from_numpy(mpimg.imread(options.imagePath))
-
+rgba_image = PIL.Image.open(options.imagePath)
+rgb_image = rgba_image.convert('RGB')
+img = torch.from_numpy(np.array(rgb_image))
+img = img.transpose(2, 0)
+img = img.type(torch.cuda.FloatTensor)
+img = img.unsqueeze(0)
 output = model(img)
 
-
-vertex_positions = output['vertex_postions']
+print(output)
+vertex_positions = output['vertex_positions']
 edge_index = output['edge_index']  # adj matrix
 face_index = output['face_index']  # faces per graph
 vertice_index = output['vertice_index']  # vertices per graph

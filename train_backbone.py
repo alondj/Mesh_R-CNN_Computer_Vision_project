@@ -26,6 +26,9 @@ parser.add_argument('--backbone_path', '-bp', type=str, default='',
 # dataset/loader arguments
 parser.add_argument('--num_sampels', type=int,
                     help='number of sampels to dataset', default=None)
+
+parser.add_argument('-c', '--classes', help='classes of the exampels in the dataset', type=str, default=None)
+
 parser.add_argument('--dataRoot', type=str, help='file root')
 
 parser.add_argument('--batchSize', '-b', type=int,
@@ -75,12 +78,24 @@ print(f"options were:\n{options}\n")
 if options.model == 'ShapeNet':
     model = pretrained_ResNet50(nn.functional.nll_loss, num_classes=13,
                                 pretrained=True)
-    dataset = shapeNet_Dataset(options.dataRoot, options.num_sampels)
+
+    if options.classes is not None:
+        classes = [item for item in options.classes.split(',')]
+        dataset = shapeNet_Dataset(options.dataRoot, options.num_sampels,classes=classes)
+    else:
+        dataset = shapeNet_Dataset(options.dataRoot, options.num_sampels)
+
     trainloader = shapenetDataLoader(
         dataset, options.batchSize, 48, options.workers)
 else:
     model = pretrained_MaskRcnn(num_classes=10, pretrained=True)
-    dataset = pix3dDataset(options.dataRoot, options.num_sampels)
+
+    if options.classes is not None:
+        classes = [item for item in options.classes.split(',')]
+        dataset = pix3dDataset(options.dataRoot, options.num_sampels,classes=classes)
+    else:
+        dataset = pix3dDataset(options.dataRoot, options.num_sampels)
+
     trainloader = pix3dDataLoader(
         dataset, options.batchSize, 24, options.workers)
 

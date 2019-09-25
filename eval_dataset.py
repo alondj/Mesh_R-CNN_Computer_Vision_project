@@ -40,8 +40,11 @@ parser.add_argument("--residual", default=False,
                     action="store_true", help="whether to use residual refinement for ShapeNet")
 
 # dataset/loader arguments
-parser.add_argument('--num_samples', type=int,
+parser.add_argument('--num_sampels', type=int,
                     help='number of sampels to dataset', default=None)
+
+parser.add_argument('-c', '--classes', help='classes of the exampels in the dataset', type=str, default=None)
+
 parser.add_argument('--dataRoot', type=str, help='file root')
 
 parser.add_argument('--batchSize', '-b', type=int,
@@ -70,7 +73,12 @@ if model_name == 'ShapeNet':
                           vertex_feature_dim=options.featDim,
                           num_refinement_stages=options.num_refinement_stages)
 
-    dataset = shapeNet_Dataset(options.dataRoot, options.num_sampels)
+    if options.classes is not None:
+        classes = [item for item in options.classes.split(',')]
+        dataset = shapeNet_Dataset(options.dataRoot, options.num_sampels,classes=classes)
+    else:
+        dataset = shapeNet_Dataset(options.dataRoot, options.num_sampels)
+
     trainloader = shapenetDataLoader(
         dataset, batch_size=options.batchSize, num_voxels=48, num_workers=options.workers)
 else:
@@ -78,7 +86,13 @@ else:
                        cubify_threshold=options.threshold,
                        vertex_feature_dim=options.featDim,
                        num_refinement_stages=options.num_refinement_stages)
-    dataset = pix3dDataset(options.dataRoot, options.num_sampels)
+
+    if options.classes is not None:
+        classes = [item for item in options.classes.split(',')]
+        dataset = pix3dDataset(options.dataRoot, options.num_sampels, classes=classes)
+    else:
+        dataset = pix3dDataset(options.dataRoot, options.num_sampels)
+
     testLoader = pix3dDataLoader(
         dataset, batch_size=options.batchSize, num_voxels=24, num_workers=options.workers)
     num_classes = 10
@@ -88,7 +102,7 @@ model.load_state_dict(torch.load(options.model_path))
 
 # use data parallel if possible
 # TODO i do not know if it will work for mask rcnn
-if len(devices > 1):
+if len(devices) > 1:
     model = nn.DataParallel(model)
 
 model: nn.Module = model.to(devices[0]).eval()

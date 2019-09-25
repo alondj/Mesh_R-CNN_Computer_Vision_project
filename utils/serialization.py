@@ -55,6 +55,7 @@ def load_voxels(path: str, tensor=False):
 def load_mesh(filename: str, tensor=False) -> Mesh:
     triangles = []
     vertices = []
+    filename = filename.replace(".binvox", ".obj")
     with open(filename) as file:
         for line in file:
             components = line.strip(' \n').split(' ')

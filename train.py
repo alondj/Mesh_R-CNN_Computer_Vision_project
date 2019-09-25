@@ -67,6 +67,9 @@ parser.add_argument("--backbone", help="weight of the backbone loss",
 # dataset/loader arguments
 parser.add_argument('--num_sampels', type=int,
                     help='number of sampels to dataset', default=None)
+
+parser.add_argument('-c', '--classes', help='classes of the exampels in the dataset', type=str, default=None)
+
 parser.add_argument('--dataRoot', type=str, help='file root')
 
 parser.add_argument('--batchSize', '-b', type=int,
@@ -111,9 +114,10 @@ pretrained = options.model_path != ''
 # model and datasets/loaders definition
 if model_name == 'ShapeNet':
     backbone = pretrained_ResNet50(nn.functional.nll_loss,
-                                              num_classes=13,
-                                              pretrained=pretrained)
-    backbone.load_state_dict(torch.load(options.backbone_path))
+                                   num_classes=13,
+                                   pretrained=pretrained)
+    if options.backbone_path != '':
+        backbone.load_state_dict(torch.load(options.backbone_path))
     model = ShapeNetModel(backbone,
                           residual=options.residual,
                           cubify_threshold=options.threshold,
@@ -121,18 +125,30 @@ if model_name == 'ShapeNet':
                           num_refinement_stages=options.num_refinement_stages,
                           voxel_only=options.voxel_only)
 
-    dataset = shapeNet_Dataset(options.dataRoot, options.num_sampels)
+    if options.classes is not None:
+        classes = [item for item in options.classes.split(',')]
+        dataset = shapeNet_Dataset(options.dataRoot, options.num_sampels, classes=classes)
+    else:
+        dataset = shapeNet_Dataset(options.dataRoot, options.num_sampels)
+
     trainloader = shapenetDataLoader(
         dataset, batch_size=options.batchSize, num_voxels=48, num_workers=options.workers)
 else:
     backbone = pretrained_MaskRcnn(num_classes=10, pretrained=pretrained)
-    backbone.load_state_dict(torch.load(options.backbone_path))
+    if options.backbone_path != '':
+        backbone.load_state_dict(torch.load(options.backbone_path))
     model = Pix3DModel(backbone,
                        cubify_threshold=options.threshold,
                        vertex_feature_dim=options.featDim,
                        num_refinement_stages=options.num_refinement_stages,
                        voxel_only=options.voxel_only)
-    dataset = pix3dDataset(options.dataRoot, options.num_sampels)
+
+    if options.classes is not None:
+        classes = [item for item in options.classes.split(',')]
+        dataset = pix3dDataset(options.dataRoot, options.num_sampels, classes=classes)
+    else:
+        dataset = pix3dDataset(options.dataRoot, options.num_sampels)
+
     trainloader = pix3dDataLoader(
         dataset, batch_size=options.batchSize, num_voxels=24, num_workers=options.workers)
 
