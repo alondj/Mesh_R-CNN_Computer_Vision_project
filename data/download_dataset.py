@@ -82,7 +82,6 @@ def batch(iterable, n=1):
 
 
 def render_shapenet_meshes(download_path):
-    # TODO we render voxels at their given size maybe we should upsample/downsample
     renderer = Cubify(threshold=0.5).to('cuda')
 
     pathlist = Path(download_path).glob('**/*.binvox')
