@@ -1,22 +1,14 @@
 import argparse
-import datetime
-import os
-import platform
 import sys
-from itertools import chain
 from torchvision.ops.boxes import box_iou
 # import numpy as np
 import torch
 import torch.nn as nn
 import tqdm
-from torch import Tensor
-from torch.optim import SGD, Adam
-from torch.utils.data import DataLoader, random_split
 
-from data.dataloader import (pix3dDataset, pix3DTarget, pix3DTargetList,
-                             shapeNet_Dataset, pix3dDataLoader, shapenetDataLoader)
-from model import (Pix3DModel, ShapeNetModel, pretrained_MaskRcnn,
-                   pretrained_ResNet50)
+
+from data.dataloader import (pix3dDataset, pix3dDataLoader)
+from model import (Pix3DModel, pretrained_MaskRcnn)
 from model.loss_functions import batched_mesh_loss, voxel_loss
 from utils import f_score
 

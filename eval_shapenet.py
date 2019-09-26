@@ -114,8 +114,7 @@ with torch.no_grad():
             losses_and_scores['normal'] += normal_loss.item()
 
             # update confusion matrix
-            # TODO get predictions from shapenet backbone
-            preds = torch.argmax(model_output['preds'], 1)
+            preds = torch.argmax(model_output['backbone'], 1)
             for p, t in zip(preds, backbone_targets):
                 confusion_matrix[p, t] += 1
 
