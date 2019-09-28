@@ -82,12 +82,15 @@ losses_and_scores = {'chamfer': 0.,
                      }
 
 
-def get_out_of_dicts(bbo):
+def get_out_of_dicts(bbo, is_gt):
     boxes, labels, masks = [], [], []
     for dic in bbo:
         boxes.append(dic['boxes'])
         labels.append(dic['labels'][0])
-        masks.append(dic['masks'])
+        if is_gt:
+            masks.append(dic['masks'])
+        else:
+            masks.append(dic['mask'])
     return boxes, labels, masks
 
 
@@ -145,9 +148,9 @@ with torch.no_grad():
                 batch
             )
 
-            # TODO how to get masks from mask_RCNN backbone
-            gt_boxes, gt_labels, gt_masks = get_out_of_dicts(backbone_targets)
-            boxes, preds, masks = get_out_of_dicts(model_output['backbone'])
+
+            gt_boxes, gt_labels, gt_masks = get_out_of_dicts(backbone_targets, True)
+            boxes, preds, masks = get_out_of_dicts(model_output['backbone'], False)
 
             # update losses
             losses_and_scores['chamfer'] += chamfer_loss.item()
