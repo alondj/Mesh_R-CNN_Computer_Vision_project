@@ -5,8 +5,7 @@ from torchvision.ops.boxes import box_iou
 import torch
 import torch.nn as nn
 import tqdm
-
-
+from sklearn.metrics import auc
 from data.dataloader import (pix3dDataset, pix3dDataLoader)
 from model import (Pix3DModel, pretrained_MaskRcnn)
 from model.loss_functions import batched_mesh_loss, voxel_loss
@@ -80,7 +79,6 @@ losses_and_scores = {'chamfer': 0.,
                      'normal': 0.,
                      'AP_box': 0.,
                      'AP_mask': 0.,
-                     'AP_mesh': 0.
                      }
 
 
@@ -116,6 +114,16 @@ def calc_precision_mask(masks, gt_masks):
     return count / num_sampels
 
 
+def mesh_precision_recall(confusion, f1_score):
+    tp = confusion.diagonal()
+    should_be_positive = confusion.sum(0)
+    total_positive_predicted = confusion.sum(1)
+    tp[f1_score <= 0.5] = 0  # at f1_0.3 > 0.5 condition for being true positive
+    class_precision = 100 * (tp / total_positive_predicted)
+    class_recall = 100 * (tp / should_be_positive)
+    return auc(class_recall, class_precision)
+
+
 confusion_matrix = torch.zeros(num_classes, num_classes)
 with torch.no_grad():
     with tqdm.tqdm(total=len(testloader.batch_sampler), file=sys.stdout) as pbar:
@@ -138,7 +146,6 @@ with torch.no_grad():
             )
 
             # TODO how to get masks from mask_RCNN backbone
-            # TODO add AP mesh
             gt_boxes, gt_labels, gt_masks = get_out_of_dicts(backbone_targets)
             boxes, preds, masks = get_out_of_dicts(model_output['backbone'])
 
@@ -154,9 +161,8 @@ with torch.no_grad():
                 confusion_matrix[p, t] += 1
 
     # compute final metrics
-    f_0_1loss = f_score(confusion_matrix, 0.1).mean().item()
-    f_0_3loss = f_score(confusion_matrix, 0.3).mean().item()
-    f_0_5loss = f_score(confusion_matrix, 0.5).mean().item()
+    f1_0_3_score = f_score(confusion_matrix, 0.3)
+    AP_mesh = mesh_precision_recall(confusion_matrix, f1_0_3_score)
 
     avg_chamfer = losses_and_scores['chamfer'] / len(testloader.batch_sampler)
     avg_edge = losses_and_scores['edge'] / len(testloader.batch_sampler)
@@ -168,10 +174,8 @@ with torch.no_grad():
     print(f"evaluated {model_name} dataset")
     print(f"avg precision of boxes:{avg_AP_box}")
     print(f"avg precision of masks:{avg_AP_mask}")
+    print(f"avg precision of mesh {AP_mesh}")
     print(f"avg chamfer loss {avg_chamfer:.2f}")
     print(f"avg edge loss {avg_edge:.2f}")
     print(f"avg voxel loss {avg_voxel:.2f}")
     print(f"avg normal loss {avg_normal:.2f}")
-    print(f"avg f0.1 1loss {f_0_1loss:.2f}")
-    print(f"avg f0.3 loss {f_0_3loss:.2f}")
-    print(f"avg f0.5 1loss {f_0_5loss:.2f}")
