@@ -35,7 +35,8 @@ parser.add_argument("--residual", default=False,
 parser.add_argument('--num_sampels', type=int,
                     help='number of sampels to dataset', default=None)
 
-parser.add_argument('-c', '--classes', help='classes of the exampels in the dataset', type=str, default=None)
+parser.add_argument('-c', '--classes',
+                    help='classes of the exampels in the dataset', type=str, default=None)
 
 parser.add_argument('--dataRoot', type=str, help='file root')
 
@@ -58,7 +59,7 @@ gpus = [torch.cuda.get_device_name(device) for device in devices]
 # model and datasets/loaders definition
 num_classes = 13
 model = ShapeNetModel(pretrained_ResNet50(nn.functional.nll_loss,
-                                          num_classes=13,
+                                          num_classes=num_classes,
                                           pretrained=False),
                       residual=options.residual,
                       cubify_threshold=options.threshold,
@@ -67,11 +68,13 @@ model = ShapeNetModel(pretrained_ResNet50(nn.functional.nll_loss,
 
 if options.classes is not None:
     classes = [item for item in options.classes.split(',')]
-    dataset = shapeNet_Dataset(options.dataRoot, options.num_sampels, classes=classes)
+    dataset = shapeNet_Dataset(
+        options.dataRoot, options.num_sampels, classes=classes)
 else:
     dataset = shapeNet_Dataset(options.dataRoot, options.num_sampels)
 
-testloader = shapenetDataLoader(dataset, batch_size=options.batchSize, num_voxels=48, num_workers=options.workers)
+testloader = shapenetDataLoader(
+    dataset, batch_size=options.batchSize, num_voxels=48, num_workers=options.workers)
 
 # load checkpoint
 model.load_state_dict(torch.load(options.model_path))

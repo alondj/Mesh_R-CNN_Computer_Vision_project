@@ -1,15 +1,12 @@
 import argparse
 import sys
-from torchvision.ops.boxes import box_iou
-# import numpy as np
 import torch
 import torch.nn as nn
 import tqdm
-from sklearn.metrics import auc
 from data.dataloader import (pix3dDataset, pix3dDataLoader)
 from model import (Pix3DModel, pretrained_MaskRcnn)
 from model.loss_functions import batched_mesh_loss, voxel_loss
-from utils import f_score
+from utils.metrics import f_score, calc_precision_box, calc_precision_mask, mesh_precision_recall
 
 assert torch.cuda.is_available(), "the training process is slow and requires gpu"
 
@@ -31,7 +28,8 @@ parser.add_argument("--residual", default=False,
 parser.add_argument('--num_sampels', type=int,
                     help='number of sampels to dataset', default=None)
 
-parser.add_argument('-c', '--classes', help='classes of the exampels in the dataset', type=str, default=None)
+parser.add_argument('-c', '--classes',
+                    help='classes of the exampels in the dataset', type=str, default=None)
 
 parser.add_argument('--dataRoot', type=str, help='file root')
 
@@ -59,11 +57,13 @@ model = Pix3DModel(pretrained_MaskRcnn(num_classes=num_classes, pretrained=False
 
 if options.classes is not None:
     classes = [item for item in options.classes.split(',')]
-    dataset = pix3dDataset(options.dataRoot, options.num_sampels, classes=classes)
+    dataset = pix3dDataset(options.dataRoot, options.num_sampels,
+                           classes=classes)
 else:
     dataset = pix3dDataset(options.dataRoot, options.num_sampels)
 
-testloader = pix3dDataLoader(dataset, batch_size=options.batchSize, num_voxels=24, num_workers=options.workers)
+testloader = pix3dDataLoader(dataset, batch_size=options.batchSize,
+                             num_voxels=24, num_workers=options.workers)
 
 # load checkpoint
 model.load_state_dict(torch.load(options.model_path))
@@ -94,39 +94,6 @@ def get_out_of_dicts(bbo, is_gt):
     return boxes, labels, masks
 
 
-def calc_precision_box(boxes, gt_boxes):
-    count = 0
-    num_sampels = len(boxes)
-
-    for gt_box, pred_box in zip(gt_boxes, boxes):
-        if box_iou(gt_boxes, pred_box)[0][0] > 0.5:
-            count += 1
-    return count / num_sampels
-
-
-def calc_precision_mask(masks, gt_masks):
-    count = 0
-    num_sampels = len(masks)
-
-    for mask, gt_mask in zip(masks, gt_masks):
-        intersection = mask & gt_mask
-        union = mask | gt_mask
-        iou_score = torch.sum(intersection) / torch.sum(union)
-        if iou_score > 0.5:
-            count += 1
-    return count / num_sampels
-
-
-def mesh_precision_recall(confusion, f1_score):
-    tp = confusion.diagonal()
-    should_be_positive = confusion.sum(0)
-    total_positive_predicted = confusion.sum(1)
-    tp[f1_score <= 0.5] = 0  # at f1_0.3 > 0.5 condition for being true positive
-    class_precision = 100 * (tp / total_positive_predicted)
-    class_recall = 100 * (tp / should_be_positive)
-    return auc(class_recall, class_precision)
-
-
 confusion_matrix = torch.zeros(num_classes, num_classes)
 with torch.no_grad():
     with tqdm.tqdm(total=len(testloader.batch_sampler), file=sys.stdout) as pbar:
@@ -148,8 +115,10 @@ with torch.no_grad():
                 batch
             )
 
-            gt_boxes, gt_labels, gt_masks = get_out_of_dicts(backbone_targets, True)
-            boxes, preds, masks = get_out_of_dicts(model_output['backbone'], False)
+            gt_boxes, gt_labels, gt_masks = get_out_of_dicts(backbone_targets,
+                                                             True)
+            boxes, preds, masks = get_out_of_dicts(model_output['backbone'],
+                                                   is_gt=False)
 
             # update losses
             losses_and_scores['chamfer'] += chamfer_loss.item()
@@ -157,7 +126,8 @@ with torch.no_grad():
             losses_and_scores['edge'] += edge_loss.item()
             losses_and_scores['normal'] += normal_loss.item()
             losses_and_scores['AP_box'] += calc_precision_box(boxes, gt_boxes)
-            losses_and_scores['AP_mask'] += calc_precision_mask(masks=masks, gt_masks=gt_masks)
+            losses_and_scores['AP_mask'] += calc_precision_mask(masks=masks,
+                                                                gt_masks=gt_masks)
             # update confusion matrix
             for p, t in zip(preds, gt_labels):
                 confusion_matrix[p, t] += 1
