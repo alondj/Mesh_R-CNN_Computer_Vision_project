@@ -148,7 +148,6 @@ with torch.no_grad():
                 batch
             )
 
-
             gt_boxes, gt_labels, gt_masks = get_out_of_dicts(backbone_targets, True)
             boxes, preds, masks = get_out_of_dicts(model_output['backbone'], False)
 

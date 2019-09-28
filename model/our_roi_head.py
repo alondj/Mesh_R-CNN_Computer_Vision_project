@@ -4,7 +4,7 @@ from torchvision.models.detection.faster_rcnn import TwoMLPHead, FastRCNNPredict
 from torchvision.models.detection.roi_heads import RoIHeads
 from torchvision.models.detection.roi_heads import fastrcnn_loss, maskrcnn_inference, \
     keypointrcnn_inference, keypointrcnn_loss, maskrcnn_loss
-
+from torchvision.models.detection.mask_rcnn import MaskRCNNHeads
 
 class ModifiedRoIHead(RoIHeads):
     def forward(self, features, proposals, image_shapes, targets=None):
@@ -136,7 +136,7 @@ def build_RoI_head(out_channels, num_classes=None, box_roi_pool=None, box_head=N
                    box_score_thresh=0.05, box_nms_thresh=0.5, box_detections_per_img=100,
                    box_fg_iou_thresh=0.5, box_bg_iou_thresh=0.5,
                    box_batch_size_per_image=512, box_positive_fraction=0.25,
-                   bbox_reg_weights=None, mask_predictor=None, ):
+                   bbox_reg_weights=None, mask_predictor=None, mask_roi_pool=None, mask_head=None):
     if box_roi_pool is None:
         box_roi_pool = MultiScaleRoIAlign(
             featmap_names=[0, 1, 2, 3],
@@ -155,11 +155,24 @@ def build_RoI_head(out_channels, num_classes=None, box_roi_pool=None, box_head=N
         box_predictor = FastRCNNPredictor(
             representation_size,
             num_classes)
+
+    if mask_roi_pool is None:
+        mask_roi_pool = MultiScaleRoIAlign(
+            featmap_names=[0, 1, 2, 3],
+            output_size=14,
+            sampling_ratio=2)
+
+    if mask_head is None:
+        mask_layers = (256, 256, 256, 256)
+        mask_dilation = 1
+        mask_head = MaskRCNNHeads(out_channels, mask_layers, mask_dilation)
+
     roi_heads = ModifiedRoIHead(
         # Box
         box_roi_pool, box_head, box_predictor,
         box_fg_iou_thresh, box_bg_iou_thresh,
         box_batch_size_per_image, box_positive_fraction,
         bbox_reg_weights,
-        box_score_thresh, box_nms_thresh, box_detections_per_img, mask_predictor=mask_predictor)
+        box_score_thresh, box_nms_thresh, box_detections_per_img, mask_predictor=mask_predictor, mask_head=mask_head,
+        mask_roi_pool=mask_roi_pool)
     return roi_heads
