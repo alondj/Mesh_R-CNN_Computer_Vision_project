@@ -7,6 +7,7 @@ from data.dataloader import (pix3dDataset, pix3dDataLoader)
 from model import (Pix3DModel, pretrained_MaskRcnn)
 from model.loss_functions import batched_mesh_loss, voxel_loss
 from utils.metrics import f_score, calc_precision_box, calc_precision_mask, mesh_precision_recall
+from torchvision.ops.boxes import box_iou
 
 assert torch.cuda.is_available(), "the training process is slow and requires gpu"
 
@@ -82,15 +83,26 @@ losses_and_scores = {'chamfer': 0.,
                      }
 
 
-def get_out_of_dicts(bbo, is_gt):
+def get_max_box(boxes, gt_box):
+    iou = box_iou(boxes, gt_box)
+    max_idx = torch.argmax(iou, dim=0)[0]
+    return boxes[max_idx]
+
+
+def get_out_of_dicts(bbo, gt_bbox=None):
     boxes, labels, masks = [], [], []
-    for dic in bbo:
-        boxes.append(dic['boxes'])
-        labels.append(dic['labels'][0])
-        if is_gt:
+    if gt_bbox is None:
+        for dic in bbo:
+            boxes.append(dic['boxes'])
+            labels.append(dic['labels'][0])
             masks.append(dic['masks'])
-        else:
+
+    else:
+        for dic, gt_box in zip(bbo, gt_bbox):
+            boxes.append(get_max_box(dic['boxes'], gt_box))
+            labels.append(dic['labels'][0])
             masks.append(dic['mask'])
+
     return boxes, labels, masks
 
 

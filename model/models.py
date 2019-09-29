@@ -271,7 +271,7 @@ def pretrained_MaskRcnn(num_classes=10, pretrained=True):
 
     in_features_mask = model.roi_heads.mask_predictor.conv5_mask.in_channels
     hidden_layer = 256
-    model.roi_heads = build_RoI_head(model.backbone.out_channels, num_classes=num_classes, box_detections_per_img=1,
+    model.roi_heads = build_RoI_head(model.backbone.out_channels, num_classes=num_classes, box_detections_per_img=3,
                                      box_roi_pool=MultiScaleRoIAlign(featmap_names=[0, 1, 2, 3],
                                                                      output_size=12,
                                                                      sampling_ratio=1),
