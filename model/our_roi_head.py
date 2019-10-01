@@ -1,12 +1,75 @@
 import torch
-from torchvision.ops import MultiScaleRoIAlign
+import torch.nn.functional as F
+from torchvision.ops import MultiScaleRoIAlign, boxes as box_ops
 from torchvision.models.detection.faster_rcnn import TwoMLPHead, FastRCNNPredictor
 from torchvision.models.detection.roi_heads import RoIHeads
 from torchvision.models.detection.roi_heads import fastrcnn_loss, maskrcnn_inference, \
     keypointrcnn_inference, keypointrcnn_loss, maskrcnn_loss
 from torchvision.models.detection.mask_rcnn import MaskRCNNHeads
 
+
 class ModifiedRoIHead(RoIHeads):
+    def postprocess_detections(self, box_features, class_logits, box_regression, proposals, image_shapes):
+        device = class_logits.device
+        num_classes = class_logits.shape[-1]
+
+        boxes_per_image = [len(boxes_in_image) for boxes_in_image in proposals]
+        pred_boxes = self.box_coder.decode(box_regression, proposals)
+        pred_scores = F.softmax(class_logits, -1)
+
+        # split boxes and scores and featyres per image
+        pred_boxes = pred_boxes.split(boxes_per_image, 0)
+        pred_scores = pred_scores.split(boxes_per_image, 0)
+        pred_features = box_features.split(boxes_per_image, 0)
+        all_boxes = []
+        all_scores = []
+        all_labels = []
+        all_features = []
+        for features, boxes, scores, image_shape in zip(pred_features, pred_boxes, pred_scores, image_shapes):
+            boxes = box_ops.clip_boxes_to_image(boxes, image_shape)
+
+            # create labels for each prediction
+            labels = torch.arange(num_classes, device=device)
+            labels = labels.view(1, -1).expand_as(scores)
+
+            # remove predictions with the background label
+            boxes = boxes[:, 1:]
+            scores = scores[:, 1:]
+            labels = labels[:, 1:]
+
+            # batch everything, by making every class prediction be a separate instance
+            boxes = boxes.reshape(-1, 4)
+            scores = scores.flatten()
+            labels = labels.flatten()
+
+            # at this stage every feature correspond to nClasses-1 boxes
+            # so the idea is to keep track of which original box indices are kept
+            # and from them compute feature_indices = box_idx // nClasses-1
+            box_keep_idxs = torch.arange(boxes.shape[0])
+
+            # remove low scoring boxes
+            inds = torch.nonzero(scores > self.score_thresh).squeeze(1)
+            boxes, scores, labels, box_keep_idxs = boxes[inds], scores[inds], labels[inds], box_keep_idxs[inds]
+
+            # remove empty boxes
+            keep = box_ops.remove_small_boxes(boxes, min_size=1e-2)
+            boxes, scores, labels, box_keep_idxs = boxes[keep], scores[keep], labels[keep], box_keep_idxs[keep]
+
+            # non-maximum suppression, independently done per class
+            keep = box_ops.batched_nms(boxes, scores, labels, self.nms_thresh)
+            # keep only topk scoring predictions
+            keep = keep[:self.detections_per_img]
+            boxes, scores, labels, box_keep_idxs = boxes[keep], scores[keep], labels[keep], box_keep_idxs[keep]
+
+            all_boxes.append(boxes)
+            all_scores.append(scores)
+            all_labels.append(labels)
+
+            feature_indices = box_keep_idxs / (num_classes-1)
+            all_features.append(features[feature_indices])
+
+        return all_boxes, all_scores, all_labels, all_features
+
     def forward(self, features, proposals, image_shapes, targets=None):
         """
         Arguments:
@@ -26,15 +89,17 @@ class ModifiedRoIHead(RoIHeads):
             proposals, matched_idxs, labels, regression_targets = self.select_training_samples(
                 proposals, targets)
 
-        box_features_return = self.box_roi_pool(
-            features, proposals, image_shapes)
+        # this is where we changed the code so that boxes will be returned in training too
+        box_features_return = self.box_roi_pool(features, proposals,
+                                                image_shapes)
         box_features = self.box_head(box_features_return)
         class_logits, box_regression = self.box_predictor(box_features)
-        # this is where we changed the code so that boxes will be returned in training too
         result, losses = [], {}
+
         if self.training:
-            boxes, scores, new_labels = self.postprocess_detections(class_logits, box_regression, proposals,
-                                                                    image_shapes)
+            boxes, scores, new_labels, GCN_features = self.postprocess_detections(box_features_return, class_logits,
+                                                                                  box_regression, proposals,
+                                                                                  image_shapes)
             num_images = len(boxes)
             for i in range(num_images):
                 result.append(
@@ -49,10 +114,10 @@ class ModifiedRoIHead(RoIHeads):
                 class_logits, box_regression, labels, regression_targets)
             losses = dict(loss_classifier=loss_classifier,
                           loss_box_reg=loss_box_reg)
-
         else:
-            boxes, scores, labels = self.postprocess_detections(
-                class_logits, box_regression, proposals, image_shapes)
+            boxes, scores, labels, GCN_features = self.postprocess_detections(box_features_return, class_logits,
+                                                                              box_regression, proposals,
+                                                                              image_shapes)
             num_images = len(boxes)
             for i in range(num_images):
                 result.append(
@@ -129,7 +194,7 @@ class ModifiedRoIHead(RoIHeads):
 
             losses.update(loss_keypoint)
 
-        return result, box_features_return, losses
+        return result, losses, GCN_features
 
 
 def build_RoI_head(out_channels, num_classes=None, box_roi_pool=None, box_head=None, box_predictor=None,

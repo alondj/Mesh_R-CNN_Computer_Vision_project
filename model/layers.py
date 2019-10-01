@@ -530,8 +530,12 @@ class VertexAlign(nn.Module):
         # and compute the projection on the respective feature maps
         # img_features is a list of batched features map
         # so for eg. the first mesh will be projected into img_features[0][0],...img_features[len(img_features)-1][0]
-        assert len(mesh_index) == img_features[0].shape[0]
-        assert sum(mesh_index) == len(vertices_per_mesh)
+        if self.training:
+            assert len(vertices_per_mesh) == len(image_sizes)
+            assert mesh_index == [1 for _ in image_sizes]
+
+        assert img_features[0].shape[0] == len(image_sizes)
+
         vertices = vertex_positions.split(vertices_per_mesh)
 
         i = 0

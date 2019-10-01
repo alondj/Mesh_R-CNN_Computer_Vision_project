@@ -16,7 +16,9 @@ def total_loss(ws: dict, model_output: dict, voxel_gts: Tensor, batch: Batch,
 
     if 'edge_index' in model_output:
         chamfer_loss, normal_loss, edge_loss = batched_mesh_loss(
-            model_output['vertex_positions'],
+            # we do not compute loss for the first mesh as it was directly computed
+            # from the voxels and not from the refine stages
+            model_output['vertex_positions'][1:],
             model_output['faces'],
             model_output['edge_index'],
             model_output['vertice_index'],
@@ -47,7 +49,7 @@ def voxel_loss(voxel_prediction: Tensor, voxel_gts: Tensor) -> Tensor:
 def batched_mesh_loss(vertex_positions_pred: Tensor, mesh_faces_pred: Tensor, pred_adjacency: Tensor,
                       vertices_per_sample_pred: List[int], faces_per_sample_pred: List[int],
                       batch: Batch,
-                      point_cloud_size: float = 1e3,
+                      point_cloud_size: float = 10e3,
                       num_neighbours_for_normal_loss: int = 10) -> Tuple[Tensor, Tensor, Tensor]:
 
     chamfer, normal, edge = mesh_loss(vertex_positions_pred[0], mesh_faces_pred, pred_adjacency,
@@ -70,7 +72,7 @@ def batched_mesh_loss(vertex_positions_pred: Tensor, mesh_faces_pred: Tensor, pr
 def mesh_loss(vertex_positions_pred: Tensor, mesh_faces_pred: Tensor, pred_adjacency: Tensor,
               vertices_per_sample_pred: List[int], faces_per_sample_pred: List[int],
               batch: Batch,
-              point_cloud_size: float = 1e3,
+              point_cloud_size: float = 10e3,
               num_neighbours_for_normal_loss: int = 10) -> Tuple[Tensor, Tensor, Tensor]:
 
     # edge loss
@@ -109,7 +111,7 @@ def mesh_loss(vertex_positions_pred: Tensor, mesh_faces_pred: Tensor, pred_adjac
 #  can be vectorized if necessary
 def batched_mesh_sampling(vertex_positions: Tensor, mesh_faces: Tensor,
                           vertices_per_sample: List[int], faces_per_sample: List[int],
-                          num_points: float = 1e3) -> Tensor:
+                          num_points: float = 10e3) -> Tensor:
     ''' given vertex positions and mesh faces sample point clouds to be used in the loss functions
         vertices_per sample and faces_per sample specify how to split the input along dimention 0
     '''

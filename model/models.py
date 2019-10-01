@@ -88,7 +88,6 @@ class ShapeNetModel(nn.Module):
         output['face_index'] = face_index
         output['vertice_index'] = vertice_index
         output['faces'] = faces
-        output['graphs_per_image'] = [1]
 
         return output
 
@@ -172,15 +171,20 @@ class Pix3DModel(nn.Module):
         if self.training and targets is None:
             raise ValueError("In training mode, targets should be passed")
 
-        backbone_out, roiAlign, graphs_per_image = self.backbone(
-            images, targets)
+        backbone_out, ROI_features = self.backbone(images, targets)
 
-        voxelGrid = self.voxelBranch(roiAlign)
+        if self.training:
+            # TODO handle roi_filtering in train mode
+            pass
+
+        # TODO set mesh_index to indicate how many meshes per image
+        # TODO revisit the concept of vertices per mesh and mesh per image
+        # concept in vertexAlign and loss functions
+        voxelGrid = self.voxelBranch(ROI_features)
 
         output = dict()
         output['voxels'] = voxelGrid
         output['backbone'] = backbone_out
-        output['roi_input'] = roiAlign
 
         if self.voxel_only:
             return output
@@ -189,14 +193,14 @@ class Pix3DModel(nn.Module):
             voxelGrid)
 
         sizes = [i.shape[1:] for i in images]
-        vertex_positions1, vertex_features = self.refineStages[0](vertice_index, roiAlign,
+        vertex_positions1, vertex_features = self.refineStages[0](vertice_index, ROI_features,
                                                                   adj_index, vertex_positions0,
                                                                   sizes)
 
         vertex_positions = [vertex_positions0, vertex_positions1]
 
         for stage in self.refineStages[1:]:
-            new_positions, vertex_features = stage(vertice_index, roiAlign,
+            new_positions, vertex_features = stage(vertice_index, ROI_features,
                                                    adj_index, vertex_positions[-1], sizes,
                                                    vertex_features=vertex_features)
             vertex_positions.append(new_positions)
@@ -206,7 +210,6 @@ class Pix3DModel(nn.Module):
         output['face_index'] = face_index
         output['vertice_index'] = vertice_index
         output['faces'] = faces
-        output['graphs_per_image'] = graphs_per_image
 
         return output
 
@@ -239,26 +242,19 @@ class Pix3DMask_RCNN(MaskRCNN):
         if isinstance(features, torch.Tensor):
             features = OrderedDict([(0, features)])
         proposals, proposal_losses = self.rpn(images, features, targets)
-        # additional ROI features for pix3d
-        graphs_per_image = [p.shape[0] for p in proposals]
-        detections, pix3d_input, detector_losses = self.roi_heads(
-            features, proposals, images.image_sizes, targets)
-        if self.training:
-            # during training we limit the nuber of roi features
-            # that are passed to the GCN as each feature creates a graph
-            pix3d_input = filter_pix3d_input(targets, proposals,
-                                             pix3d_input)
+        detections, detector_losses, ROI_features = self.roi_heads(features, proposals,
+                                                                   images.image_sizes, targets)
 
-        detections = self.transform.postprocess(
-            detections, images.image_sizes, original_image_sizes)
+        detections = self.transform.postprocess(detections, images.image_sizes,
+                                                original_image_sizes)
 
         losses = {}
         losses.update(detector_losses)
         losses.update(proposal_losses)
         if self.training:
-            return losses, pix3d_input, graphs_per_image
+            return losses, ROI_features
 
-        return detections, pix3d_input, graphs_per_image
+        return detections, ROI_features
 
 
 def pretrained_MaskRcnn(num_classes=10, pretrained=True):
