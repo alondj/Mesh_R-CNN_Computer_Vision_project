@@ -4,7 +4,7 @@ import os
 import platform
 import sys
 from itertools import chain
-
+import pickle
 # import numpy as np
 import torch
 import torch.nn as nn
@@ -30,7 +30,8 @@ parser.add_argument('--threshold', '-th',
                     help='Cubify threshold', type=float, default=0.2)
 parser.add_argument("--residual", default=False,
                     action="store_true", help="whether to use residual refinement for ShapeNet")
-
+parser.add_argument("--train_test_path",
+                    help="a path to a train_test ds split", type=str, default='')
 # dataset/loader arguments
 parser.add_argument('--num_sampels', type=int,
                     help='number of sampels to dataset', default=None)
@@ -72,6 +73,12 @@ if options.classes is not None:
         options.dataRoot, options.num_sampels, classes=classes)
 else:
     dataset = shapeNet_Dataset(options.dataRoot, options.num_sampels)
+
+if options.train_test_path != '':
+    file = open(options.train_test_path, 'rb')
+    _, test_ds = pickle.load(file)
+    dataset = test_ds
+    file.close()
 
 testloader = shapenetDataLoader(
     dataset, batch_size=options.batchSize, num_voxels=48, num_workers=options.workers)
