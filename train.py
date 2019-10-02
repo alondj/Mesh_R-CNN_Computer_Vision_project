@@ -6,6 +6,7 @@ import sys
 from itertools import chain
 from pathlib import Path
 import numpy as np
+import pickle
 import torch
 import torch.nn as nn
 import tqdm
@@ -51,7 +52,10 @@ parser.add_argument("--residual", default=False,
                     action="store_true", help="whether to use residual refinement for ShapeNet")
 parser.add_argument("--train_backbone", default=False, action="store_true",
                     help="whether to train the backbone in additon to the GCN")
-
+parser.add_argument('--train_set_path', '-tsp', type=str, default='',
+                    help='a path of a train set')
+parser.add_argument('--save_train_set', default=False, action="store_true",
+                    help="whether to save the train set to a file")
 # loss args
 parser.add_argument("--chamfer", help="weight of the chamfer loss",
                     type=float, default=1.0)
@@ -131,6 +135,12 @@ if model_name == 'ShapeNet':
     else:
         dataset = shapeNet_Dataset(options.dataRoot, options.num_sampels)
 
+    # load train set if needed
+    if options.train_set_path != '':
+        file = open(options.train_set_path, 'rb')
+        dataset = pickle.load(file)
+        file.close()
+
     trainloader = shapenetDataLoader(
         dataset, batch_size=options.batchSize, num_voxels=48, num_workers=options.workers)
 else:
@@ -149,8 +159,26 @@ else:
     else:
         dataset = pix3dDataset(options.dataRoot, options.num_sampels)
 
+    # load train set if needed
+    if options.train_set_path != '':
+        file = open(options.train_set_path, 'rb')
+        dataset = pickle.load(file)
+        file.close()
+
     trainloader = pix3dDataLoader(
         dataset, batch_size=options.batchSize, num_voxels=24, num_workers=options.workers)
+
+# save train_set if needed
+if options.save_train_set:
+    now = datetime.datetime.now()
+    save_path = now.isoformat()
+    train_set_path = os.path.join('train_sets', model_name, save_path)
+    if not os.path.exists(train_set_path):
+        Path(train_set_path).mkdir(parents=True, exist_ok=True)
+    file_name = os.path.join(train_set_path, "train_set.pt")
+    file = open(file_name, 'wb')
+    pickle.dump(dataset, file)
+    file.close()
 
 # load checkpoint if possible
 if options.model_path != '':
