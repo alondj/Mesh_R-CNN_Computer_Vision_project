@@ -96,7 +96,7 @@ if options.model == 'ShapeNet':
         if options.save_train_test_set:
             now = datetime.datetime.now()
             save_path = now.isoformat()
-            train_set_path = os.path.join('train_test_sets', model_name, save_path)
+            train_set_path = os.path.join('checkpoints', 'train_test_sets', model_name, save_path)
             if not os.path.exists(train_set_path):
                 Path(train_set_path).mkdir(parents=True, exist_ok=True)
             file_name = os.path.join(train_set_path, "train_set.pt")
@@ -124,7 +124,7 @@ else:
         if options.save_train_test_set:
             now = datetime.datetime.now()
             save_path = now.isoformat()
-            train_set_path = os.path.join('train_test_sets', model_name, save_path)
+            train_set_path = os.path.join('checkpoints', 'train_test_sets', model_name, save_path)
             if not os.path.exists(train_set_path):
                 Path(train_set_path).mkdir(parents=True, exist_ok=True)
             file_name = os.path.join(train_set_path, "train_set.pt")
