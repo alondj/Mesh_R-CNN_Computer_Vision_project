@@ -174,7 +174,7 @@ class Pix3DModel(nn.Module):
         backbone_out, ROI_features = self.backbone(images, targets)
 
         if self.training:
-            ROI_features = filter_featuers(targets, backbone_out, ROI_features)
+            ROI_features = filter_featuers(targets, backbone_out[0], ROI_features)
 
         # TODO set mesh_index to indicate how many meshes per image
         # TODO revisit the concept of vertices per mesh and mesh per image
@@ -183,7 +183,11 @@ class Pix3DModel(nn.Module):
 
         output = dict()
         output['voxels'] = voxelGrid
-        output['backbone'] = backbone_out
+
+        if self.training:
+            output['backbone'] = backbone_out[1]
+        else:
+            output['backbone'] = backbone_out
 
         if self.voxel_only:
             return output
@@ -251,7 +255,7 @@ class Pix3DMask_RCNN(MaskRCNN):
         losses.update(detector_losses)
         losses.update(proposal_losses)
         if self.training:
-            return losses, ROI_features
+            return [detections, losses], ROI_features
 
         return detections, ROI_features
 
