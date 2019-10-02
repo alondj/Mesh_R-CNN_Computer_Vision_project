@@ -174,7 +174,6 @@ class Pix3DModel(nn.Module):
         backbone_out, ROI_features = self.backbone(images, targets)
 
         if self.training:
-            # TODO handle roi_filtering in train mode
             ROI_features = filter_featuers(targets, backbone_out, ROI_features)
 
         # TODO set mesh_index to indicate how many meshes per image
