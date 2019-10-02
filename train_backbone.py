@@ -4,12 +4,13 @@ import os
 import platform
 import sys
 from pathlib import Path
+import pickle
 import numpy as np
 import torch
 import torch.nn as nn
 import tqdm
 from torch.optim import SGD, Adam
-
+from train import test_train_split
 from data.dataloader import pix3dDataset, shapeNet_Dataset, pix3dDataLoader, shapenetDataLoader
 from model import pretrained_MaskRcnn, pretrained_ResNet50
 
@@ -22,10 +23,14 @@ parser.add_argument(
     "--model", "-m", help="the backbone model we wish to train", choices=["ShapeNet", "Pix3D"], required=True)
 parser.add_argument('--backbone_path', '-bp', type=str, default='',
                     help='path of a pretrained backbone if we wish to continue training from checkpoint must be provided with GCN_path')
-
+parser.add_argument('--save_train_test_set', default=False, action="store_true",
+                    help="whether to save the train set to a file")
 # dataset/loader arguments
 parser.add_argument('--num_sampels', type=int,
                     help='number of sampels to dataset', default=None)
+
+parser.add_argument('--train_split_ratio', type=float,
+                    help='portion of the data that goes for training', default=1.0)
 
 parser.add_argument('-c', '--classes', help='classes of the exampels in the dataset', type=str, default=None)
 
@@ -46,9 +51,7 @@ parser.add_argument('--weightDecay', type=float,
                     default=5e-6, help='weight decay for L2 loss')
 parser.add_argument('--lr', type=float, default=1e-4, help='learning rate')
 
-
 options = parser.parse_args()
-
 
 epochs = options.nEpoch
 
@@ -73,7 +76,7 @@ print('system information\n python: %s, torch: %s, cudnn: %s, cuda: %s, \ngpus: 
 print("\n")
 
 print(f"options were:\n{options}\n")
-
+model_name = options.model
 # model and datasets/loaders definition
 if options.model == 'ShapeNet':
     model = pretrained_ResNet50(nn.functional.nll_loss, num_classes=13,
@@ -81,26 +84,59 @@ if options.model == 'ShapeNet':
 
     if options.classes is not None:
         classes = [item for item in options.classes.split(',')]
-        dataset = shapeNet_Dataset(options.dataRoot, options.num_sampels,classes=classes)
+        dataset = shapeNet_Dataset(options.dataRoot, options.num_sampels, classes=classes)
     else:
         dataset = shapeNet_Dataset(options.dataRoot, options.num_sampels)
 
-    trainloader = shapenetDataLoader(
-        dataset, options.batchSize, 48, options.workers)
+    if options.train_split_ratio != 1.0:
+        train_ds, test_ds = test_train_split(dataset, options.train_split_ratio)
+        trainloader = shapenetDataLoader(
+            train_ds, batch_size=options.batchSize, num_voxels=48, num_workers=options.workers)
+        # save train/test_set if needed
+        if options.save_train_test_set:
+            now = datetime.datetime.now()
+            save_path = now.isoformat()
+            train_set_path = os.path.join('train_test_sets', model_name, save_path)
+            if not os.path.exists(train_set_path):
+                Path(train_set_path).mkdir(parents=True, exist_ok=True)
+            file_name = os.path.join(train_set_path, "train_set.pt")
+            file = open(file_name, 'wb')
+            pickle.dump((train_ds, test_ds), file)
+            file.close()
+    else:
+        trainloader = shapenetDataLoader(
+            dataset, batch_size=options.batchSize, num_voxels=48, num_workers=options.workers)
+
 else:
     model = pretrained_MaskRcnn(num_classes=10, pretrained=True)
 
     if options.classes is not None:
         classes = [item for item in options.classes.split(',')]
-        dataset = pix3dDataset(options.dataRoot, options.num_sampels,classes=classes)
+        dataset = pix3dDataset(options.dataRoot, options.num_sampels, classes=classes)
     else:
         dataset = pix3dDataset(options.dataRoot, options.num_sampels)
 
-    trainloader = pix3dDataLoader(
-        dataset, options.batchSize, 24, options.workers)
+    if options.train_split_ratio != 1.0:
+        train_ds, test_ds = test_train_split(dataset, options.train_split_ratio)
+        trainloader = pix3dDataLoader(
+            train_ds, batch_size=options.batchSize, num_voxels=24, num_workers=options.workers)
+        # save train/test_set if needed
+        if options.save_train_test_set:
+            now = datetime.datetime.now()
+            save_path = now.isoformat()
+            train_set_path = os.path.join('train_test_sets', model_name, save_path)
+            if not os.path.exists(train_set_path):
+                Path(train_set_path).mkdir(parents=True, exist_ok=True)
+            file_name = os.path.join(train_set_path, "train_set.pt")
+            file = open(file_name, 'wb')
+            pickle.dump((train_ds, test_ds), file)
+            file.close()
+    else:
+        trainloader = pix3dDataLoader(
+            dataset, batch_size=options.batchSize, num_voxels=24, num_workers=options.workers)
 
-if options.backbone_path!= '':
-      model.load_state_dict(torch.load(options.backbone_path))
+if options.backbone_path != '':
+    model.load_state_dict(torch.load(options.backbone_path))
 
 # use data parallel if possible
 # TODO i do not know if it will work for mask rcnn
@@ -116,7 +152,6 @@ if options.optim == 'Adam':
     optimizer = Adam(model.parameters(), lr=lrate, weight_decay=decay)
 else:
     optimizer = SGD(model.parameters(), lr=lrate, weight_decay=decay)
-
 
 now = datetime.datetime.now()
 save_path = now.isoformat()
