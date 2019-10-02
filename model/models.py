@@ -16,7 +16,7 @@ from torchvision.models.detection.mask_rcnn import model_urls as mask_urls
 from torchvision.models.detection.roi_heads import RoIHeads
 from torchvision.models.detection.transform import GeneralizedRCNNTransform
 from torchvision.ops import MultiScaleRoIAlign, RoIAlign
-
+import copy
 from model.our_roi_head import build_RoI_head
 from model.utils import filter_featuers
 
@@ -171,10 +171,13 @@ class Pix3DModel(nn.Module):
         if self.training and targets is None:
             raise ValueError("In training mode, targets should be passed")
 
+        if self.training:
+            orig_targets = copy.deepcopy(targets)
+
         backbone_out, ROI_features = self.backbone(images, targets)
 
         if self.training:
-            ROI_features = filter_featuers(targets, backbone_out[0], ROI_features)
+            ROI_features = filter_featuers(orig_targets, backbone_out[0], ROI_features)
 
         # TODO set mesh_index to indicate how many meshes per image
         # TODO revisit the concept of vertices per mesh and mesh per image
