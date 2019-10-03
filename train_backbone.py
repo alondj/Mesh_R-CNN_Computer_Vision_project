@@ -10,7 +10,7 @@ import torch.nn as nn
 import tqdm
 from torch.optim import SGD, Adam
 
-from data.dataloader import pix3dDataset, shapeNet_Dataset, pix3dDataLoader, shapenetDataLoader
+from data.dataloader import pix3dDataset, shapeNet_Dataset, dataLoader
 from model import pretrained_MaskRcnn, pretrained_ResNet50
 
 assert torch.cuda.is_available(), "the training process is slow and requires gpu"
@@ -26,11 +26,11 @@ parser.add_argument('--backbone_path', '-bp', type=str, default='',
 # dataset/loader arguments
 parser.add_argument('--num_sampels', type=int,
                     help='number of sampels to dataset', default=None)
-
-parser.add_argument('-c', '--classes', help='classes of the exampels in the dataset', type=str, default=None)
-
+parser.add_argument('--train_ration', type=float, help='ration of samples used for training',
+                    default=None)
+parser.add_argument(
+    '-c', '--classes', help='classes of the exampels in the dataset', type=str, default=None)
 parser.add_argument('--dataRoot', type=str, help='file root')
-
 parser.add_argument('--batchSize', '-b', type=int,
                     default=16, help='batch size')
 parser.add_argument('--workers', type=int,
@@ -75,32 +75,29 @@ print("\n")
 print(f"options were:\n{options}\n")
 
 # model and datasets/loaders definition
+classes = options.classes
+if classes != None:
+    classes = [item for item in options.classes.split(',')]
+
 if options.model == 'ShapeNet':
     model = pretrained_ResNet50(nn.functional.nll_loss, num_classes=13,
                                 pretrained=True)
+    num_voxels = 48
+    dataset_cls = shapeNet_Dataset
 
-    if options.classes is not None:
-        classes = [item for item in options.classes.split(',')]
-        dataset = shapeNet_Dataset(options.dataRoot, options.num_sampels,classes=classes)
-    else:
-        dataset = shapeNet_Dataset(options.dataRoot, options.num_sampels)
-
-    trainloader = shapenetDataLoader(
-        dataset, options.batchSize, 48, options.workers)
 else:
     model = pretrained_MaskRcnn(num_classes=10, pretrained=True)
+    num_voxels = 24
+    dataset_cls = pix3dDataset
 
-    if options.classes is not None:
-        classes = [item for item in options.classes.split(',')]
-        dataset = pix3dDataset(options.dataRoot, options.num_sampels,classes=classes)
-    else:
-        dataset = pix3dDataset(options.dataRoot, options.num_sampels)
+dataset = dataset_cls(options.dataRoot, classes=classes)
+trainloader = dataLoader(dataset, options.batchSize, num_voxels=num_voxels,
+                         num_workers=options.workers,
+                         num_train_samples=options.num_samples,
+                         train_ratio=options.train_ratio)
 
-    trainloader = pix3dDataLoader(
-        dataset, options.batchSize, 24, options.workers)
-
-if options.backbone_path!= '':
-      model.load_state_dict(torch.load(options.backbone_path))
+if options.backbone_path != '':
+    model.load_state_dict(torch.load(options.backbone_path))
 
 # use data parallel if possible
 # TODO i do not know if it will work for mask rcnn
