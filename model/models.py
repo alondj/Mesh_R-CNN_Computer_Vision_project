@@ -18,7 +18,7 @@ from torchvision.models.detection.transform import GeneralizedRCNNTransform
 from torchvision.ops import MultiScaleRoIAlign, RoIAlign
 
 from model.our_roi_head import build_RoI_head
-from model.utils import filter_featuers
+from model.utils import filter_pix3d_input
 
 from .layers import (Cubify, ResVertixRefineShapenet, VertixRefinePix3D,
                      VertixRefineShapeNet, VoxelBranch)
@@ -175,7 +175,7 @@ class Pix3DModel(nn.Module):
 
         if self.training:
             # TODO handle roi_filtering in train mode
-            ROI_features = filter_featuers(targets, backbone_out, ROI_features)
+            pass
 
         # TODO set mesh_index to indicate how many meshes per image
         # TODO revisit the concept of vertices per mesh and mesh per image

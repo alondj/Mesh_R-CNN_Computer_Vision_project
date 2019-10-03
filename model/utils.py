@@ -3,8 +3,6 @@ import torch
 from torch import Tensor
 
 from torchvision.ops.boxes import box_iou
-
-
 # ------------------------------------------------------------------------------------------------------
 
 
@@ -111,12 +109,12 @@ def dummy(*dims):
 
 
 # ------------------------------------------------------------------------------------------------------
-def filter_featuers(targets, backbone_out, featuers):
+def filter_pix3d_input(targets, proposals, pix3d_input):
     filtered_output = []
-    for target, proposal, roi_featuers in zip(targets, backbone_out, featuers):
+    for target, proposal in zip(targets, proposals):
         the_box = target["boxes"]
-        scores = box_iou(the_box, proposal["boxes"])
+        scores = box_iou(the_box, proposal)
         max_idx = torch.argmax(scores, dim=0)[0]
-        filtered_output.append(roi_featuers[max_idx])
+        filtered_output.append(pix3d_input[max_idx])
     filtered_output = torch.stack(filtered_output, dim=0)
     return filtered_output
