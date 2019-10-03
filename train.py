@@ -20,12 +20,15 @@ from model import (Pix3DModel, ShapeNetModel, pretrained_MaskRcnn,
 assert torch.cuda.is_available(), "the training process is slow and requires gpu"
 
 
-def test_train_split(ds, train_ratio):
+def test_train_split(ds, train_ratio, batch_size, num_workers):
     train_amount = int(train_ratio * len(ds))
     test_amount = len(ds) - train_amount
     train_set, test_set = random_split(ds, (train_amount, test_amount))
-
-    return train_set, test_set
+    train_dl = DataLoader(train_set, batch_size=batch_size,
+                          shuffle=True, num_workers=num_workers)
+    test_dl = DataLoader(test_set, batch_size=batch_size,
+                         shuffle=False, num_workers=num_workers)
+    return train_dl, test_dl
 
 
 parser = argparse.ArgumentParser()
@@ -49,7 +52,9 @@ parser.add_argument("--residual", default=False,
                     action="store_true", help="whether to use residual refinement for ShapeNet")
 parser.add_argument("--train_backbone", default=False, action="store_true",
                     help="whether to train the backbone in additon to the GCN")
-parser.add_argument('--save_train_test_set', default=False, action="store_true",
+parser.add_argument('--train_set_path', '-tsp', type=str, default='',
+                    help='a path of a train set')
+parser.add_argument('--save_train_set', default=False, action="store_true",
                     help="whether to save the train set to a file")
 # loss args
 parser.add_argument("--chamfer", help="weight of the chamfer loss",
@@ -66,9 +71,6 @@ parser.add_argument("--backbone", help="weight of the backbone loss",
 # dataset/loader arguments
 parser.add_argument('--num_sampels', type=int,
                     help='number of sampels to dataset', default=None)
-
-parser.add_argument('--train_split_ratio', type=float,
-                    help='portion of the data that goes for training', default=1.0)
 
 parser.add_argument('-c', '--classes', help='classes of the exampels in the dataset', type=str, default=None)
 
@@ -133,26 +135,14 @@ if model_name == 'ShapeNet':
     else:
         dataset = shapeNet_Dataset(options.dataRoot, options.num_sampels)
 
-    if options.train_split_ratio != 1.0:
-        train_ds, test_ds = test_train_split(dataset, options.train_split_ratio)
-        trainloader = shapenetDataLoader(
-            train_ds, batch_size=options.batchSize, num_voxels=48, num_workers=options.workers)
-        # save train/test_set if needed
-        if options.save_train_test_set:
-            now = datetime.datetime.now()
-            save_path = now.isoformat()
-            train_set_path = os.path.join('train_test_sets', model_name, save_path)
-            if not os.path.exists(train_set_path):
-                Path(train_set_path).mkdir(parents=True, exist_ok=True)
-            file_name = os.path.join(train_set_path, "train_set.pt")
-            file = open(file_name, 'wb')
-            pickle.dump((train_ds, test_ds), file)
-            file.close()
-    else:
-        trainloader = shapenetDataLoader(
-            dataset, batch_size=options.batchSize, num_voxels=48, num_workers=options.workers)
+    # load train set if needed
+    if options.train_set_path != '':
+        file = open(options.train_set_path, 'rb')
+        dataset = pickle.load(file)
+        file.close()
 
-
+    trainloader = shapenetDataLoader(
+        dataset, batch_size=options.batchSize, num_voxels=48, num_workers=options.workers)
 else:
     backbone = pretrained_MaskRcnn(num_classes=10, pretrained=pretrained)
     if options.backbone_path != '':
@@ -169,24 +159,26 @@ else:
     else:
         dataset = pix3dDataset(options.dataRoot, options.num_sampels)
 
-    if options.train_split_ratio != 1.0:
-        train_ds, test_ds = test_train_split(dataset, options.train_split_ratio)
-        trainloader = pix3dDataLoader(
-            train_ds, batch_size=options.batchSize, num_voxels=24, num_workers=options.workers)
-        # save train/test_set if needed
-        if options.save_train_test_set:
-            now = datetime.datetime.now()
-            save_path = now.isoformat()
-            train_set_path = os.path.join('train_test_sets', model_name, save_path)
-            if not os.path.exists(train_set_path):
-                Path(train_set_path).mkdir(parents=True, exist_ok=True)
-            file_name = os.path.join(train_set_path, "train_set.pt")
-            file = open(file_name, 'wb')
-            pickle.dump((train_ds, test_ds), file)
-            file.close()
-    else:
-        trainloader = pix3dDataLoader(
-            dataset, batch_size=options.batchSize, num_voxels=24, num_workers=options.workers)
+    # load train set if needed
+    if options.train_set_path != '':
+        file = open(options.train_set_path, 'rb')
+        dataset = pickle.load(file)
+        file.close()
+
+    trainloader = pix3dDataLoader(
+        dataset, batch_size=options.batchSize, num_voxels=24, num_workers=options.workers)
+
+# save train_set if needed
+if options.save_train_set:
+    now = datetime.datetime.now()
+    save_path = now.isoformat()
+    train_set_path = os.path.join('train_sets', model_name, save_path)
+    if not os.path.exists(train_set_path):
+        Path(train_set_path).mkdir(parents=True, exist_ok=True)
+    file_name = os.path.join(train_set_path, "train_set.pt")
+    file = open(file_name, 'wb')
+    pickle.dump(dataset, file)
+    file.close()
 
 # load checkpoint if possible
 if options.model_path != '':
