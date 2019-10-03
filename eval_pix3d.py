@@ -62,7 +62,7 @@ if options.classes is not None:
 dataset = pix3dDataset(options.dataRoot, classes=classes)
 
 testloader = dataLoader(dataset, options.batch_size, 24, options.num_workers,
-                        test=True, num_train_samples=None, train_ratio=1-options.train_ratio)
+                        test=True, num_train_samples=None, train_ratio=1 - options.train_ratio)
 
 # load checkpoint
 model.load_state_dict(torch.load(options.model_path))
@@ -84,11 +84,11 @@ losses_and_scores = {'chamfer': 0.,
 def get_max_box(boxes, gt_box):
     iou = box_iou(boxes, gt_box)
     max_idx = torch.argmax(iou, dim=0)[0]
-    return boxes[max_idx]
+    return boxes[max_idx], max_idx
 
 
 def get_out_of_dicts(bbo, gt_bbox=None):
-    boxes, labels, masks = [], [], []
+    boxes, labels, masks, max_indexes = [], [], [], []
     if gt_bbox is None:
         for dic in bbo:
             boxes.append(dic['boxes'])
@@ -97,11 +97,33 @@ def get_out_of_dicts(bbo, gt_bbox=None):
 
     else:
         for dic, gt_box in zip(bbo, gt_bbox):
-            boxes.append(get_max_box(dic['boxes'], gt_box))
+            max_box, max_idx = get_max_box(dic['boxes'], gt_box)
+            max_indexes.append(max_idx)
+            boxes.append(max_box)
             labels.append(dic['labels'][0])
             masks.append(dic['mask'])
 
-    return boxes, labels, masks
+    return boxes, labels, masks, max_indexes
+
+
+def get_only_max(max_indexes, voxels, vertex_positions, faces, edge_index, vertice_index, face_index):
+    new_max_indexes = []
+    for i in range(0, 3 * len(max_indexes), step=3):
+        new_max_indexes.append(i + max_indexes[i])
+    new_max_indexes = torch.Tensor(new_max_indexes).type(torch.LongTensor)
+    vertex_positions_return = []
+
+    voxels = voxels[new_max_indexes]
+
+    for stage in vertex_positions:
+        vertex_positions_return.append(stage[new_max_indexes])
+
+    faces = faces[new_max_indexes]
+    edge_index = edge_index[new_max_indexes]
+    vertice_index = vertice_index[new_max_indexes]
+    face_index = face_index[new_max_indexes]
+
+    return voxels, vertex_positions_return, faces, edge_index, vertice_index, face_index
 
 
 confusion_matrix = torch.zeros(num_classes, num_classes)
@@ -115,20 +137,24 @@ with torch.no_grad():
             # predict and comput loss
             model_output = model(images, backbone_targets)
 
-            vxl_loss = voxel_loss(model_output['voxels'], voxel_gts)
+            gt_boxes, gt_labels, gt_masks, _ = get_out_of_dicts(backbone_targets, gt_bbox=None)
+            boxes, preds, masks, max_indexes = get_out_of_dicts(model_output['backbone'], gt_bbox=gt_boxes)
+
+            voxels, vertex_positions, faces, \
+            edge_index, vertice_index, face_index = \
+                get_only_max(max_indexes, model_output['voxels'], model_output['vertex_positions'],
+                             model_output['faces'],
+                             model_output['edge_index'], model_output['vertice_index'], model_output['face_index'])
+
+            vxl_loss = voxel_loss(voxels, voxel_gts)
             chamfer_loss, normal_loss, edge_loss = batched_mesh_loss(
-                model_output['vertex_positions'],
-                model_output['faces'],
-                model_output['edge_index'],
-                model_output['vertice_index'],
-                model_output['face_index'],
+                vertex_positions,
+                faces,
+                edge_index,
+                vertice_index,
+                face_index,
                 batch
             )
-
-            gt_boxes, gt_labels, gt_masks = get_out_of_dicts(backbone_targets,
-                                                             gt_bbox=None)
-            boxes, preds, masks = get_out_of_dicts(model_output['backbone'],
-                                                   gt_bbox=gt_boxes)
 
             # update losses
             losses_and_scores['chamfer'] += chamfer_loss.item()
