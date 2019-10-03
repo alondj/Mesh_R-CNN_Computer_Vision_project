@@ -3,7 +3,6 @@ import sys
 import torch
 import torch.nn as nn
 import tqdm
-import pickle
 from data.dataloader import (pix3dDataset, pix3dDataLoader)
 from model import (Pix3DModel, pretrained_MaskRcnn)
 from model.loss_functions import batched_mesh_loss, voxel_loss
@@ -25,8 +24,7 @@ parser.add_argument('--threshold', '-th',
                     help='Cubify threshold', type=float, default=0.2)
 parser.add_argument("--residual", default=False,
                     action="store_true", help="whether to use residual refinement for ShapeNet")
-parser.add_argument("--train_test_path",
-                    help="a path to a train_test ds split", type=str, default='')
+
 # dataset/loader arguments
 parser.add_argument('--num_sampels', type=int,
                     help='number of sampels to dataset', default=None)
@@ -64,12 +62,6 @@ if options.classes is not None:
                            classes=classes)
 else:
     dataset = pix3dDataset(options.dataRoot, options.num_sampels)
-
-if options.train_test_path != '':
-    file = open(options.train_test_path, 'rb')
-    _, test_ds = pickle.load(file)
-    dataset = test_ds
-    file.close()
 
 testloader = pix3dDataLoader(dataset, batch_size=options.batchSize,
                              num_voxels=24, num_workers=options.workers)
