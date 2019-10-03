@@ -1,8 +1,7 @@
 import json
 import matplotlib.image as mpimg
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, SubsetRandomSampler
 import numpy as np
-from pathlib import Path
 from data.read_binvox import read_as_3d_array
 import torch
 import PIL.Image
@@ -59,8 +58,17 @@ class Batch():
 
 
 class pix3dDataset(Dataset):
+    category_idx = {"bed": 1,
+                    "bookcase": 2,
+                    "chair": 3,
+                    "desk": 4,
+                    "misc": 5,
+                    "sofa": 6,
+                    "table": 7,
+                    "tool": 8,
+                    "wardrobe": 9}
 
-    def __init__(self, dataset_path, num_sampels=None, classes=None):
+    def __init__(self, dataset_path, classes=None):
         json_path = f"{dataset_path}/pix3d.json"
         with open(json_path) as json_file:
             dataset = json.load(json_file)
@@ -73,41 +81,23 @@ class pix3dDataset(Dataset):
             for p in dataset:
                 if classes is not None and p['category'] not in classes:
                     continue
-                if num_sampels is not None and num_sampels == len(self.imgs_src):
-                    break
                 img_src = f"{dataset_path}/{p['img']}"
                 voxel_src = f"{dataset_path}/{p['voxel']}"
                 mesh_src = f"{dataset_path}/{p['model']}"
                 mask_src = f"{dataset_path}/{p['mask']}"
+                label = p['category']
 
                 self.mesh_src.append(mesh_src)
                 self.imgs_src.append(img_src)
                 self.voxels_src.append(voxel_src)
                 self.masks.append(mask_src)
                 self.bbox.append(torch.Tensor(p['bbox']).unsqueeze(0))
-                self.Class.append(self.get_class(p['img']))
+                self.Class.append(self.get_class(label))
 
     def get_class(self, s: str):
-        if s.find("bed") != -1:
-            return 1
-        if s.find("bookcase") != -1:
-            return 2
-        if s.find("chair") != -1:
-            return 3
-        if s.find("desk") != -1:
-            return 4
-        if s.find("misc") != -1:
-            return 5
-        if s.find("sofa") != -1:
-            return 6
-        if s.find("table") != -1:
-            return 7
-        if s.find("tool") != -1:
-            return 8
-        if s.find("wardrobe") != -1:
-            return 9
-        assert False, "no label found for pix3d should not happen"
-        return -1
+        idx = self.category_idx.get(s, -1)
+        assert idx != -1, "no label found for pix3d should not happen"
+        return idx
 
     def __len__(self):
         return len(self.imgs_src)
@@ -189,97 +179,41 @@ def preparte_pix3dBatch(num_voxels: int):
     return batch_input
 
 
-def pix3dDataLoader(dataset: Dataset, batch_size: int, num_voxels: int, num_workers: int):
-    return DataLoader(dataset, batch_size=batch_size, shuffle=True,
-                      num_workers=num_workers,
-                      collate_fn=preparte_pix3dBatch(num_voxels))
-
-
 class shapeNet_Dataset(Dataset):
+    category_idx = {"airplaine": 0,
+                    "bench": 1,
+                    "closet": 2,
+                    "car": 3,
+                    "chair": 4,
+                    "tv": 5,
+                    "lamp": 6,
+                    "stereo": 7,
+                    "gun": 8,
+                    "sofa": 9,
+                    "table": 10,
+                    "phone": 11,
+                    "ship": 12}
 
-    def __init__(self, directory_in_str, num_sampels=None, classes=None):
-        pathlist = Path(directory_in_str).glob('**/*.binvox')
-        self.imgs_src = []
-        self.voxels_src = []
-        self.mesh_src = []
-        self.label = []
+    def __init__(self, dataset_path, classes=None):
+        json_path = f"{dataset_path}/shapenet.json"
+        with open(json_path) as json_file:
+            dataset = json.load(json_file)
+            self.voxels_src = []
+            self.imgs_src = []
+            self.mesh_src = []
+            self.label = []
+            for p in dataset:
+                if classes is not None and p['category'] not in classes:
+                    continue
+                img_src = f"{dataset_path}/{p['img']}"
+                voxel_src = f"{dataset_path}/{p['voxel']}"
+                mesh_src = f"{dataset_path}/{p['model']}"
+                label = p['category']
 
-        for i, path in enumerate(pathlist):
-            if num_sampels is not None and len(self.voxels_src) == num_sampels:
-                break
-            voxel_path = str(path)
-            mesh_src = voxel_path.replace(
-                "ShapeNetVox32", "ShapeNetMeshes")
-            mesh_src.replace(".binvox", ".obj")
-            img_path = voxel_path.replace("ShapeNetVox32", "ShapeNetRendering")
-            img_path = img_path.replace("model.binvox", "rendering/00.png")
-            if classes is not None and self.get_class_by_name(img_path) not in classes:
-                continue
-            self.voxels_src.append(voxel_path)
-            self.mesh_src.append(mesh_src)
-            self.imgs_src.append(img_path)
-            self.label.append(self.get_class(img_path))
-            print(self.get_class_by_name(img_path))
-
-    def get_class(self, s: str):
-        if s.find("02691156") != -1:
-            return 0
-        if s.find("02828884") != -1:
-            return 1
-        if s.find("02933112") != -1:
-            return 2
-        if s.find("02958343") != -1:
-            return 3
-        if s.find("03001627") != -1:
-            return 4
-        if s.find("03211117") != -1:
-            return 5
-        if s.find("03636649") != -1:
-            return 6
-        if s.find("03691459") != -1:
-            return 7
-        if s.find("04090263") != -1:
-            return 8
-        if s.find("04256520") != -1:
-            return 9
-        if s.find("04379243") != -1:
-            return 10
-        if s.find("04401088") != -1:
-            return 11
-        if s.find("04530566") != -1:
-            return 12
-        assert False, "no label found for shapenet should not happen"
-        return -1
-
-    def get_class_by_name(self, s: str):
-        if s.find("02691156") != -1:
-            return "airplane"
-        if s.find("02828884") != -1:
-            return "bench"
-        if s.find("02933112") != -1:
-            return "closet"
-        if s.find("02958343") != -1:
-            return "car"
-        if s.find("03001627") != -1:
-            return "chair"
-        if s.find("03211117") != -1:
-            return "tv"
-        if s.find("03636649") != -1:
-            return "lamp"
-        if s.find("03691459") != -1:
-            return "stereo"
-        if s.find("04090263") != -1:
-            return "gun"
-        if s.find("04256520") != -1:
-            return "sofa"
-        if s.find("04379243") != -1:
-            return "table"
-        if s.find("04401088") != -1:
-            return "phone"
-        if s.find("04530566") != -1:
-            return "ship"
-        assert False, "no label found for shapenet should not happen"
-        return -1
+                self.mesh_src.append(mesh_src)
+                self.imgs_src.append(img_src)
+                self.voxels_src.append(voxel_src)
+                self.label.append(self.get_class(label))
 
     def __len__(self):
         return len(self.imgs_src)
@@ -301,6 +235,11 @@ class shapeNet_Dataset(Dataset):
             model = torch.from_numpy(read_as_3d_array(binvox_file))
         return img, model, mesh, float(label)
 
+    def get_class(self, s: str):
+        idx = self.category_idx.get(s, -1)
+        assert idx != -1, "no label found for shapenet should not happen"
+        return idx
+
 
 def preparte_shapeNetBatch(num_voxels: int):
     def batch_input(samples: List) -> Batch:
@@ -316,21 +255,36 @@ def preparte_shapeNetBatch(num_voxels: int):
     return batch_input
 
 
-def shapenetDataLoader(dataset: Dataset, batch_size: int, num_voxels: int, num_workers: int):
-    return DataLoader(dataset, batch_size=batch_size, shuffle=True,
-                      num_workers=num_workers,
-                      collate_fn=preparte_shapeNetBatch(num_voxels))
+def dataLoader(dataset: Dataset, batch_size: int, num_voxels: int, num_workers: int, test=False, num_train_samples=None, train_ratio=None):
+    assert (train_ratio is None) or (
+        num_train_samples is None), "at most one of train_ration and num_train_samples can set"
 
+    indices = list(range(len(dataset)))
+    np.random.seed(42)
+    np.random.shuffle(indices)
+    if train_ratio is None and num_train_samples is None:
+        train_ratio = 1.
 
-if __name__ == "__main__":
-    dataset = pix3dDataset("../dataset/pix3d", classes=["bed"])
-    img, _, _, _ = dataset[0]
-    print(img.shape)
-    img = img.transpose(2, 0)
-    print(img.shape)
-    img = img.numpy()
+    if train_ratio != None:
+        assert 0 < train_ratio <= 1.
+        num_train_samples = int(np.floor(len(dataset)*train_ratio))
 
-    import matplotlib.pyplot as plt
+    if num_train_samples != None:
+        assert 0 < num_train_samples <= len(dataset)
+        train_indices = indices[:num_train_samples]
+        test_indices = indices[num_train_samples:]
 
-    plt.imshow(img)
-    plt.show()
+    if test:
+        sampler = SubsetRandomSampler(test_indices)
+    else:
+        sampler = SubsetRandomSampler(train_indices)
+
+    if isinstance(dataset, pix3dDataset):
+        batch_fn = preparte_pix3dBatch
+    else:
+        assert isinstance(dataset, shapeNet_Dataset)
+        batch_fn = preparte_shapeNetBatch
+
+    return DataLoader(dataset, batch_size=batch_size, shuffle=False,
+                      num_workers=num_workers, sampler=sampler,
+                      collate_fn=batch_fn(num_voxels))

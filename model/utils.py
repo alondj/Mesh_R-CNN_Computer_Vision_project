@@ -109,12 +109,12 @@ def dummy(*dims):
 
 
 # ------------------------------------------------------------------------------------------------------
-def filter_pix3d_input(targets, proposals, pix3d_input):
+def filter_ROI_input(targets, backbone_out, featuers):
     filtered_output = []
-    for target, proposal in zip(targets, proposals):
+    for target, proposal, roi_featuers in zip(targets, backbone_out, featuers):
         the_box = target["boxes"]
-        scores = box_iou(the_box, proposal)
+        scores = box_iou(the_box, proposal["boxes"])
         max_idx = torch.argmax(scores, dim=0)[0]
-        filtered_output.append(pix3d_input[max_idx])
+        filtered_output.append(roi_featuers[max_idx])
     filtered_output = torch.stack(filtered_output, dim=0)
     return filtered_output

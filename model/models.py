@@ -18,7 +18,7 @@ from torchvision.models.detection.transform import GeneralizedRCNNTransform
 from torchvision.ops import MultiScaleRoIAlign, RoIAlign
 
 from model.our_roi_head import build_RoI_head
-from model.utils import filter_pix3d_input
+from model.utils import filter_ROI_input
 
 from .layers import (Cubify, ResVertixRefineShapenet, VertixRefinePix3D,
                      VertixRefineShapeNet, VoxelBranch)
@@ -173,13 +173,25 @@ class Pix3DModel(nn.Module):
 
         backbone_out, ROI_features = self.backbone(images, targets)
 
+        # in this part we set the mesh index (how many meshes per image)
+        # and filtering roi_input for training
         if self.training:
-            # TODO handle roi_filtering in train mode
-            pass
+            # backbone returns loss,(ROI_features,detection)
+            if self.backbone.training:
+                ROI_features, detections = ROI_features
+            else:
+                # backbone returns detection,ROI_features
+                detections = backbone_out
+            ROI_features = filter_ROI_input(targets, detections,
+                                            ROI_features)
+            mesh_index = [1 for _ in images]
+            detections = None
+        else:
+            mesh_index = [f.shape[0] for f in ROI_features]
+            ROI_features = torch.cat(ROI_features)
 
-        # TODO set mesh_index to indicate how many meshes per image
-        # TODO revisit the concept of vertices per mesh and mesh per image
-        # concept in vertexAlign and loss functions
+        print(mesh_index)
+        print(ROI_features.shape)
         voxelGrid = self.voxelBranch(ROI_features)
 
         output = dict()
@@ -195,14 +207,15 @@ class Pix3DModel(nn.Module):
         sizes = [i.shape[1:] for i in images]
         vertex_positions1, vertex_features = self.refineStages[0](vertice_index, ROI_features,
                                                                   adj_index, vertex_positions0,
-                                                                  sizes)
+                                                                  sizes, mesh_index=mesh_index)
 
         vertex_positions = [vertex_positions0, vertex_positions1]
 
         for stage in self.refineStages[1:]:
             new_positions, vertex_features = stage(vertice_index, ROI_features,
                                                    adj_index, vertex_positions[-1], sizes,
-                                                   vertex_features=vertex_features)
+                                                   vertex_features=vertex_features,
+                                                   mesh_index=mesh_index)
             vertex_positions.append(new_positions)
 
         output['vertex_positions'] = vertex_positions
@@ -252,7 +265,7 @@ class Pix3DMask_RCNN(MaskRCNN):
         losses.update(detector_losses)
         losses.update(proposal_losses)
         if self.training:
-            return losses, ROI_features
+            return losses, (ROI_features, detections)
 
         return detections, ROI_features
 

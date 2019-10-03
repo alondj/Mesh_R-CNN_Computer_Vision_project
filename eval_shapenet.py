@@ -10,8 +10,8 @@ import torch
 import torch.nn as nn
 import tqdm
 
-from data.dataloader import (shapeNet_Dataset, shapenetDataLoader)
-from model import (ShapeNetModel, pretrained_ResNet50)
+from data.dataloader import shapeNet_Dataset, dataLoader
+from model import ShapeNetModel, pretrained_ResNet50
 from model.loss_functions import batched_mesh_loss, voxel_loss
 from utils import f_score
 
@@ -32,9 +32,8 @@ parser.add_argument("--residual", default=False,
                     action="store_true", help="whether to use residual refinement for ShapeNet")
 
 # dataset/loader arguments
-parser.add_argument('--num_sampels', type=int,
-                    help='number of sampels to dataset', default=None)
-
+parser.add_argument('--test_ratio', type=float,
+                    help='ratio of samples to test', default=1.)
 parser.add_argument('-c', '--classes',
                     help='classes of the exampels in the dataset', type=str, default=None)
 
@@ -66,15 +65,13 @@ model = ShapeNetModel(pretrained_ResNet50(nn.functional.nll_loss,
                       vertex_feature_dim=options.featDim,
                       num_refinement_stages=options.num_refinement_stages)
 
+classes = None
 if options.classes is not None:
     classes = [item for item in options.classes.split(',')]
-    dataset = shapeNet_Dataset(
-        options.dataRoot, options.num_sampels, classes=classes)
-else:
-    dataset = shapeNet_Dataset(options.dataRoot, options.num_sampels)
+dataset = shapeNet_Dataset(options.dataRoot, classes=classes)
 
-testloader = shapenetDataLoader(
-    dataset, batch_size=options.batchSize, num_voxels=48, num_workers=options.workers)
+testloader = dataLoader(dataset, options.batch_size, 48, options.num_workers,
+                        test=True, num_train_samples=None, train_ratio=1-options.train_ratio)
 
 # load checkpoint
 model.load_state_dict(torch.load(options.model_path))

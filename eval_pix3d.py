@@ -3,7 +3,7 @@ import sys
 import torch
 import torch.nn as nn
 import tqdm
-from data.dataloader import (pix3dDataset, pix3dDataLoader)
+from data.dataloader import (pix3dDataset, dataLoader)
 from model import (Pix3DModel, pretrained_MaskRcnn)
 from model.loss_functions import batched_mesh_loss, voxel_loss
 from utils.metrics import f_score, calc_precision_box, calc_precision_mask, mesh_precision_recall
@@ -26,8 +26,8 @@ parser.add_argument("--residual", default=False,
                     action="store_true", help="whether to use residual refinement for ShapeNet")
 
 # dataset/loader arguments
-parser.add_argument('--num_sampels', type=int,
-                    help='number of sampels to dataset', default=None)
+parser.add_argument('--test_ratio', type=float,
+                    help='ratio of samples to test', default=1.)
 
 parser.add_argument('-c', '--classes',
                     help='classes of the exampels in the dataset', type=str, default=None)
@@ -56,15 +56,13 @@ model = Pix3DModel(pretrained_MaskRcnn(num_classes=num_classes, pretrained=False
                    vertex_feature_dim=options.featDim,
                    num_refinement_stages=options.num_refinement_stages)
 
+classes = None
 if options.classes is not None:
     classes = [item for item in options.classes.split(',')]
-    dataset = pix3dDataset(options.dataRoot, options.num_sampels,
-                           classes=classes)
-else:
-    dataset = pix3dDataset(options.dataRoot, options.num_sampels)
+dataset = pix3dDataset(options.dataRoot, classes=classes)
 
-testloader = pix3dDataLoader(dataset, batch_size=options.batchSize,
-                             num_voxels=24, num_workers=options.workers)
+testloader = dataLoader(dataset, options.batch_size, 24, options.num_workers,
+                        test=True, num_train_samples=None, train_ratio=1-options.train_ratio)
 
 # load checkpoint
 model.load_state_dict(torch.load(options.model_path))
@@ -128,9 +126,9 @@ with torch.no_grad():
             )
 
             gt_boxes, gt_labels, gt_masks = get_out_of_dicts(backbone_targets,
-                                                             True)
+                                                             gt_bbox=None)
             boxes, preds, masks = get_out_of_dicts(model_output['backbone'],
-                                                   is_gt=False)
+                                                   gt_bbox=gt_boxes)
 
             # update losses
             losses_and_scores['chamfer'] += chamfer_loss.item()
