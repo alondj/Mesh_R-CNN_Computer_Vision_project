@@ -107,21 +107,27 @@ def get_out_of_dicts(bbo, gt_bbox=None):
 
 
 def get_only_max(max_indexes, voxels, vertex_positions, faces, edge_index, vertice_index, face_index):
-    new_max_indexes = []
+    new_max_indexes_lst = []
     for i in range(0, 3 * len(max_indexes), step=3):
-        new_max_indexes.append(i + max_indexes[i])
-    new_max_indexes = torch.Tensor(new_max_indexes).type(torch.LongTensor)
+        new_max_indexes_lst.append(i + max_indexes[i])
+
+    new_max_indexes = torch.Tensor(new_max_indexes_lst).type(torch.LongTensor)
+
     vertex_positions_return = []
 
     voxels = voxels[new_max_indexes]
 
     for stage in vertex_positions:
-        vertex_positions_return.append(stage[new_max_indexes])
+        stage = stage.split(vertice_index)
+        filtered_stage = [stage[idx] for idx in new_max_indexes_lst]
+        vertex_positions_return.append(filtered_stage)
 
-    faces = faces[new_max_indexes]
-    edge_index = edge_index[new_max_indexes]
-    vertice_index = vertice_index[new_max_indexes]
-    face_index = face_index[new_max_indexes]
+    faces = faces.split(face_index)
+    filtered_faces = [faces[idx] for idx in new_max_indexes_lst]
+    faces = torch.cat(filtered_faces)
+
+    vertice_index = [vertice_index[idx] for idx in new_max_indexes_lst]
+    face_index = [face_index[idx] for idx in new_max_indexes_lst]
 
     return voxels, vertex_positions_return, faces, edge_index, vertice_index, face_index
 
