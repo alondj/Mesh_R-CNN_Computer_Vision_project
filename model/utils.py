@@ -111,7 +111,6 @@ def dummy(*dims):
 
 
 # ------------------------------------------------------------------------------------------------------
-# filters the number of graphes per image
 def filter_featuers(targets, backbone_out, featuers):
     filtered_output = []
     for target, proposal, roi_featuers in zip(targets, backbone_out, featuers):
