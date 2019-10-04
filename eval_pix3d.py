@@ -129,6 +129,8 @@ def get_only_max(max_indexes, voxels, vertex_positions, faces, edge_index, verti
     vertice_index = [vertice_index[idx] for idx in new_max_indexes_lst]
     face_index = [face_index[idx] for idx in new_max_indexes_lst]
 
+    # TODO how to handel the edge_index
+
     return voxels, vertex_positions_return, faces, edge_index, vertice_index, face_index
 
 
