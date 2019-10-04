@@ -7,13 +7,12 @@ import json
 import argparse
 import torch
 from model.layers import Cubify
-from .read_binvox import read_as_3d_array
+from data.read_binvox import read_as_3d_array
 from utils import save_mesh, normalize_mesh
 """
 the dataset should be built like that:
 -dataset
 ----shapeNet
--------ShapeNet_pointclouds
 -------ShapeNetRendering
 -------ShapeNetVox32
 -------ShapeNetMeshes
@@ -82,9 +81,10 @@ def batch(iterable, n=1):
 
 
 def render_shapenet_meshes(download_path):
-    renderer = Cubify(threshold=0.5).to('cuda')
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    renderer = Cubify(threshold=0.5).to(device)
 
-    pathlist = Path(download_path).glob('**/*.binvox')
+    pathlist = list(Path(download_path).glob('**/*.binvox'))
 
     with torch.no_grad():
         # every time render 16 models
@@ -96,7 +96,7 @@ def render_shapenet_meshes(download_path):
                 with open(p, 'rb') as binvox_file:
                     v = torch.from_numpy(read_as_3d_array(binvox_file))
                     voxels.append(v)
-            v_batch = torch.stack(voxels).float().to('cuda')
+            v_batch = torch.stack(voxels).float().to(device)
 
             # render and split again
             vs, v_index, faces, f_index, _ = renderer(v_batch)
@@ -159,11 +159,10 @@ def create_shapenet_Json(directory_str):
         json_obj.append({"img": img_path, "category": category,
                          "voxel": voxel_path, "model": mesh_src})
 
-    with open(f"{directory_str}/shapenet.json", "a+") as f:
+    with open(f"{directory_str}/shapeNet/shapenet.json", "a+") as f:
         json.dump(json_obj, f)
 
 
-# TODO ben verify this works
 def prepare_shapenet(download_path):
     download_shapenet(download_path)
     render_shapenet_meshes(download_path)

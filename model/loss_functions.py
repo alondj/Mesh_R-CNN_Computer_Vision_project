@@ -46,7 +46,7 @@ def voxel_loss(voxel_prediction: Tensor, voxel_gts: Tensor) -> Tensor:
     return loss
 
 
-def batched_mesh_loss(vertex_positions_pred: Tensor, mesh_faces_pred: Tensor, pred_adjacency: Tensor,
+def batched_mesh_loss(vertex_positions_pred: List[Tensor], mesh_faces_pred: Tensor, pred_adjacency: Tensor,
                       vertices_per_sample_pred: List[int], faces_per_sample_pred: List[int],
                       batch: Batch,
                       point_cloud_size: float = 10e3,

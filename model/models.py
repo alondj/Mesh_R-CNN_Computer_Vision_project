@@ -190,8 +190,6 @@ class Pix3DModel(nn.Module):
             mesh_index = [f.shape[0] for f in ROI_features]
             ROI_features = torch.cat(ROI_features)
 
-        print(mesh_index)
-        print(ROI_features.shape)
         voxelGrid = self.voxelBranch(ROI_features)
 
         output = dict()
