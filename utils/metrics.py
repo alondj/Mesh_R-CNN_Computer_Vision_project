@@ -20,12 +20,12 @@ def f_score(confusion: Tensor, beta=1.0):
     should_be_positive = confusion.sum(0)
     total_positive_predicted = confusion.sum(1)
 
-    class_precision = 100*(tp/total_positive_predicted)
-    class_recall = 100*(tp/should_be_positive)
+    class_precision = 100 * (tp / total_positive_predicted)
+    class_recall = 100 * (tp / should_be_positive)
 
-    score = (1+beta**2)*class_precision*class_recall
+    score = (1 + beta ** 2) * class_precision * class_recall
 
-    return score / (1e-8+class_recall+(beta**2)*class_precision)
+    return score / (1e-8 + class_recall + (beta ** 2) * class_precision)
 
 
 def calc_precision_box(boxes, gt_boxes):
