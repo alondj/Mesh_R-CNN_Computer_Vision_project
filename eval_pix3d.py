@@ -119,7 +119,7 @@ def get_only_max(max_indexes, voxels, vertex_positions, faces, edge_index, verti
 
     for stage in vertex_positions:
         stage = stage.split(vertice_index)
-        filtered_stage = [stage[idx] for idx in new_max_indexes_lst]
+        filtered_stage = torch.cat([stage[idx] for idx in new_max_indexes_lst])
         vertex_positions_return.append(filtered_stage)
 
     faces = faces.split(face_index)
