@@ -30,6 +30,8 @@ def download_pix3d(download_path):
     pix3d img,voxel,masks http://pix3d.csail.mit.edu/data/pix3d.zip
     pix3d pointclouds https://drive.google.com/file/d/1RZakyBu9lPbG85SyconBn4sR8r2faInV/view
     """
+    if os.path.exists(f"{download_path}/dataset/pix3d"):
+        return
     os.mkdir(f"{download_path}/dataset")
     url = "http://pix3d.csail.mit.edu/data/pix3d.zip"
     zip_download_path = f"{download_path}/dataset/pix3d.zip"
@@ -49,7 +51,8 @@ def download_shapenet(download_path):
     shapeNet voxel http://cvgl.stanford.edu/data2/ShapeNetVox32.tgz
     shapeNet pointclouds https://drive.google.com/open?id=1cfoe521iTgcB_7-g_98GYAqO553W8Y0g
     """
-
+    if os.path.exists(f"{download_path}/dataset/shapeNet"):
+        return
     print("downloading shapeNet img zip")
     os.mkdir(f"{download_path}/dataset/shapeNet")
     url = "http://cvgl.stanford.edu/data2/ShapeNetRendering.tgz"
@@ -81,11 +84,13 @@ def batch(iterable, n=1):
 
 
 def render_shapenet_meshes(download_path):
+    if os.path.exists(f"{download_path}/dataset/shapeNet/ShapeNetMeshes"):
+        return None
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     renderer = Cubify(threshold=0.5).to(device)
-
-    pathlist = list(Path(download_path).glob('**/*.binvox'))
-
+    print("render start")
+    pathlist = list(Path(f"{download_path}/dataset/shapeNet/ShapeNetVox32").glob('**/*.binvox'))
+    print(len(pathlist))
     with torch.no_grad():
         # every time render 16 models
         for b in batch(pathlist, n=16):
@@ -110,6 +115,8 @@ def render_shapenet_meshes(download_path):
                 v_path = v_path.replace(".binvox", "")
                 Path(v_path).parent.mkdir(parents=True, exist_ok=True)
                 save_mesh(normalize_mesh(v), f, v_path)
+    print("render done")
+    return pathlist
 
 
 def get_shapenet_class_by_name(s: str):
@@ -143,10 +150,15 @@ def get_shapenet_class_by_name(s: str):
     return -1
 
 
-def create_shapenet_Json(directory_str):
+def create_shapenet_Json(directory_str,pathlist):
     json_obj = []
-    pathlist = Path(directory_str).glob('**/*.binvox')
+    if os.path.exists(f"{directory_str}/dataset/shapeNet/shapenet.json"):
+        return
+    if pathlist is None:
+        pathlist=list(Path(f"{download_path}/dataset/shapeNet/ShapeNetVox32").glob('**/*.binvox'))
 
+    print(f"{directory_str}/dataset/shapeNet/shapenet.json")
+    print("creating json")
     for path in pathlist:
         voxel_path = str(path)
         mesh_src = voxel_path.replace(
@@ -159,14 +171,14 @@ def create_shapenet_Json(directory_str):
         json_obj.append({"img": img_path, "category": category,
                          "voxel": voxel_path, "model": mesh_src})
 
-    with open(f"{directory_str}/shapeNet/shapenet.json", "a+") as f:
+    with open(f"{directory_str}/dataset/shapeNet/shapenet.json", "a+") as f:
         json.dump(json_obj, f)
-
+    print("json done")
 
 def prepare_shapenet(download_path):
     download_shapenet(download_path)
-    render_shapenet_meshes(download_path)
-    create_shapenet_Json(download_path)
+    pathlist=render_shapenet_meshes(download_path)
+    create_shapenet_Json(download_path,pathlist)
 
 
 parser = argparse.ArgumentParser()

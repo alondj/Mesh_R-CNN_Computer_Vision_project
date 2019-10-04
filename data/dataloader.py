@@ -205,9 +205,9 @@ class shapeNet_Dataset(Dataset):
             for p in dataset:
                 if classes is not None and p['category'] not in classes:
                     continue
-                img_src = f"{dataset_path}/{p['img']}"
-                voxel_src = f"{dataset_path}/{p['voxel']}"
-                mesh_src = f"{dataset_path}/{p['model']}"
+                img_src = p['img']
+                voxel_src = p['voxel']
+                mesh_src = p['model']
                 label = p['category']
 
                 self.mesh_src.append(mesh_src)
@@ -258,7 +258,7 @@ def preparte_shapeNetBatch(num_voxels: int):
 def dataLoader(dataset: Dataset, batch_size: int, num_voxels: int, num_workers: int, test=False, num_train_samples=None,
                train_ratio=None):
     assert (train_ratio is None) or (
-            num_train_samples is None), "at most one of train_ration and num_train_samples can set"
+        num_train_samples is None), "at most one of train_ration and num_train_samples can set"
 
     indices = list(range(len(dataset)))
     np.random.seed(42)
