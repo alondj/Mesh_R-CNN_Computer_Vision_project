@@ -49,17 +49,20 @@ class ModifiedRoIHead(RoIHeads):
 
             # remove low scoring boxes
             inds = torch.nonzero(scores > self.score_thresh).squeeze(1)
-            boxes, scores, labels, box_keep_idxs = boxes[inds], scores[inds], labels[inds], box_keep_idxs[inds]
+            if boxes[inds].shape[0] > 0:
+                boxes, scores, labels, box_keep_idxs = boxes[inds], scores[inds], labels[inds], box_keep_idxs[inds]
 
             # remove empty boxes
             keep = box_ops.remove_small_boxes(boxes, min_size=1e-2)
-            boxes, scores, labels, box_keep_idxs = boxes[keep], scores[keep], labels[keep], box_keep_idxs[keep]
+            if boxes[keep].shape[0] > 0:
+                boxes, scores, labels, box_keep_idxs = boxes[keep], scores[keep], labels[keep], box_keep_idxs[keep]
 
             # non-maximum suppression, independently done per class
             keep = box_ops.batched_nms(boxes, scores, labels, self.nms_thresh)
             # keep only topk scoring predictions
             keep = keep[:self.detections_per_img]
-            boxes, scores, labels, box_keep_idxs = boxes[keep], scores[keep], labels[keep], box_keep_idxs[keep]
+            if boxes[keep].shape[0] > 0:
+                boxes, scores, labels, box_keep_idxs = boxes[keep], scores[keep], labels[keep], box_keep_idxs[keep]
 
             all_boxes.append(boxes)
             all_scores.append(scores)
@@ -67,7 +70,6 @@ class ModifiedRoIHead(RoIHeads):
 
             feature_indices = box_keep_idxs / (num_classes-1)
             all_features.append(features[feature_indices])
-
         return all_boxes, all_scores, all_labels, all_features
 
     def forward(self, features, proposals, image_shapes, targets=None):
