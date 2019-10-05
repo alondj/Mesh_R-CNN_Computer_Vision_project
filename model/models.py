@@ -60,7 +60,6 @@ class ShapeNetModel(nn.Module):
                                  mode='bilinear', align_corners=True)
 
         voxelGrid = self.voxelBranch(upscaled)
-
         output = dict()
         output['voxels'] = voxelGrid
         output['backbone'] = backbone_out
@@ -68,19 +67,21 @@ class ShapeNetModel(nn.Module):
         if self.voxel_only:
             return output
 
+        mesh_index = [1 for _ in images]
         vertex_positions0, vertice_index, faces, face_index, adj_index = self.cubify(
             voxelGrid)
 
         vertex_positions1, vertex_features = self.refineStages[0](vertice_index, feature_maps,
                                                                   adj_index, vertex_positions0,
-                                                                  sizes)
+                                                                  sizes, mesh_index=mesh_index)
 
         vertex_positions = [vertex_positions0, vertex_positions1]
 
         for stage in self.refineStages[1:]:
             new_positions, vertex_features = stage(vertice_index, feature_maps,
                                                    adj_index, vertex_positions[-1],
-                                                   sizes, vertex_features=vertex_features)
+                                                   sizes, mesh_index=mesh_index,
+                                                   vertex_features=vertex_features)
             vertex_positions.append(new_positions)
 
         output['vertex_positions'] = vertex_positions
@@ -88,6 +89,7 @@ class ShapeNetModel(nn.Module):
         output['face_index'] = face_index
         output['vertice_index'] = vertice_index
         output['faces'] = faces
+        output['mesh_index'] = mesh_index
 
         return output
 
@@ -221,6 +223,7 @@ class Pix3DModel(nn.Module):
         output['face_index'] = face_index
         output['vertice_index'] = vertice_index
         output['faces'] = faces
+        output['mesh_index'] = mesh_index
 
         return output
 
