@@ -8,6 +8,8 @@ from model import (Pix3DModel, pretrained_MaskRcnn)
 from model.loss_functions import batched_mesh_loss, voxel_loss
 from utils.metrics import f_score, calc_precision_box, calc_precision_mask, mesh_precision_recall
 from torchvision.ops.boxes import box_iou
+import numpy as np
+import copy
 
 assert torch.cuda.is_available(), "the training process is slow and requires gpu"
 
@@ -106,12 +108,14 @@ def get_out_of_dicts(bbo, gt_bbox=None):
     return boxes, labels, masks, max_indexes
 
 
-def get_only_max(max_indexes, voxels, vertex_positions, faces, edge_index, vertice_index, face_index):
+def get_only_max(max_indexes, voxels, vertex_positions, faces, vertice_index, face_index):
     new_max_indexes_lst = []
     for i in range(0, 3 * len(max_indexes), step=3):
         new_max_indexes_lst.append(i + max_indexes[i])
 
     new_max_indexes = torch.Tensor(new_max_indexes_lst).type(torch.LongTensor)
+
+    old_offset = np.cumsum(vertice_index) - vertice_index
 
     vertex_positions_return = []
 
@@ -123,15 +127,22 @@ def get_only_max(max_indexes, voxels, vertex_positions, faces, edge_index, verti
         vertex_positions_return.append(filtered_stage)
 
     faces = faces.split(face_index)
+    faces = [f + off for f, off in zip(faces, old_offset)]
     filtered_faces = [faces[idx] for idx in new_max_indexes_lst]
     faces = torch.cat(filtered_faces)
 
     vertice_index = [vertice_index[idx] for idx in new_max_indexes_lst]
     face_index = [face_index[idx] for idx in new_max_indexes_lst]
 
-    # TODO how to handel the edge_index
+    faces_t = faces.t()
+    idx_i, idx_j = torch.cat([faces_t[:2], faces_t[1:], faces_t[::2]], dim=1)
+    idx_i, idx_j = torch.cat([idx_i, idx_j], dim=0), torch.cat([idx_j, idx_i], dim=0)
+    adj_index = torch.stack([idx_i, idx_j], dim=0).unique(dim=1)
 
-    return voxels, vertex_positions_return, faces, edge_index, vertice_index, face_index
+    new_offset = np.cumsum(vertice_index) - vertice_index
+    faces = torch.cat([f - off for f, off in zip(faces.split(face_index), new_offset)])
+
+    return voxels, vertex_positions_return, faces, adj_index, vertice_index, face_index
 
 
 confusion_matrix = torch.zeros(num_classes, num_classes)
@@ -151,8 +162,7 @@ with torch.no_grad():
             voxels, vertex_positions, faces, \
             edge_index, vertice_index, face_index = \
                 get_only_max(max_indexes, model_output['voxels'], model_output['vertex_positions'],
-                             model_output['faces'],
-                             model_output['edge_index'], model_output['vertice_index'], model_output['face_index'])
+                             model_output['faces'], model_output['vertice_index'], model_output['face_index'])
 
             vxl_loss = voxel_loss(voxels, voxel_gts)
             chamfer_loss, normal_loss, edge_loss = batched_mesh_loss(
