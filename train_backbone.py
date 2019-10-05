@@ -26,7 +26,7 @@ parser.add_argument('--backbone_path', '-bp', type=str, default='',
 # dataset/loader arguments
 parser.add_argument('--num_sampels', type=int,
                     help='number of sampels to dataset', default=None)
-parser.add_argument('--train_ration', type=float, help='ration of samples used for training',
+parser.add_argument('--train_ratio', type=float, help='ration of samples used for training',
                     default=None)
 parser.add_argument(
     '-c', '--classes', help='classes of the exampels in the dataset', type=str, default=None)
@@ -93,7 +93,7 @@ else:
 dataset = dataset_cls(options.dataRoot, classes=classes)
 trainloader = dataLoader(dataset, options.batchSize, num_voxels=num_voxels,
                          num_workers=options.workers,
-                         num_train_samples=options.num_samples,
+                         num_train_samples=options.num_sampels,
                          train_ratio=options.train_ratio)
 
 if options.backbone_path != '':
