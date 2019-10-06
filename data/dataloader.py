@@ -87,6 +87,10 @@ class pix3dDataset(Dataset):
                 mask_src = f"{dataset_path}/{p['mask']}"
                 label = p['category']
 
+                # only rgb images with 3 channles
+                img = torch.from_numpy(mpimg.imread(img_src))
+                if img.ndim != 3 or img.shape[2] != 3:
+                    continue
                 self.mesh_src.append(mesh_src)
                 self.imgs_src.append(img_src)
                 self.voxels_src.append(voxel_src)
@@ -110,15 +114,15 @@ class pix3dDataset(Dataset):
         bbox = self.bbox[idx]
         label = torch.tensor(self.Class[idx]).unsqueeze(0)
         img = torch.from_numpy(mpimg.imread(img_src))
-        if len(img.shape) == 3:
-            img = img.permute(2, 1, 0)
-        else:
-            img = img.unsqueeze(0)
+        img = img.permute(2, 1, 0)
         img = img.type(torch.FloatTensor)
+        # normalize to 0-1
+        if img.max() > 1.:
+            img = img / 255.
         model = load_voxels(voxel_src, tensor=True)
         mesh = load_mesh(mesh_src, tensor=True)
-        mask = torch.from_numpy(mpimg.imread(masks_src)).unsqueeze(0)
-
+        mask = torch.from_numpy(mpimg.imread(
+            masks_src)).unsqueeze(0).permute(0, 2, 1)
         target = pix3DTarget({'masks': mask, 'boxes': bbox, 'labels': label})
         return img, model, mesh, target
 
