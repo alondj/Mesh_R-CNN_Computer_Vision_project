@@ -102,8 +102,8 @@ def get_out_of_dicts(bbo, gt_bbox=None):
             max_box, max_idx = get_max_box(dic['boxes'], gt_box)
             max_indexes.append(max_idx)
             boxes.append(max_box)
-            labels.append(dic['labels'][0])
-            masks.append(dic['mask'])
+            labels.append(dic['labels'][max_idx][0])
+            masks.append(dic['masks'][max_idx])
 
     return boxes, labels, masks, max_indexes
 
@@ -136,11 +136,13 @@ def get_only_max(max_indexes, voxels, vertex_positions, faces, vertice_index, fa
 
     faces_t = faces.t()
     idx_i, idx_j = torch.cat([faces_t[:2], faces_t[1:], faces_t[::2]], dim=1)
-    idx_i, idx_j = torch.cat([idx_i, idx_j], dim=0), torch.cat([idx_j, idx_i], dim=0)
+    idx_i, idx_j = torch.cat([idx_i, idx_j], dim=0), torch.cat(
+        [idx_j, idx_i], dim=0)
     adj_index = torch.stack([idx_i, idx_j], dim=0).unique(dim=1)
 
     new_offset = np.cumsum(vertice_index) - vertice_index
-    faces = torch.cat([f - off for f, off in zip(faces.split(face_index), new_offset)])
+    faces = torch.cat(
+        [f - off for f, off in zip(faces.split(face_index), new_offset)])
 
     return voxels, vertex_positions_return, faces, adj_index, vertice_index, face_index
 
@@ -153,16 +155,21 @@ with torch.no_grad():
             images, backbone_targets = batch.images, batch.targets
             voxel_gts = batch.voxels
 
+            gt_boxes, gt_labels, gt_masks, _ = get_out_of_dicts(backbone_targets,
+                                                                gt_bbox=None)
+
             # predict and comput loss
             model_output = model(images, backbone_targets)
 
-            gt_boxes, gt_labels, gt_masks, _ = get_out_of_dicts(backbone_targets, gt_bbox=None)
-            boxes, preds, masks, max_indexes = get_out_of_dicts(model_output['backbone'], gt_bbox=gt_boxes)
+            boxes, preds, masks, max_indexes = get_out_of_dicts(model_output['backbone'],
+                                                                gt_bbox=gt_boxes)
 
-            voxels, vertex_positions, faces, \
-            edge_index, vertice_index, face_index = \
-                get_only_max(max_indexes, model_output['voxels'], model_output['vertex_positions'],
-                             model_output['faces'], model_output['vertice_index'], model_output['face_index'])
+            pred = get_only_max(max_indexes, model_output['voxels'],
+                                model_output['vertex_positions'],
+                                model_output['faces'], model_output['vertice_index'],
+                                model_output['face_index'])
+
+            voxels, vertex_positions, faces, edge_index, vertice_index, face_index = pred
 
             vxl_loss = voxel_loss(voxels, voxel_gts)
             chamfer_loss, normal_loss, edge_loss = batched_mesh_loss(

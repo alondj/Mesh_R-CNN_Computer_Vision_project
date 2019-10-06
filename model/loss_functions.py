@@ -206,7 +206,7 @@ def compute_normals(pt: Tensor, p2p_distance: Tensor, k: int = 10) -> Tensor:
 #  normalizes as a whole and not per sample
 def total_edge_length(p2p_distance: Tensor, vertex_adjacency: Tensor,) -> Tensor:
     ''' compute the edge loss as denoted by L(V,E) =1/|E| * ∑(v,v′)∈E ‖v−v′‖^2\n
-        vertex_adjacency can be many adjacency matrices stacked together in block diagonal format
+        vertex_adjacency is in COO format
     '''
     # we mask only (v,v′)∈E
     masked_p2p_distance = p2p_distance[vertex_adjacency[0],

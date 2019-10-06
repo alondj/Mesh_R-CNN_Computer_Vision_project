@@ -42,8 +42,7 @@ class GraphConv(nn.Module):
         # note that vertex_features is the concatination of all feature matrices of the batch
         # along the vertex dimension (we stack them vertically)
 
-        # note that vertex_adjacency is a block diagonal matrix containing all adjacency matrices of the batch
-        # as block on the diagonal and all off diagonal blocks are zero blocks
+        # note that vertex_adjacency is in coo format of occupied indices in the adj matrix
 
         # ∑VxIn @ InxOut => ∑VxOut
         w0_features = torch.mm(vertex_features, self.w0)
@@ -83,9 +82,6 @@ class ResGraphConv(nn.Module):
     def forward(self, vertex_features: Tensor, vertex_adjacency: Tensor) -> Tensor:
          # note that vertex_features is the concatination of all feature matrices of the batch
         # along the vertex dimension (we stack them vertically)
-
-        # note that vertex_adjacency is a block diagonal matrix containing all adjacency matrices of the batch
-        # as block on the diagonal and all off diagonal blocks are zero blocks
 
         # ∑VxIn @ InxOut => ∑VxOut
         skip = self.projection(vertex_features)
@@ -136,8 +132,7 @@ class ResVertixRefineShapenet(nn.Module):
         # note that vertex_positions is the concatination of all position matrices of the batch
         # along the vertex dimension (we stack them vertically)
 
-        # note that vertex_adjacency is a block diagonal matrix containing all adjacency matrices of the batch
-        # as block on the diagonal and all off diagonal blocks are zero blocks
+        # note that vertex_adjacency is in sparse COO format of occupied indices in the adj matrix
 
         # note that the conv_feature are batched NxCxHxW
 
@@ -214,8 +209,7 @@ class VertixRefineShapeNet(nn.Module):
         # note that vertex_positions is the concatination of all position matrices of the batch
         # along the vertex dimension (we stack them vertically)
 
-        # note that vertex_adjacency is a block diagonal matrix containing all adjacency matrices of the batch
-        # as block on the diagonal and all off diagonal blocks are zero blocks
+        # note that vertex_adjacency is in sparse COO format of occupied indices in the adj matrix
 
         # note that the conv_feature are batched NxCxHxW
 
@@ -297,8 +291,7 @@ class VertixRefinePix3D(nn.Module):
         # note that vertex_positions is the concatination of all position matrices of the batch
         # along the vertex dimension (we stack them vertically)
 
-        # note that vertex_adjacency is a block diagonal matrix containing all adjacency matrices of the batch
-        # as block on the diagonal and all off diagonal blocks are zero blocks
+        # note that vertex_adjacency is in sparse COO format of occupied indices in the adj matrix
 
         # note that the back_bone_features are batched NxCxHxW
         if mesh_index is None:
