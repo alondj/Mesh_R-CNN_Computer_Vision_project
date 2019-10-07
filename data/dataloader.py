@@ -88,8 +88,11 @@ class pix3dDataset(Dataset):
                 label = p['category']
 
                 # only rgb images with 3 channles
-                img = torch.from_numpy(mpimg.imread(img_src))
-                if img.ndim != 3 or img.shape[2] != 3:
+                try:
+                    img = torch.from_numpy(mpimg.imread(img_src))
+                    if img.ndim != 3 or img.shape[2] != 3:
+                        continue
+                except Exception as _:
                     continue
                 self.mesh_src.append(mesh_src)
                 self.imgs_src.append(img_src)
@@ -214,6 +217,12 @@ class shapeNet_Dataset(Dataset):
                 mesh_src = p['model']
                 label = p['category']
 
+                try:
+                    rgba_image = PIL.Image.open(img_src)
+                    rgb_image = rgba_image.convert('RGB')
+                except Exception as _:
+                    continue
+
                 self.mesh_src.append(mesh_src)
                 self.imgs_src.append(img_src)
                 self.voxels_src.append(voxel_src)
@@ -266,7 +275,7 @@ def preparte_shapeNetBatch(num_voxels: int):
 def dataLoader(dataset: Dataset, batch_size: int, num_voxels: int, num_workers: int, test=False, num_train_samples=None,
                train_ratio=None):
     assert (train_ratio is None) or (
-            num_train_samples is None), "at most one of train_ration and num_train_samples can set"
+        num_train_samples is None), "at most one of train_ration and num_train_samples can set"
 
     indices = list(range(len(dataset)))
     np.random.seed(42)
