@@ -124,7 +124,7 @@ class ResVertixRefineShapenet(nn.Module):
     def forward(self, vertice_index: List[int], img_feature_maps: List[Tensor],
                 vertex_adjacency: Tensor, vertex_positions: Tensor,
                 image_sizes: List, vertex_features: Optional[Tensor] = None,
-                meshes_index: List[int] = None) -> Tuple[Tensor, Tensor]:
+                mesh_index: List[int] = None) -> Tuple[Tensor, Tensor]:
 
         # note that vertex_features is the concatination of all feature matrices of the batch
         # along the vertex dimension (we stack them vertically)
@@ -137,13 +137,13 @@ class ResVertixRefineShapenet(nn.Module):
         # note that the conv_feature are batched NxCxHxW
 
         # unless specified otherwise only one mesh per image
-        if meshes_index is None:
-            meshes_index = [1 for _ in image_sizes]
+        if mesh_index is None:
+            mesh_index = [1 for _ in image_sizes]
 
         # project the 3D mesh to the 2D feature planes and pool new features
         # ∑Vx3840
         aligned_vertices = self.vertAlign(img_feature_maps, vertex_positions,
-                                          vertice_index, image_sizes, meshes_index)
+                                          vertice_index, image_sizes, mesh_index)
 
         # ∑Vx128
         projected = self.linear(aligned_vertices)
@@ -200,7 +200,7 @@ class VertixRefineShapeNet(nn.Module):
 
     def forward(self, vertice_index: List[int], img_feature_maps: List[Tensor],
                 vertex_adjacency: Tensor, vertex_positions: Tensor,
-                image_sizes: List, meshes_index: List[int] = None,
+                image_sizes: List, mesh_index: List[int] = None,
                 vertex_features: Optional[Tensor] = None) -> Tuple[Tensor, Tensor]:
 
         # note that vertex_features is the concatination of all feature matrices of the batch
@@ -213,13 +213,13 @@ class VertixRefineShapeNet(nn.Module):
 
         # note that the conv_feature are batched NxCxHxW
 
-        if meshes_index is None:
-            meshes_index = [1 for _ in image_sizes]
+        if mesh_index is None:
+            mesh_index = [1 for _ in image_sizes]
 
         # project the 3D mesh to the 2D feature planes and pool new features
         # ∑Vx3840
         aligned_vertices = self.vertAlign(img_feature_maps, vertex_positions,
-                                          vertice_index, image_sizes, meshes_index)
+                                          vertice_index, image_sizes, mesh_index)
         # ∑Vx128
         projected = self.linear0(aligned_vertices)
 
