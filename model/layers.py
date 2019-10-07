@@ -429,8 +429,9 @@ class Cubify(nn.Module):
         # Vx4
         vs = torch.cat(vs)
 
-        # if we have no vertices then error
-        assert len(vs) > 0
+        # if we have no vertices then error ugly hack
+        if len(vs) == 0:
+            raise ValueError("empty grid")
 
         # order by batch
         vs = vs[vs[:, 0].argsort()]

@@ -205,24 +205,27 @@ for epoch in range(epochs):
             images, backbone_targets = batch.images, batch.targets
             voxel_gts = batch.voxels
             # predict and comput loss
-            output = model(images, backbone_targets)
+            try:
+                output = model(images, backbone_targets)
 
-            loss = total_loss(loss_weights, output,
-                              voxel_gts, batch,
-                              train_backbone=options.train_backbone,
-                              backbone_type=model_name)
+                loss = total_loss(loss_weights, output,
+                                  voxel_gts, batch,
+                                  train_backbone=options.train_backbone,
+                                  backbone_type=model_name)
 
-            loss.backward()
-            optimizer.step()
+                loss.backward()
+                optimizer.step()
 
-            epoch_loss.append(loss.item())
-            pbar.update()
-            avg_loss = np.mean(epoch_loss)
+                epoch_loss.append(loss.item())
+                pbar.update()
+                avg_loss = np.mean(epoch_loss)
 
-            # prediodic loss updates
-            if (i + 1) % 128 == 0:
-                print(f"Epoch {epoch+1} batch {i+1}")
-                print(f"avg loss for this epoch sor far {avg_loss:.2f}")
+                # prediodic loss updates
+                if (i + 1) % 128 == 0:
+                    print(f"Epoch {epoch+1} batch {i+1}")
+                    print(f"avg loss for this epoch sor far {avg_loss:.2f}")
+            except Exception as _:
+                continue
 
     # epoch ended
     losses.append(epoch_loss)

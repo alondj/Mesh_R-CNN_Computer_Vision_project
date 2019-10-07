@@ -135,27 +135,28 @@ for epoch in range(epochs):
 
             batch = batch.to(devices[0])
             images, backbone_targets = batch.images, batch.targets
+            try:
+                # predict and comput loss
+                out = model(images, backbone_targets)
 
-            # predict and comput loss
-            out = model(images, backbone_targets)
+                if options.model == 'ShapeNet':
+                    loss = out[0]
+                else:
+                    loss = sum(out[0].values())
 
-            if options.model == 'ShapeNet':
-                loss = out[0]
-            else:
-                loss = sum(out[0].values())
+                loss.backward()
+                optimizer.step()
 
-            loss.backward()
-            optimizer.step()
+                epoch_loss.append(loss.item())
+                pbar.update()
+                avg_loss = np.mean(epoch_loss)
 
-            epoch_loss.append(loss.item())
-            pbar.update()
-            avg_loss = np.mean(epoch_loss)
-
-            # prediodic loss updates
-            if (i + 1) % 128 == 0:
-                print(f"Epoch {epoch+1} batch {i+1}")
-                print(f"avg loss for this epoch sor far {avg_loss:.2f}")
-
+                # prediodic loss updates
+                if (i + 1) % 128 == 0:
+                    print(f"Epoch {epoch+1} batch {i+1}")
+                    print(f"avg loss for this epoch sor far {avg_loss:.2f}")
+            except Exception as _:
+                continue
     # epoch ended
     losses.append(epoch_loss)
     print(
