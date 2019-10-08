@@ -114,7 +114,7 @@ def filter_ROI_input(targets, backbone_out, featuers):
     for target, proposal, roi_featuers in zip(targets, backbone_out, featuers):
         the_box = target["boxes"]
         scores = box_iou(the_box, proposal["boxes"])
-        max_idx = torch.argmax(scores, dim=0)[0]
+        max_idx = torch.argmax(scores, dim=1)[0]
         filtered_output.append(roi_featuers[max_idx])
     filtered_output = torch.stack(filtered_output, dim=0)
     return filtered_output
