@@ -12,7 +12,7 @@ from torch.optim import SGD, Adam
 
 from data.dataloader import pix3dDataset, shapeNet_Dataset, dataLoader
 from model import pretrained_MaskRcnn, pretrained_ResNet50
-
+from parallel import CustomDP
 assert torch.cuda.is_available(), "the training process is slow and requires gpu"
 
 parser = argparse.ArgumentParser()
@@ -100,9 +100,9 @@ if options.backbone_path != '':
     model.load_state_dict(torch.load(options.backbone_path))
 
 # use data parallel if possible
-# TODO i do not know if it will work for mask rcnn
+# TODO need to check
 if len(devices) > 1:
-    model = nn.DataParallel(model)
+    model = CustomDP(model, is_backbone=True, pix3d=(options.model == 'Pix3D'))
 
 model: nn.Module = model.to(devices[0])
 
@@ -169,6 +169,10 @@ for epoch in range(epochs):
 
     # for eg checkpoints/ShapeNet/backbone/date/model_1.pth
     file_name = f"model_{epoch}.pth"
-    torch.save(model.state_dict(), os.path.join(dir_name, file_name))
+    try:
+        state_dict = model.module.state_dict()
+    except AttributeError:
+        state_dict = model.state_dict()
+    torch.save(state_dict, os.path.join(dir_name, file_name))
 
 print(f"backbone training done avg loss {np.mean(losses)}")

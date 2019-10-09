@@ -10,6 +10,7 @@ from utils.metrics import f_score, calc_precision_box, calc_precision_mask, mesh
 from torchvision.ops.boxes import box_iou
 import numpy as np
 import copy
+from parallel import CustomDP
 
 assert torch.cuda.is_available(), "the training process is slow and requires gpu"
 
@@ -48,7 +49,7 @@ devices = [torch.device('cuda', i)
            for i in range(torch.cuda.device_count())]
 
 # print header
-model_name = options.model
+model_name = 'Pix3D'
 
 gpus = [torch.cuda.get_device_name(device) for device in devices]
 
@@ -70,7 +71,7 @@ testloader = dataLoader(dataset, options.batch_size, 24, options.num_workers,
 model.load_state_dict(torch.load(options.model_path))
 
 if len(devices) > 1:
-    model = nn.DataParallel(model)
+    model = CustomDP(model, is_backbone=False, pix3d=True)
 
 model: nn.Module = model.to(devices[0]).eval()
 

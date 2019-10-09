@@ -15,6 +15,8 @@ from data.dataloader import pix3dDataset, shapeNet_Dataset, dataLoader
 from model import (Pix3DModel, ShapeNetModel, pretrained_MaskRcnn,
                    pretrained_ResNet50, total_loss)
 
+from parallel import CustomDP
+
 assert torch.cuda.is_available(), "the training process is slow and requires gpu"
 
 parser = argparse.ArgumentParser()
@@ -158,9 +160,9 @@ else:
     model.backbone.eval()
 
 # use data parallel if possible
-# TODO i do not know if it will work for mask rcnn
+# TODO need to check if works
 if len(devices) > 1:
-    model = nn.DataParallel(model)
+    model = CustomDP(model, is_backbone=False, pix3d=(model_name == 'Pix3d'))
 
 model: nn.Module = model.to(devices[0])
 
@@ -207,7 +209,12 @@ for epoch in range(epochs):
                 for k, v in output:
                     w = loss_weights.get(k, 0.)
                     if w != 0.:
-                        loss += v*w
+                        if k != 'backbone_loss':
+                            loss += v*w
+                        elif model_name == 'Pix3d':
+                            loss += (sum(v.values())*w)
+                        else:
+                            loss += v*w
 
                 loss.backward()
                 optimizer.step()
@@ -233,7 +240,11 @@ for epoch in range(epochs):
     print('saving net...')
     # for eg checkpoints/Pix3D/date/model_{1}.pth
     file_name = f"model_{epoch}.pth"
-    torch.save(model.state_dict(),
+    try:
+        state_dict = model.module.state_dict()
+    except AttributeError:
+        state_dict = model.state_dict()
+    torch.save(state_dict,
                os.path.join(GCN_path, file_name))
 
 print(f"training done avg loss {np.mean(losses)}")

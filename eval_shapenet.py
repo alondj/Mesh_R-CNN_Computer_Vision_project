@@ -14,6 +14,7 @@ from data.dataloader import shapeNet_Dataset, dataLoader
 from model import ShapeNetModel, pretrained_ResNet50
 from model.loss_functions import batched_mesh_loss, voxel_loss
 from utils import f_score
+from parallel import CustomDP
 
 assert torch.cuda.is_available(), "the training process is slow and requires gpu"
 
@@ -51,7 +52,7 @@ devices = [torch.device('cuda', i)
            for i in range(torch.cuda.device_count())]
 
 # print header
-model_name = options.model
+model_name = 'ShapeNet'
 
 gpus = [torch.cuda.get_device_name(device) for device in devices]
 
@@ -77,7 +78,7 @@ testloader = dataLoader(dataset, options.batch_size, 48, options.num_workers,
 model.load_state_dict(torch.load(options.model_path))
 
 if len(devices) > 1:
-    model = nn.DataParallel(model)
+    model = CustomDP(model, is_backbone=False, pix3d=False)
 
 model: nn.Module = model.to(devices[0]).eval()
 

@@ -214,7 +214,7 @@ class Pix3DModel(nn.Module):
 
         output = dict()
         if self.training and self.backbone.training:
-            output['backbone_loss'] = sum(backbone_out.values())
+            output['backbone_loss'] = backbone_out
         elif not self.training:
             assert not self.backbone.training
             output['backbone'] = backbone_out
