@@ -175,11 +175,11 @@ else:
     # linearly increasing the learning rate from 0.002 to 0.02 over the first 1K iterations,
 
 # loss weights
-loss_weights = {'c': options.chamfer,
-                'v': options.voxel,
-                'n': options.normal,
-                'e': options.edge,
-                'b': options.backbone
+loss_weights = {'chamfer_loss': options.chamfer,
+                'voxel_loss': options.voxel,
+                'normal_loss': options.normal,
+                'edge_loss': options.edge,
+                'backbone_loss': options.backbone
                 }
 
 # checkpoint directories
@@ -203,25 +203,25 @@ for epoch in range(epochs):
             # predict and comput loss
             try:
                 output = model(batch.images, batch)
-
-                loss = total_loss(loss_weights, output,
-                                  voxel_gts, batch,
-                                  train_backbone=options.train_backbone,
-                                  backbone_type=model_name)
+                loss = torch.zeros(1).to(devices[0])
+                for k, v in output:
+                    w = loss_weights.get(k, 0.)
+                    if w != 0.:
+                        loss += v*w
 
                 loss.backward()
                 optimizer.step()
 
                 epoch_loss.append(loss.item())
-                pbar.update()
-                avg_loss = np.mean(epoch_loss)
-
-                # prediodic loss updates
-                if (i + 1) % 128 == 0:
-                    print(f"Epoch {epoch+1} batch {i+1}")
-                    print(f"avg loss for this epoch sor far {avg_loss:.2f}")
             except Exception as _:
-                continue
+                pass
+            pbar.update()
+            avg_loss = np.mean(epoch_loss)
+
+            # periodic loss updates
+            if (i + 1) % 128 == 0:
+                print(f"Epoch {epoch+1} batch {i+1}")
+                print(f"avg loss for this epoch sor far {avg_loss:.2f}")
 
     # epoch ended
     losses.append(epoch_loss)

@@ -148,15 +148,17 @@ for epoch in range(epochs):
                 optimizer.step()
 
                 epoch_loss.append(loss.item())
-                pbar.update()
-                avg_loss = np.mean(epoch_loss)
-
-                # prediodic loss updates
-                if (i + 1) % 128 == 0:
-                    print(f"Epoch {epoch+1} batch {i+1}")
-                    print(f"avg loss for this epoch sor far {avg_loss:.2f}")
             except Exception as _:
-                continue
+                pass
+
+            pbar.update()
+            avg_loss = np.mean(epoch_loss)
+
+            # prediodic loss updates
+            if (i + 1) % 128 == 0:
+                print(f"Epoch {epoch+1} batch {i+1}")
+                print(f"avg loss for this epoch sor far {avg_loss:.2f}")
+
     # epoch ended
     losses.append(epoch_loss)
     print(
