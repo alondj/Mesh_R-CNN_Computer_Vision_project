@@ -3,6 +3,8 @@ import torch.nn as nn
 from parallel.scatter import custom_scatter
 from parallel.gather import pix3d_backbone_gather, pix3d_gather, shapenet_backbone_gather, shapenet_gather
 from data.dataloader import Batch
+from itertools import chain
+from torchvision.models.detection._utils
 
 
 class CustomDP(nn.Module):
@@ -41,6 +43,15 @@ class CustomDP(nn.Module):
 
         replicas = nn.parallel.replicate(self.model,
                                          self.device_ids[:len(inputs)])
+        for r, i in zip(replicas, inputs):
+            device = list(r.parameters())[0].device
+
+            for t in chain(r.parameters(), r.buffers()):
+                assert t.device == device
+
+            for im in i[0]:
+                assert im.device == device
+
         outputs = nn.parallel.parallel_apply(replicas, inputs)
         if self.is_backbone:
             return self.gather(outputs, self.output_device, train=self.model.training)

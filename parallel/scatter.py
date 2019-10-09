@@ -23,6 +23,7 @@ def custom_scatter(images, targets=None, target_gpus=None):
 
     data = []
     for imgs, trgts, device in zip(divided_imgs, divided_trgts, target_gpus):
+        print(device)
         imgs = [img.to(device) for img in imgs]
         if trgts:
             trgts = trgts.to(device)
