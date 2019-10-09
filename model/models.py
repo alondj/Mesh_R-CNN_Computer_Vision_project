@@ -64,8 +64,17 @@ class ShapeNetModel(nn.Module):
 
         voxelGrid = self.voxelBranch(upscaled)
         output = dict()
-        output['voxels'] = voxelGrid
-        output['backbone'] = backbone_out
+
+        if self.training and self.backbone.training:
+            output['backbone_loss'] = backbone_out
+        elif not self.training:
+            assert not self.backbone.training
+            output['backbone'] = backbone_out
+
+        if self.training:
+            output['voxel_loss'] = voxel_loss(voxelGrid, targets.voxels)
+        else:
+            output['voxels'] = voxelGrid
 
         if self.voxel_only:
             return output
@@ -87,12 +96,18 @@ class ShapeNetModel(nn.Module):
                                                    vertex_features=vertex_features)
             vertex_positions.append(new_positions)
 
-        output['vertex_positions'] = vertex_positions
-        output['edge_index'] = adj_index
-        output['face_index'] = face_index
-        output['vertice_index'] = vertice_index
-        output['faces'] = faces
-        output['mesh_index'] = mesh_index
+        if self.training:
+            chamfer, normal, edge = batched_mesh_loss(vertex_positions[1:], faces, adj_index,
+                                                      vertice_index, face_index, targets)
+            output.update({'chamfer_loss': chamfer,
+                           "edge_loss": edge, "normal_loss": normal})
+        else:
+            output['vertex_positions'] = vertex_positions
+            output['edge_index'] = adj_index
+            output['face_index'] = face_index
+            output['vertice_index'] = vertice_index
+            output['faces'] = faces
+            output['mesh_index'] = mesh_index
 
         return output
 
@@ -198,8 +213,16 @@ class Pix3DModel(nn.Module):
         voxelGrid = self.voxelBranch(ROI_features)
 
         output = dict()
-        output['voxels'] = voxelGrid
-        output['backbone'] = backbone_out
+        if self.training and self.backbone.training:
+            output['backbone_loss'] = sum(backbone_out.values())
+        elif not self.training:
+            assert not self.backbone.training
+            output['backbone'] = backbone_out
+
+        if self.training:
+            output['voxel_loss'] = voxel_loss(voxelGrid, targets.voxels)
+        else:
+            output['voxels'] = voxelGrid
 
         if self.voxel_only:
             return output
@@ -221,12 +244,18 @@ class Pix3DModel(nn.Module):
                                                    mesh_index=mesh_index)
             vertex_positions.append(new_positions)
 
-        output['vertex_positions'] = vertex_positions
-        output['edge_index'] = adj_index
-        output['face_index'] = face_index
-        output['vertice_index'] = vertice_index
-        output['faces'] = faces
-        output['mesh_index'] = mesh_index
+        if self.training:
+            chamfer, normal, edge = batched_mesh_loss(vertex_positions[1:], faces, adj_index,
+                                                      vertice_index, face_index, targets)
+            output.update({'chamfer_loss': chamfer,
+                           "edge_loss": edge, "normal_loss": normal})
+        else:
+            output['vertex_positions'] = vertex_positions
+            output['edge_index'] = adj_index
+            output['face_index'] = face_index
+            output['vertice_index'] = vertice_index
+            output['faces'] = faces
+            output['mesh_index'] = mesh_index
 
         return output
 
