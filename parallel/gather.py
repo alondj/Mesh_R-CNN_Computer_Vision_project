@@ -99,16 +99,31 @@ def pix3d_gather(outs, out_device, voxel_only=False, backbone_train=True, train=
     res = dict()
     if backbone_train:
         assert train
-        backbone_loss = {k: reduce_add([out['backbone_loss'][k] for out in outs],
-                                       destination=out_device) for k in outs[0]}
-        res['backbone_loss'] = backbone_loss
+        backbone_keys = list(outs[0]['backbone_loss'].keys())
+        backbone_loss = {k: [] for k in backbone_keys}
+        for out in outs:
+            for k, v in out['backbone_loss'].items():
+                print(k, v.requires_grad)
+                backbone_loss[k].append(v)
+
+        b_loss = {k: reduce_add(ts, destination=out_device)
+                  for k, ts in backbone_loss.items()}
+        print(b_loss)
+        res['backbone_loss'] = b_loss
         # we pop backbone_loss so that when we reduce gcn_loss we do not overwrite it
         outs[0].pop('backbone_loss')
-
+        print("reduced backbone")
     if train:
+        for out in outs:
+            for k, v in out.items():
+                if isinstance(v, dict):
+                    continue
+                print(k, v.requires_grad)
+
         gcn_losses = {k: reduce_add([out[k] for out in outs],
                                     destination=out_device) for k in outs[0]}
         res.update(gcn_losses)
+        print("reduced gcn loss")
     else:
         assert not backbone_train
         detections = [{k: v.to(out_device) for k, v in d.items()}

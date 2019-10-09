@@ -42,7 +42,6 @@ class CustomDP(nn.Module):
         replicas = nn.parallel.replicate(self.model,
                                          self.device_ids[:len(inputs)])
         outputs = nn.parallel.parallel_apply(replicas, inputs)
-
         if self.is_backbone:
             return self.gather(outputs, self.output_device, train=self.model.training)
 
