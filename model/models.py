@@ -133,7 +133,6 @@ class ShapeNetResNet50(ResNet):
 
 
 def pretrained_ResNet50(loss_function, num_classes=10, pretrained=True):
-    # TODO we should have our own pretrained model and not the default one
     # when that time comes remove the pretrained arg and set path as deafult model path
     url = res_urls['resnet50']
     model = ShapeNetResNet50(loss_function, Bottleneck, [3, 4, 6, 3])
@@ -276,7 +275,6 @@ class Pix3DMask_RCNN(MaskRCNN):
 
 
 def pretrained_MaskRcnn(num_classes=10, pretrained=True):
-    # TODO we should have our own pretrained model and not the default one
     # when that time comes remove the pretrained arg and set path as deafult model path
     url = mask_urls['maskrcnn_resnet50_fpn_coco']
     model = Pix3DMask_RCNN(91)
