@@ -187,6 +187,8 @@ class pix3DTargetList():
         return pix3DTargetList(backbone_targets)
 
     def __getitem__(self, arg):
+        if isinstance(arg, slice):
+            return pix3DTargetList(self.backbone_targets[arg])
         return self.backbone_targets[arg]
 
     def __setitem__(self, key, value):

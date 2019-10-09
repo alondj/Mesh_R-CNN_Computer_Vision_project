@@ -35,7 +35,7 @@ def shapenet_backbone_gather(outs, out_device, train=True):
 
 def gather_GCN_outputs(outs, out_device, voxel_only=False):
     res = dict()
-    res['voxels'] = gather([out['voxesls']for out in outs],
+    res['voxels'] = gather([out['voxels']for out in outs],
                            destination=out_device)
     if voxel_only:
         return res
@@ -92,7 +92,7 @@ def shapenet_gather(outs, out_device, voxel_only=False, backbone_train=True, tra
 
 def pix3d_gather(outs, out_device, voxel_only=False, backbone_train=True, train=True):
     # train=True outs is list of loss dicts reduce to one loss dict
-    # train=False outs is dict of various predictions reduce to one dict
+    # train=False outs is a list of dict of various predictions reduce to one dict
     # train_backbone=True reduce losses
     # train_backbone=False and Train append predictions
 
@@ -111,7 +111,7 @@ def pix3d_gather(outs, out_device, voxel_only=False, backbone_train=True, train=
         res.update(gcn_losses)
     else:
         assert not backbone_train
-        detections = [{k: v.to(out_device) for k, v in d.values()}
+        detections = [{k: v.to(out_device) for k, v in d.items()}
                       for out in outs for d in out['backbone']]
 
         res['backbone'] = detections
