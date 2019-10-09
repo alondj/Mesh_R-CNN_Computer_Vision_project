@@ -152,7 +152,7 @@ for epoch in range(epochs):
                 pass
 
             pbar.update()
-            avg_loss = np.mean(epoch_loss)
+            avg_loss = np.nanmean(epoch_loss)
 
             # prediodic loss updates
             if (i + 1) % 128 == 0:
@@ -162,8 +162,8 @@ for epoch in range(epochs):
     # epoch ended
     losses.append(epoch_loss)
     print(
-        f'--- EPOCH {epoch+1}/{epochs} --- avg epoch loss {np.mean(epoch_loss):.2f}')
-    print(f"total avg loss so far {np.mean(losses):.2f}")
+        f'--- EPOCH {epoch+1}/{epochs} --- avg epoch loss {np.nanmean(epoch_loss):.2f}')
+    print(f"total avg loss so far {np.nanmean(losses):.2f}")
     # save the model
     print('saving net...')
 
