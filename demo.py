@@ -1,3 +1,4 @@
+import PIL.Image
 import argparse
 import datetime
 import os
@@ -56,7 +57,6 @@ else:
 model.load_state_dict(torch.load(options.modelPath))
 model: nn.Module = model.to('cuda').eval()
 
-import PIL.Image
 
 rgba_image = PIL.Image.open(options.imagePath)
 rgb_image = rgba_image.convert('RGB')
@@ -66,14 +66,12 @@ img = img.type(torch.cuda.FloatTensor)
 img = img.unsqueeze(0)
 output = model(img)
 
-print(output)
 vertex_positions = output['vertex_positions']
 edge_index = output['edge_index']  # adj matrix
 face_index = output['face_index']  # faces per graph
 vertice_index = output['vertice_index']  # vertices per graph
-mesh_faces = output['faces']
+faces = output['faces']
 voxels = output['voxels']
-graphs_per_image = output['graphs_per_image']
 
 print(f"saving output to {options.savePath}")
 
@@ -82,12 +80,13 @@ if not os.path.exists(options.savePath):
 
 filename = os.path.basename(options.imgPath).split('.')[0]
 # save voxels
-save_voxels(voxels, os.path.join(options.savePath, filename))
+for idx, v in enumerate(voxels.split(1)):
+    f_name = f"{filename}_voxel_obj{idx}"
+    save_voxels(v.squeeze(0), os.path.join(options.savePath, f_name))
 
-# TODO handle the graph_per_image vertex per graph nonsense
 # save the intermediate meshes
-for idx, (pos, faces) in enumerate(zip(vertex_positions.split(vertice_index), mesh_faces.split(face_index))):
-    mesh_file = os.path.join(options.savePath, filename, f"_mesh_{idx}")
+for idx, (pos, faces) in enumerate(zip(vertex_positions.split(vertice_index), faces.split(face_index))):
+    mesh_file = os.path.join(options.savePath, f"{filename}_mesh_obj_{idx}")
     save_mesh(pos, faces, mesh_file)
 
 print("Finish!")
