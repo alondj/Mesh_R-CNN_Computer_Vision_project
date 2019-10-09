@@ -11,9 +11,13 @@ from utils import Mesh, load_mesh, load_voxels, resample_voxels
 
 class Batch():
     def __init__(self, images, voxels, num_voxels, meshes, targets):
-        # fit voxels to shape BxVxVxV
-        batched_models = torch.stack(voxels)
-        batched_models = resample_voxels(batched_models, num_voxels)
+        if isinstance(voxels, torch.Tensor):
+            batched_models = voxels
+        else:
+            batched_models = torch.stack(voxels)
+
+        if batched_models.shape[1:] != torch.Size([num_voxels]*3):
+            batched_models = resample_voxels(batched_models, num_voxels)
 
         # stack all meshes together ∑Vx3 ∑fx3
         batched_vertices = torch.cat([m.vertices for m in meshes])
@@ -55,6 +59,23 @@ class Batch():
             self.targets = self.targets.to(*args, **kwargs)
 
         return self
+
+    def __getitem__(self, idx):
+        if isinstance(idx, int):
+            return self[idx:idx+1]
+
+        images = self.images[idx]
+        voxels = self.voxels[idx]
+        targets = self.targets[idx]
+        num_voxels = voxels.shape[1]
+
+        meshes = [Mesh(v, f) for v, f in zip(self.meshes.vertices.split(self.vertice_index)[idx],
+                                             self.meshes.faces.split(self.face_index)[idx])]
+
+        return Batch(images, voxels, num_voxels, meshes, targets)
+
+    def __len__(self):
+        return len(self.images)
 
 
 class pix3dDataset(Dataset):
