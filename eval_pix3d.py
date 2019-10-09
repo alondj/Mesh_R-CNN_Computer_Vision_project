@@ -152,14 +152,14 @@ with torch.no_grad():
     with tqdm.tqdm(total=len(testloader.batch_sampler), file=sys.stdout) as pbar:
         for i, batch in enumerate(testloader, 0):
             batch = batch.to(devices[0])
-            images, backbone_targets = batch.images, batch.targets
+            images, backbone_targets = batch.images, batch.backbone_targets
             voxel_gts = batch.voxels
 
             gt_boxes, gt_labels, gt_masks, _ = get_out_of_dicts(backbone_targets,
                                                                 gt_bbox=None)
 
             # predict and comput loss
-            model_output = model(images, backbone_targets)
+            model_output = model(images)
 
             boxes, preds, masks, max_indexes = get_out_of_dicts(model_output['backbone'],
                                                                 gt_bbox=gt_boxes)

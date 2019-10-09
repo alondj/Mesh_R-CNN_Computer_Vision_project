@@ -134,7 +134,7 @@ for epoch in range(epochs):
             optimizer.zero_grad()
 
             batch = batch.to(devices[0])
-            images, backbone_targets = batch.images, batch.targets
+            images, backbone_targets = batch.images, batch.backbone_targets
             try:
                 # predict and comput loss
                 out = model(images, backbone_targets)

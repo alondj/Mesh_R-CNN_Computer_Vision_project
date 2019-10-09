@@ -186,12 +186,9 @@ loss_weights = {'c': options.chamfer,
 now = datetime.datetime.now()
 save_path = now.isoformat()
 GCN_path = os.path.join('checkpoints', model_name, 'GCN', save_path)
-backbone_path = os.path.join('checkpoints', options.model,
-                             'backbone', save_path)
+
 if not os.path.exists(GCN_path):
     Path(GCN_path).mkdir(parents=True, exist_ok=True)
-if options.train_backbone and not os.path.exists(backbone_path):
-    Path(backbone_path).mkdir(parents=True, exist_ok=True)
 
 # Train model on the dataset
 losses = []
@@ -202,11 +199,10 @@ for epoch in range(epochs):
         for i, batch in enumerate(trainloader, 0):
             optimizer.zero_grad()
             batch = batch.to(devices[0])
-            images, backbone_targets = batch.images, batch.targets
             voxel_gts = batch.voxels
             # predict and comput loss
             try:
-                output = model(images, backbone_targets)
+                output = model(batch.images, batch)
 
                 loss = total_loss(loss_weights, output,
                                   voxel_gts, batch,

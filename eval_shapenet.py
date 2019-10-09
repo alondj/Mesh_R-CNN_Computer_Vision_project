@@ -92,11 +92,11 @@ with torch.no_grad():
     with tqdm.tqdm(total=len(testloader.batch_sampler), file=sys.stdout) as pbar:
         for i, batch in enumerate(testloader, 0):
             batch = batch.to(devices[0])
-            images, backbone_targets = batch.images, batch.targets
+            images, backbone_targets = batch.images, batch.backbone_targets
             voxel_gts = batch.voxels
 
             # predict and comput loss
-            model_output = model(images, backbone_targets)
+            model_output = model(images)
             vxl_loss = voxel_loss(model_output['voxels'], voxel_gts)
             chamfer_loss, normal_loss, edge_loss = batched_mesh_loss(
                 model_output['vertex_positions'],

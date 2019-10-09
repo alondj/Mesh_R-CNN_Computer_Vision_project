@@ -22,6 +22,8 @@ from model.utils import filter_ROI_input
 
 from .layers import (Cubify, ResVertixRefineShapenet, VertixRefinePix3D,
                      VertixRefineShapeNet, VoxelBranch)
+from model.loss_functions import voxel_loss, batched_mesh_loss
+from data.dataloader import Batch
 
 
 class ShapeNetModel(nn.Module):
@@ -50,11 +52,12 @@ class ShapeNetModel(nn.Module):
 
         self.refineStages = nn.ModuleList(stages)
 
-    def forward(self, images: Tensor, targets=None) -> dict:
+    def forward(self, images: Tensor, targets: Batch = None) -> dict:
         if self.training and targets is None:
             raise ValueError("In training mode, targets should be passed")
 
-        backbone_out, feature_maps = self.backbone(images, targets)
+        backbone_out, feature_maps = self.backbone(images,
+                                                   targets.backbone_targets)
         sizes = [i.shape[1:] for i in images]
         upscaled = F.interpolate(feature_maps[-1], scale_factor=4.8,
                                  mode='bilinear', align_corners=True)
@@ -169,11 +172,12 @@ class Pix3DModel(nn.Module):
 
         self.refineStages = nn.ModuleList(stages)
 
-    def forward(self, images: List[Tensor], targets: Optional[List[Dict]] = None) -> dict:
+    def forward(self, images: List[Tensor], targets: Batch = None) -> dict:
         if self.training and targets is None:
             raise ValueError("In training mode, targets should be passed")
 
-        backbone_out, ROI_features = self.backbone(images, targets)
+        backbone_out, ROI_features = self.backbone(images,
+                                                   targets.backbone_targets)
 
         # in this part we set the mesh index (how many meshes per image)
         # and filtering roi_input for training
@@ -184,7 +188,7 @@ class Pix3DModel(nn.Module):
             else:
                 # backbone returns detection,ROI_features
                 detections = backbone_out
-            ROI_features = filter_ROI_input(targets, detections,
+            ROI_features = filter_ROI_input(targets.backbone_targets, detections,
                                             ROI_features)
             mesh_index = [1 for _ in images]
             detections = None

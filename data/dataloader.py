@@ -10,7 +10,7 @@ from utils import Mesh, load_mesh, load_voxels, resample_voxels
 
 
 class Batch():
-    def __init__(self, images, voxels, num_voxels, meshes, targets):
+    def __init__(self, images, voxels, num_voxels, meshes, backbone_targets):
         if isinstance(voxels, torch.Tensor):
             batched_models = voxels
         else:
@@ -35,7 +35,7 @@ class Batch():
         self.mesh_index = mesh_index
         self.vertice_index = vertice_index
         self.face_index = face_index
-        self.targets = targets
+        self.backbone_targets = backbone_targets
 
     def to(self, *args, **kwargs):
         if not (self.images is None):
@@ -55,8 +55,8 @@ class Batch():
             assert self.mesh_index != None
             self.meshes = Mesh(self.meshes.vertices.to(*args, **kwargs),
                                self.meshes.faces.to(*args, **kwargs))
-        if not (self.targets is None):
-            self.targets = self.targets.to(*args, **kwargs)
+        if not (self.backbone_targets is None):
+            self.backbone_targets = self.backbone_targets.to(*args, **kwargs)
 
         return self
 
@@ -66,13 +66,13 @@ class Batch():
 
         images = self.images[idx]
         voxels = self.voxels[idx]
-        targets = self.targets[idx]
+        backbone_targets = self.backbone_targets[idx]
         num_voxels = voxels.shape[1]
 
         meshes = [Mesh(v, f) for v, f in zip(self.meshes.vertices.split(self.vertice_index)[idx],
                                              self.meshes.faces.split(self.face_index)[idx])]
 
-        return Batch(images, voxels, num_voxels, meshes, targets)
+        return Batch(images, voxels, num_voxels, meshes, backbone_targets)
 
     def __len__(self):
         return len(self.images)
@@ -178,31 +178,32 @@ class pix3DTarget():
 
 
 class pix3DTargetList():
-    def __init__(self, pix3d_targets: List[pix3DTarget]):
-        self.targets = pix3d_targets
+    def __init__(self, pix3d_backbone_targets: List[pix3DTarget]):
+        self.backbone_targets = pix3d_backbone_targets
 
     def to(self, *args, **kwargs):
-        targets = [t.to(*args, **kwargs) for t in self.targets]
-        return pix3DTargetList(targets)
+        backbone_targets = [t.to(*args, **kwargs)
+                            for t in self.backbone_targets]
+        return pix3DTargetList(backbone_targets)
 
     def __getitem__(self, arg):
-        return self.targets[arg]
+        return self.backbone_targets[arg]
 
     def __setitem__(self, key, value):
-        self.targets[key] = value
+        self.backbone_targets[key] = value
 
     def __len__(self):
-        return len(self.targets)
+        return len(self.backbone_targets)
 
 
 def preparte_pix3dBatch(num_voxels: int):
     def batch_input(samples: List) -> Batch:
-        images, voxel_gts, meshes, targets = zip(*samples)
-        backbone_targets = pix3DTargetList(targets)
+        images, voxel_gts, meshes, backbone_targets = zip(*samples)
+        pix3d_backbone_targets = pix3DTargetList(backbone_targets)
 
         return Batch(images=images, voxels=voxel_gts,
                      num_voxels=num_voxels, meshes=meshes,
-                     targets=backbone_targets)
+                     backbone_targets=pix3d_backbone_targets)
 
     return batch_input
 
@@ -281,14 +282,14 @@ class shapeNet_Dataset(Dataset):
 
 def preparte_shapeNetBatch(num_voxels: int):
     def batch_input(samples: List) -> Batch:
-        images, voxel_gts, meshes, targets = zip(*samples)
+        images, voxel_gts, meshes, backbone_targets = zip(*samples)
         # batch images BxCxHxW
         images = torch.stack(images)
-        targets = torch.Tensor(targets)
+        backbone_targets = torch.Tensor(backbone_targets)
 
         return Batch(images=images, voxels=voxel_gts,
                      num_voxels=num_voxels, meshes=meshes,
-                     targets=targets)
+                     backbone_targets=backbone_targets)
 
     return batch_input
 
