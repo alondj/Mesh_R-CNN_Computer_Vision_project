@@ -1,6 +1,29 @@
 import numpy as np
-from torch.cuda.comm import reduce_add, gather
 from itertools import chain
+
+from torch.autograd import Function
+import torch.cuda.comm as comm
+from torch.nn.parallel._functions import Broadcast, Gather
+
+
+class Reduce(Function):
+    @staticmethod
+    def forward(ctx, target_gpu, *inputs):
+        ctx.target_gpus = [inputs[i].get_device() for i in range(len(inputs))]
+        inputs = sorted(inputs, key=lambda i: i.get_device())
+        return comm.reduce_add(inputs, destination=target_gpu)
+
+    @staticmethod
+    def backward(ctx, gradOutput):
+        return (None,) + Broadcast.apply(ctx.target_gpus, gradOutput)
+
+
+def reduce_add(ts, out_device):
+    return Reduce.apply(out_device, *ts)
+
+
+def gather(ts, out_device):
+    return Gather.apply(out_device, 0, *ts)
 
 
 def pix3d_backbone_gather(outs, out_device, train=True):
@@ -9,8 +32,8 @@ def pix3d_backbone_gather(outs, out_device, train=True):
     # during eval flatten the list of dictionary outputs
     if train:
         # outs loss,(roi,detections)
-        loss = {k: reduce_add([out[0][k] for out in outs],
-                              destination=out_device) for k in outs[0]}
+        loss = {k: reduce_add([out[0][k] for out in outs], out_device)
+                for k in outs[0]}
         return loss, None
     else:
         # outs detections,roi
@@ -23,39 +46,37 @@ def pix3d_backbone_gather(outs, out_device, train=True):
 def shapenet_backbone_gather(outs, out_device, train=True):
     if train:
         # outs is list of (loss,features)
-        loss = reduce_add([out[0] for out in outs], destination=out_device)
+        loss = reduce_add([out[0] for out in outs], out_device)
 
         return loss, None
     else:
         # outs is list of (probas,features)
-        probas = gather([out[0] for out in outs], destination=out_device)
+        probas = gather([out[0] for out in outs], out_device)
 
         return probas, None
 
 
 def gather_GCN_outputs(outs, out_device, voxel_only=False):
     res = dict()
-    res['voxels'] = gather([out['voxels']for out in outs],
-                           destination=out_device)
+    res['voxels'] = Gather.apply([out['voxels']for out in outs], out_device)
     if voxel_only:
         return res
 
-    res['vertex_positions'] = gather([out['vertex_positions'] for out in outs],
-                                     dim=0, destination=out_device)
+    res['vertex_positions'] = Gather.apply([out['vertex_positions'] for out in outs],
+                                           out_device)
 
     res['vertice_index'] = list(chain(*[out['vertice_index']
                                         for out in outs]))
 
     offsets = [np.sum(out['vertice_index']) for out in outs]
     offsets = np.cumsum(offsets)-offsets
-    res['edge_index'] = gather([out['edge_index']+off for out, off in zip(outs, offsets)],
-                               destination=out_device)
+    res['edge_index'] = Gather.apply(out_device, 0,
+                                     [out['edge_index']+off for out, off in zip(outs, offsets)])
 
     res['face_index'] = list(chain(*[out['face_index']
                                      for out in outs]))
 
-    res['faces'] = gather([out['faces'] for out in outs],
-                          dim=0, destination=out_device)
+    res['faces'] = Gather.apply([out['faces'] for out in outs], out_device)
 
     res['mesh_index'] = list(chain(*[out['mesh_index']
                                      for out in outs]))
@@ -71,19 +92,18 @@ def shapenet_gather(outs, out_device, voxel_only=False, backbone_train=True, tra
     if backbone_train:
         assert train
         backbone_loss = reduce_add([out['backbone_loss'] for out in outs],
-                                   destination=out_device)
+                                   out_device)
         res['backbone_loss'] = backbone_loss
         # we pop backbone_loss so that when we reduce gcn_loss we do not overwrite it
         outs[0].pop('backbone_loss')
 
     if train:
-        gcn_losses = {k: reduce_add([out[k] for out in outs],
-                                    destination=out_device) for k in outs[0]}
+        gcn_losses = {k: reduce_add([out[k] for out in outs], out_device)
+                      for k in outs[0]}
         res.update(gcn_losses)
     else:
         assert not backbone_train
-        res['backbone'] = gather([out['backbone']for out in outs],
-                                 destination=out_device)
+        res['backbone'] = gather([out['backbone']for out in outs], out_device)
         gcn_out = gather_GCN_outputs(outs, out_device, voxel_only=voxel_only)
         res.update(gcn_out)
 
@@ -103,27 +123,19 @@ def pix3d_gather(outs, out_device, voxel_only=False, backbone_train=True, train=
         backbone_loss = {k: [] for k in backbone_keys}
         for out in outs:
             for k, v in out['backbone_loss'].items():
-                print(k, v.requires_grad)
                 backbone_loss[k].append(v)
 
-        b_loss = {k: reduce_add(ts, destination=out_device)
+        b_loss = {k: reduce_add(ts, out_device)
                   for k, ts in backbone_loss.items()}
-        print(b_loss)
+
         res['backbone_loss'] = b_loss
         # we pop backbone_loss so that when we reduce gcn_loss we do not overwrite it
         outs[0].pop('backbone_loss')
-        print("reduced backbone")
-    if train:
-        for out in outs:
-            for k, v in out.items():
-                if isinstance(v, dict):
-                    continue
-                print(k, v.requires_grad)
 
-        gcn_losses = {k: reduce_add([out[k] for out in outs],
-                                    destination=out_device) for k in outs[0]}
+    if train:
+        gcn_losses = {k: reduce_add([out[k] for out in outs], out_device)
+                      for k in outs[0]}
         res.update(gcn_losses)
-        print("reduced gcn loss")
     else:
         assert not backbone_train
         detections = [{k: v.to(out_device) for k, v in d.items()}
