@@ -22,8 +22,8 @@ def reduce_add(ts, out_device):
     return Reduce.apply(out_device, *ts)
 
 
-def gather(ts, out_device):
-    return Gather.apply(out_device, 0, *ts)
+def gather(ts, out_device, dim=0):
+    return Gather.apply(out_device, dim, *ts)
 
 
 def pix3d_backbone_gather(outs, out_device, train=True):
@@ -62,8 +62,10 @@ def gather_GCN_outputs(outs, out_device, voxel_only=False):
     if voxel_only:
         return res
 
-    res['vertex_positions'] = gather([out['vertex_positions'] for out in outs],
-                                     out_device)
+    # collect each refine stage
+
+    res['vertex_positions'] = [gather([out['vertex_positions'][i]for out in outs], out_device)
+                               for i in range(len(outs[0]['vertex_positions']))]
 
     res['vertice_index'] = list(chain(*[out['vertice_index']
                                         for out in outs]))
@@ -71,7 +73,7 @@ def gather_GCN_outputs(outs, out_device, voxel_only=False):
     offsets = [np.sum(out['vertice_index']) for out in outs]
     offsets = np.cumsum(offsets)-offsets
     res['edge_index'] = gather([out['edge_index']+off for out, off in zip(outs, offsets)],
-                               out_device)
+                               out_device, dim=1)
 
     res['face_index'] = list(chain(*[out['face_index']
                                      for out in outs]))
