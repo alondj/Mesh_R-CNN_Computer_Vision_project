@@ -33,7 +33,7 @@ class CustomDP(nn.Module):
         outputs = nn.parallel.parallel_apply(replicas, inputs)
 
         if self.is_backbone:
-            if self.pix3d:
+            if self.is_pix3d:
                 return pix3d_backbone_gather(outputs, self.output_device, train=self.model.training)
             else:
                 return shapenet_backbone_gather(outputs, self.output_device, train=self.model.training)
