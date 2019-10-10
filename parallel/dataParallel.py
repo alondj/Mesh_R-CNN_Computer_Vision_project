@@ -23,9 +23,11 @@ class CustomDP(nn.Module):
             self.output_device = output_device
 
         self.is_backbone = is_backbone
+        self.is_pix3d = pix3d
 
     def forward(self, images, targets: Batch = None):
-        inputs = custom_scatter(images, targets, self.device_ids)
+        inputs = custom_scatter(images, targets, self.device_ids,
+                                pix3d=self.is_pix3d)
 
         replicas = replicate(self.model, self.device_ids[:len(inputs)])
         outputs = nn.parallel.parallel_apply(replicas, inputs)
