@@ -160,7 +160,6 @@ else:
     model.backbone.eval()
 
 # use data parallel if possible
-# TODO need to check if works
 if len(devices) > 1:
     model = CustomDP(model, is_backbone=False, pix3d=(model_name == 'Pix3D'))
 

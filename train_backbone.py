@@ -100,7 +100,6 @@ if options.backbone_path != '':
     model.load_state_dict(torch.load(options.backbone_path))
 
 # use data parallel if possible
-# TODO need to check
 if len(devices) > 1:
     model = CustomDP(model, is_backbone=True, pix3d=(options.model == 'Pix3D'))
 
