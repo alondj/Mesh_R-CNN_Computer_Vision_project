@@ -10,7 +10,7 @@ def split_to_n(l, n):
     return[l[ends[i]-sizes[i]:ends[i]] for i in range(len(sizes))]
 
 
-def custom_scatter(images, targets=None, target_gpus=None, shapeNet=False):
+def custom_scatter(images, targets=None, target_gpus=None, pix3d=False):
     if targets:
         assert len(images) == len(targets)
     if target_gpus is None:
@@ -23,7 +23,7 @@ def custom_scatter(images, targets=None, target_gpus=None, shapeNet=False):
 
     data = []
     for imgs, trgts, device in zip(divided_imgs, divided_trgts, target_gpus):
-        if not shapeNet:
+        if pix3d:
             imgs = [img.to(device) for img in imgs]
         else:
             imgs = imgs.to(device)
