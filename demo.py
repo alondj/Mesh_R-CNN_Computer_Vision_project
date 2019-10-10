@@ -30,8 +30,7 @@ parser.add_argument('--threshold', '-th',
                     help='Cubify threshold', type=float, default=0.5)
 parser.add_argument("--residual", default=False,
                     action="store_true", help="whether to use residual refinement for ShapeNet")
-parser.add_argument('--voxel_only', default=False, action='store_true',
-                    help='whether to return only the cubified mesh resulting from cubify')
+
 # sample to evaluate and output paths
 parser.add_argument('--imagePath', type=str, help='the path to find the data')
 parser.add_argument('--savePath', type=str, default='eval/',
@@ -46,12 +45,12 @@ if options.model == 'ShapeNet':
                           residual=options.residual,
                           cubify_threshold=options.threshold,
                           vertex_feature_dim=options.featDim,
-                          num_refinement_stages=options.num_refinement_stages, voxel_only=options.voxel_only)
+                          num_refinement_stages=options.num_refinement_stages, voxel_only=False)
 else:
     model = Pix3DModel(pretrained_MaskRcnn(num_classes=10, pretrained=False),
                        cubify_threshold=options.threshold,
                        vertex_feature_dim=options.featDim,
-                       num_refinement_stages=options.num_refinement_stages, voxel_only=options.voxel_only)
+                       num_refinement_stages=options.num_refinement_stages, voxel_only=False)
 
 # load checkpoint
 model.load_state_dict(torch.load(options.modelPath))
@@ -66,7 +65,6 @@ img = img.type(torch.cuda.FloatTensor)
 img = img.unsqueeze(0)
 output = model(img)
 
-print(output)
 vertex_positions = output['vertex_positions']
 edge_index = output['edge_index']  # adj matrix
 face_index = output['face_index']  # faces per graph
@@ -86,8 +84,10 @@ for idx, v in enumerate(voxels.split(1)):
     save_voxels(v.squeeze(0), os.path.join(options.savePath, f_name))
 
 # save the intermediate meshes
-for idx, (pos, faces) in enumerate(zip(vertex_positions.split(vertice_index), faces.split(face_index))):
-    mesh_file = os.path.join(options.savePath, f"{filename}_mesh_obj_{idx}")
-    save_mesh(pos, faces, mesh_file)
+for stage, (vs, fs) in enumerate(zip(vertex_positions, faces)):
+    for idx, (pos, faces) in enumerate(zip(vs.split(vertice_index), fs.split(face_index))):
+        mesh_file = os.path.join(options.savePath,
+                                 f"{filename}_mesh_stage{stage}_obj_{idx}")
+        save_mesh(pos, faces, mesh_file)
 
 print("Finish!")
