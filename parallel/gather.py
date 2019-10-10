@@ -33,19 +33,20 @@ def pix3d_backbone_gather(outs, out_device, train=True):
     if train:
         # outs loss,(roi,detections)
         loss = {k: reduce_add([out[0][k] for out in outs], out_device)
-                for k in outs[0]}
+                for k in outs[0][0].keys()}
+
         return loss, None
     else:
         # outs detections,roi
-        detections = [{k: v.to(out_device) for k, v in d.items()}
-                      for out_list in outs for d in out_list[0]]
+        detections = [{k: v.to(out_device)}
+                      for out in outs for d in out[0] for k, v in d.items()]
 
         return detections, None
 
 
 def shapenet_backbone_gather(outs, out_device, train=True):
     if train:
-        # outs is list of (loss,features)
+            # outs is list of (loss,features)
         loss = reduce_add([out[0] for out in outs], out_device)
 
         return loss, None
