@@ -3,6 +3,7 @@ import torch.nn as nn
 from parallel.scatter import custom_scatter
 from parallel.gather import pix3d_backbone_gather, pix3d_gather, shapenet_backbone_gather, shapenet_gather
 from data.dataloader import Batch
+from parallel.replicate import replicate
 
 
 class CustomDP(nn.Module):
@@ -22,28 +23,22 @@ class CustomDP(nn.Module):
             self.output_device = output_device
 
         self.is_backbone = is_backbone
-        # determine scatter gather functions
-        if is_backbone:
-            if pix3d:
-                self.gather = pix3d_backbone_gather
-            else:
-                self.gather = shapenet_backbone_gather
-        else:
-            if pix3d:
-                self.gather = pix3d_gather
-            else:
-                self.gather = shapenet_gather
-
-        self.scatter = custom_scatter
 
     def forward(self, images, targets: Batch = None):
-        inputs = self.scatter(images, targets, self.device_ids)
+        inputs = custom_scatter(images, targets, self.device_ids)
 
-        replicas = nn.parallel.replicate(self.model,
-                                         self.device_ids[:len(inputs)])
+        replicas = replicate(self.model, self.device_ids[:len(inputs)])
         outputs = nn.parallel.parallel_apply(replicas, inputs)
-        if self.is_backbone:
-            return self.gather(outputs, self.output_device, train=self.model.training)
 
-        return self.gather(outputs, self.output_device, voxel_only=self.model.voxel_only,
-                           backbone_train=self.model.backbone.training, train=self.model.training)
+        if self.is_backbone:
+            if self.pix3d:
+                return pix3d_backbone_gather(outputs, self.output_device, train=self.model.training)
+            else:
+                return shapenet_backbone_gather(outputs, self.output_device, train=self.model.training)
+
+        if self.is_pix3d:
+            return pix3d_gather(outputs, self.output_device, voxel_only=self.model.voxel_only,
+                                backbone_train=self.model.backbone.training, train=self.model.training)
+
+        return shapenet_gather(outputs, self.output_device, voxel_only=self.model.voxel_only,
+                               backbone_train=self.model.backbone.training, train=self.model.training)
