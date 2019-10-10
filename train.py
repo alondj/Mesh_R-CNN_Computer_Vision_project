@@ -162,7 +162,7 @@ else:
 # use data parallel if possible
 # TODO need to check if works
 if len(devices) > 1:
-    model = CustomDP(model, is_backbone=False, pix3d=(model_name == 'Pix3d'))
+    model = CustomDP(model, is_backbone=False, pix3d=(model_name == 'Pix3D'))
 
 model: nn.Module = model.to(devices[0])
 
@@ -211,7 +211,7 @@ for epoch in range(epochs):
                     if w != 0.:
                         if k != 'backbone_loss':
                             loss += v*w
-                        elif model_name == 'Pix3d':
+                        elif model_name == 'Pix3D':
                             loss += (sum(v.values())*w)
                         else:
                             loss += v*w

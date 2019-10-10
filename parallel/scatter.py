@@ -11,12 +11,12 @@ def split_to_n(l, n):
 
 
 def custom_scatter(images, targets=None, target_gpus=None, pix3d=False):
-    if targets:
+    if targets is not None:
         assert len(images) == len(targets)
     if target_gpus is None:
         target_gpus = list(range(torch.cuda.device_count()))
     divided_imgs = split_to_n(images, n=len(target_gpus))
-    if targets:
+    if targets is not None:
         divided_trgts = split_to_n(targets, n=len(target_gpus))
     else:
         divided_trgts = [None for _ in target_gpus]
@@ -28,7 +28,7 @@ def custom_scatter(images, targets=None, target_gpus=None, pix3d=False):
         else:
             imgs = imgs.to(device)
 
-        if trgts:
+        if trgts is not None:
             trgts = trgts.to(device)
 
         data.append((imgs, trgts))
