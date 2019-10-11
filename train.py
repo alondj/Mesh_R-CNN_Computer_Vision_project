@@ -2,18 +2,15 @@ import argparse
 import datetime
 import os
 import platform
-import sys
 from itertools import chain
 from pathlib import Path
-import numpy as np
 import torch
 import torch.nn as nn
-import tqdm
+from utils.train_utils import train_gcn
 from torch.optim import SGD, Adam
-
+from collections import OrderedDict
 from data.dataloader import pix3dDataset, shapeNet_Dataset, dataLoader
-from model import (Pix3DModel, ShapeNetModel, pretrained_MaskRcnn,
-                   pretrained_ResNet50, total_loss)
+from model import Pix3DModel, ShapeNetModel, pretrained_MaskRcnn, pretrained_ResNet50
 
 from parallel import CustomDP
 
@@ -76,174 +73,147 @@ parser.add_argument('--weightDecay', type=float,
                     default=5e-6, help='weight decay for L2 loss')
 parser.add_argument('--lr', type=float, default=1e-4, help='learning rate')
 
-options = parser.parse_args()
 
-epochs = options.nEpoch
+def main():
+    options = parser.parse_args()
+    is_pix3d = options.model == 'Pix3D'
+    epochs = options.nEpoch
 
-devices = [torch.device('cuda', i)
-           for i in range(torch.cuda.device_count())]
+    devices = [torch.device('cuda', i)
+               for i in range(torch.cuda.device_count())]
 
-# print header
-model_name = options.model
-title = f'{model_name} training \n used_gpus: {len(devices)}\n epochs: {epochs}\n'
-print(title)
+    # print header
+    model_name = options.model
+    title = f'{model_name} training \n used_gpus: {len(devices)}\n epochs: {epochs}\n'
+    print(title)
 
-gpus = [torch.cuda.get_device_name(device) for device in devices]
-print('system information\n python: %s, torch: %s, cudnn: %s, cuda: %s, \ngpus: %s' % (
-    platform.python_version(),
-    torch.__version__,
-    torch.backends.cudnn.version(),
-    torch.version.cuda,
-    gpus))
-print("\n")
+    gpus = [torch.cuda.get_device_name(device) for device in devices]
+    print('system information\n python: %s, torch: %s, cudnn: %s, cuda: %s, \ngpus: %s' % (
+        platform.python_version(),
+        torch.__version__,
+        torch.backends.cudnn.version(),
+        torch.version.cuda,
+        gpus))
+    print("\n")
 
-print(f"options were:\n{options}\n")
+    print(f"options were:\n{options}\n")
 
-pretrained = options.model_path != ''
-# model and datasets/loaders definition
-classes = options.classes
-if classes != None:
-    classes = [item for item in options.classes.split(',')]
+    pretrained_backbone = options.model_path != '' or options.backbone_path != ''
+    # model and datasets/loaders definition
+    classes = options.classes
+    if classes != None:
+        classes = [item for item in options.classes.split(',')]
 
-if model_name == 'ShapeNet':
-    backbone = pretrained_ResNet50(nn.functional.nll_loss,
-                                   num_classes=13,
-                                   pretrained=pretrained)
-    model = ShapeNetModel(backbone,
-                          residual=options.residual,
-                          cubify_threshold=options.threshold,
-                          vertex_feature_dim=options.featDim,
-                          num_refinement_stages=options.num_refinement_stages,
-                          voxel_only=options.voxel_only)
+    if is_pix3d:
+        backbone = pretrained_MaskRcnn(
+            num_classes=10, pretrained=pretrained_backbone)
+        model = Pix3DModel(backbone,
+                           cubify_threshold=options.threshold,
+                           vertex_feature_dim=options.featDim,
+                           num_refinement_stages=options.num_refinement_stages,
+                           voxel_only=options.voxel_only)
 
-    dataset_cls = shapeNet_Dataset
-    num_voxels = 48
-else:
-    backbone = pretrained_MaskRcnn(num_classes=10, pretrained=pretrained)
-    model = Pix3DModel(backbone,
-                       cubify_threshold=options.threshold,
-                       vertex_feature_dim=options.featDim,
-                       num_refinement_stages=options.num_refinement_stages,
-                       voxel_only=options.voxel_only)
+        dataset_cls = pix3dDataset
+        num_voxels = 24
+    else:
+        backbone = pretrained_ResNet50(nn.functional.nll_loss,
+                                       num_classes=13,
+                                       pretrained=pretrained_backbone)
+        model = ShapeNetModel(backbone,
+                              residual=options.residual,
+                              cubify_threshold=options.threshold,
+                              vertex_feature_dim=options.featDim,
+                              num_refinement_stages=options.num_refinement_stages,
+                              voxel_only=options.voxel_only)
 
-    dataset_cls = pix3dDataset
-    num_voxels = 24
+        dataset_cls = shapeNet_Dataset
+        num_voxels = 48
 
-dataset = dataset_cls(options.dataRoot, classes=classes)
-trainloader = dataLoader(dataset, options.batchSize, num_voxels=num_voxels,
-                         num_workers=options.workers,
-                         num_train_samples=options.num_sampels,
-                         train_ratio=options.train_ratio)
+    dataset = dataset_cls(options.dataRoot, classes=classes)
+    trainloader = dataLoader(dataset, options.batchSize, num_voxels=num_voxels,
+                             num_workers=options.workers,
+                             num_train_samples=options.num_sampels,
+                             train_ratio=options.train_ratio)
 
-# load checkpoint if possible
-if options.backbone_path != '':
-    model.backbone.load_state_dict(torch.load(options.backbone_path))
+    # load checkpoint if possible
+    if options.backbone_path != '':
+        model.backbone.load_state_dict(torch.load(options.backbone_path))
 
-# load checkpoint if possible
-if options.model_path != '':
-    model.load_state_dict(torch.load(options.model_path))
+    # load checkpoint if possible
+    if options.model_path != '':
+        model.load_state_dict(torch.load(options.model_path))
 
-# select trainable parameters
-trained_parameters = model.voxelBranch.parameters()
-if not options.voxel_only:
-    trained_parameters = chain(trained_parameters,
-                               model.refineStages.parameters())
-    model.refineStages.train()
+    # select trainable parameters
+    trained_parameters = model.voxelBranch.parameters()
+    if not options.voxel_only:
+        trained_parameters = chain(trained_parameters,
+                                   model.refineStages.parameters())
+        model.refineStages.train()
 
-model.voxelBranch.train()
-if options.train_backbone:
-    trained_parameters = chain(trained_parameters, model.backbone.parameters())
-    model.backbone.train()
-else:
-    for p in model.backbone.parameters():
-        p.requires_grad = False
-    model.backbone.eval()
+    model.voxelBranch.train()
+    if options.train_backbone:
+        trained_parameters = chain(
+            trained_parameters, model.backbone.parameters())
+        model.backbone.train()
+    else:
+        for p in model.backbone.parameters():
+            p.requires_grad = False
+        model.backbone.eval()
 
-# use data parallel if possible
-if len(devices) > 1:
-    model = CustomDP(model, is_backbone=False, pix3d=(model_name == 'Pix3D'))
+    # use data parallel if possible
+    if len(devices) > 1:
+        model = CustomDP(model, is_backbone=False, pix3d=is_pix3d)
 
-model: nn.Module = model.to(devices[0])
+    model: nn.Module = model.to(devices[0])
 
-# Create Optimizer
-lrate = options.lr
-decay = options.weightDecay
-if options.optim == 'Adam':
-    optimizer = Adam(trained_parameters, lr=lrate, weight_decay=decay)
-else:
-    optimizer = SGD(trained_parameters, lr=lrate, weight_decay=decay)
-    # TODO they increased learning rate do we wish to do the same?
-    # linearly increasing the learning rate from 0.002 to 0.02 over the first 1K iterations,
+    # Create Optimizer
+    lrate = options.lr
+    decay = options.weightDecay
+    if options.optim == 'Adam':
+        optimizer = Adam(trained_parameters, lr=lrate, weight_decay=decay)
+    else:
+        optimizer = SGD(trained_parameters, lr=lrate, weight_decay=decay)
+        # TODO they increased learning rate do we wish to do the same?
+        # linearly increasing the learning rate from 0.002 to 0.02 over the first 1K iterations,
 
-# loss weights
-loss_weights = {'chamfer_loss': options.chamfer,
-                'voxel_loss': options.voxel,
-                'normal_loss': options.normal,
-                'edge_loss': options.edge,
-                'backbone_loss': options.backbone
-                }
+    # loss weights
+    loss_weights = {'chamfer_loss': options.chamfer,
+                    'voxel_loss': options.voxel,
+                    'normal_loss': options.normal,
+                    'edge_loss': options.edge,
+                    'backbone_loss': options.backbone
+                    }
 
-# checkpoint directories
-now = datetime.datetime.now()
-save_path = now.isoformat()
-GCN_path = os.path.join('checkpoints', model_name, 'GCN', save_path)
+    # checkpoint directories
+    now = datetime.datetime.now()
+    save_path = now.isoformat()
+    GCN_path = os.path.join('checkpoints', model_name, 'GCN', save_path)
 
-if not os.path.exists(GCN_path):
-    Path(GCN_path).mkdir(parents=True, exist_ok=True)
+    if not os.path.exists(GCN_path):
+        Path(GCN_path).mkdir(parents=True, exist_ok=True)
 
-# Train model on the dataset
-losses = []
-for epoch in range(epochs):
-    epoch_loss = []
-    print(f'--- EPOCH {epoch+1}/{epochs} ---')
-    with tqdm.tqdm(total=len(trainloader.batch_sampler), file=sys.stdout) as pbar:
-        for i, batch in enumerate(trainloader, 0):
-            optimizer.zero_grad()
-            batch = batch.to(devices[0])
-            voxel_gts = batch.voxels
-            # predict and comput loss
-            try:
-                output = model(batch.images, batch)
-                loss = torch.zeros(1).to(devices[0])
-                for k, v in output:
-                    w = loss_weights.get(k, 0.)
-                    if w != 0.:
-                        if k != 'backbone_loss':
-                            loss += v*w
-                        elif model_name == 'Pix3D':
-                            loss += (sum(v.values())*w)
-                        else:
-                            loss += v*w
+    # Train model on the dataset
+    stats = OrderedDict()
+    for epoch in range(epochs):
+        print(f'--- EPOCH {epoch+1}/{epochs} ---')
 
-                loss.backward()
-                optimizer.step()
+        epoch_stats = train_gcn(model, optimizer, trainloader, epoch, loss_weights,
+                                backbone_train=options.train_backbone, is_pix3d=is_pix3d)
+        stats[epoch] = epoch_stats
+        # save the model
+        print('saving net...')
+        # for eg checkpoints/Pix3D/date/model_{1}.pth
+        file_name = f"model_{epoch}.pth"
+        try:
+            state_dict = model.module.state_dict()
+        except AttributeError:
+            state_dict = model.state_dict()
+        torch.save(state_dict,
+                   os.path.join(GCN_path, file_name))
 
-                epoch_loss.append(loss.item())
-            except Exception as _:
-                pass
-            pbar.update()
-            avg_loss = np.nanmean(epoch_loss)
+    torch.save(stats, os.path.join(GCN_path, f"stats.st"))
+    print("all Done")
 
-            # periodic loss updates
-            if (i + 1) % 128 == 0:
-                print(f"Epoch {epoch+1} batch {i+1}")
-                print(f"avg loss for this epoch sor far {avg_loss:.2f}")
 
-    # epoch ended
-    losses.append(epoch_loss)
-    print(
-        f'--- EPOCH {epoch+1}/{epochs} --- avg epoch loss {np.nanmean(epoch_loss):.2f}')
-    print(f"total avg loss so far {np.nanmean(losses):.2f}")
-
-    # save the model
-    print('saving net...')
-    # for eg checkpoints/Pix3D/date/model_{1}.pth
-    file_name = f"model_{epoch}.pth"
-    try:
-        state_dict = model.module.state_dict()
-    except AttributeError:
-        state_dict = model.state_dict()
-    torch.save(state_dict,
-               os.path.join(GCN_path, file_name))
-
-print(f"training done avg loss {np.mean(losses)}")
+if __name__ == "__main__":
+    main()

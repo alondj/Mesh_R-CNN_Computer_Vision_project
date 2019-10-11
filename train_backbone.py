@@ -2,17 +2,15 @@ import argparse
 import datetime
 import os
 import platform
-import sys
 from pathlib import Path
-import numpy as np
 import torch
 import torch.nn as nn
-import tqdm
 from torch.optim import SGD, Adam
-
+from collections import OrderedDict
 from data.dataloader import pix3dDataset, shapeNet_Dataset, dataLoader
 from model import pretrained_MaskRcnn, pretrained_ResNet50
 from parallel import CustomDP
+from utils.train_utils import train_backbone
 assert torch.cuda.is_available(), "the training process is slow and requires gpu"
 
 parser = argparse.ArgumentParser()
@@ -47,131 +45,100 @@ parser.add_argument('--weightDecay', type=float,
 parser.add_argument('--lr', type=float, default=1e-4, help='learning rate')
 
 
-options = parser.parse_args()
+def main():
+    options = parser.parse_args()
+    is_pix3d = options.model == 'Pix3D'
+    epochs = options.nEpoch
+
+    devices = [torch.device('cuda', i)
+               for i in range(torch.cuda.device_count())]
+
+    # print header
+    if is_pix3d:
+        disc = "training backbone mask-RCNN for Pix3D detection,classification and instance segmentation"
+    else:
+        disc = "training backbone ResNet50 for ShapeNet classification"
+    title = f'{disc} \n used_gpus: {len(devices)}\n epochs: {epochs}\n'
+    print(title)
+
+    gpus = [torch.cuda.get_device_name(device) for device in devices]
+    print('system information\n python: %s, torch: %s, cudnn: %s, cuda: %s, \ngpus: %s' % (
+        platform.python_version(),
+        torch.__version__,
+        torch.backends.cudnn.version(),
+        torch.version.cuda,
+        gpus))
+    print("\n")
+
+    print(f"options were:\n{options}\n")
+
+    # model and datasets/loaders definition
+    classes = options.classes
+    if classes != None:
+        classes = [item for item in options.classes.split(',')]
+
+    if is_pix3d:
+        model = pretrained_MaskRcnn(num_classes=10, pretrained=True)
+        num_voxels = 24
+        dataset_cls = pix3dDataset
+    else:
+        model = pretrained_ResNet50(nn.functional.nll_loss, num_classes=13,
+                                    pretrained=True)
+        num_voxels = 48
+        dataset_cls = shapeNet_Dataset
+
+    dataset = dataset_cls(options.dataRoot, classes=classes)
+    trainloader = dataLoader(dataset, options.batchSize, num_voxels=num_voxels,
+                             num_workers=options.workers,
+                             num_train_samples=options.num_sampels,
+                             train_ratio=options.train_ratio)
+
+    if options.backbone_path != '':
+        model.load_state_dict(torch.load(options.backbone_path))
+
+    # use data parallel if possible
+    if len(devices) > 1:
+        model = CustomDP(model, is_backbone=True, pix3d=is_pix3d)
+
+    model: nn.Module = model.to(devices[0])
+
+    # Create Optimizer
+    lrate = options.lr
+    decay = options.weightDecay
+    if options.optim == 'Adam':
+        optimizer = Adam(model.parameters(), lr=lrate, weight_decay=decay)
+    else:
+        optimizer = SGD(model.parameters(), lr=lrate, weight_decay=decay)
+
+    now = datetime.datetime.now()
+    save_path = now.isoformat()
+    dir_name = os.path.join('checkpoints',
+                            options.model, 'backbone', save_path)
+    if not os.path.exists(dir_name):
+        Path(dir_name).mkdir(parents=True, exist_ok=True)
+
+    stats = OrderedDict()
+    # Train model on the dataset
+    for epoch in range(epochs):
+        print(f'--- EPOCH {epoch+1}/{epochs} ---')
+        epoch_stats = train_backbone(model, optimizer, trainloader,
+                                     epoch, is_pix3d=is_pix3d)
+        stats[epoch] = epoch_stats
+
+        # save the model
+        print('saving net...')
+
+        # for eg checkpoints/ShapeNet/backbone/date/model_1.pth
+        file_name = f"model_{epoch}.pth"
+        try:
+            state_dict = model.module.state_dict()
+        except AttributeError:
+            state_dict = model.state_dict()
+        torch.save(state_dict, os.path.join(dir_name, file_name))
+
+    torch.save(stats, os.path.join(dir_name, f"stats.st"))
+    print(f"all Done")
 
 
-epochs = options.nEpoch
-
-devices = [torch.device('cuda', i)
-           for i in range(torch.cuda.device_count())]
-
-# print header
-if options.model == 'ShapeNet':
-    disc = "training backbone ResNet50 for ShapeNet classification"
-else:
-    disc = "training backbone mask-RCNN for Pix3D detection,classification and instance segmentation"
-title = f'{disc} \n used_gpus: {len(devices)}\n epochs: {epochs}\n'
-print(title)
-
-gpus = [torch.cuda.get_device_name(device) for device in devices]
-print('system information\n python: %s, torch: %s, cudnn: %s, cuda: %s, \ngpus: %s' % (
-    platform.python_version(),
-    torch.__version__,
-    torch.backends.cudnn.version(),
-    torch.version.cuda,
-    gpus))
-print("\n")
-
-print(f"options were:\n{options}\n")
-
-# model and datasets/loaders definition
-classes = options.classes
-if classes != None:
-    classes = [item for item in options.classes.split(',')]
-
-if options.model == 'ShapeNet':
-    model = pretrained_ResNet50(nn.functional.nll_loss, num_classes=13,
-                                pretrained=True)
-    num_voxels = 48
-    dataset_cls = shapeNet_Dataset
-
-else:
-    model = pretrained_MaskRcnn(num_classes=10, pretrained=True)
-    num_voxels = 24
-    dataset_cls = pix3dDataset
-
-dataset = dataset_cls(options.dataRoot, classes=classes)
-trainloader = dataLoader(dataset, options.batchSize, num_voxels=num_voxels,
-                         num_workers=options.workers,
-                         num_train_samples=options.num_sampels,
-                         train_ratio=options.train_ratio)
-
-if options.backbone_path != '':
-    model.load_state_dict(torch.load(options.backbone_path))
-
-# use data parallel if possible
-if len(devices) > 1:
-    model = CustomDP(model, is_backbone=True, pix3d=(options.model == 'Pix3D'))
-
-model: nn.Module = model.to(devices[0])
-
-# Create Optimizer
-lrate = options.lr
-decay = options.weightDecay
-if options.optim == 'Adam':
-    optimizer = Adam(model.parameters(), lr=lrate, weight_decay=decay)
-else:
-    optimizer = SGD(model.parameters(), lr=lrate, weight_decay=decay)
-
-
-now = datetime.datetime.now()
-save_path = now.isoformat()
-dir_name = os.path.join('checkpoints', options.model, 'backbone', save_path)
-if not os.path.exists(dir_name):
-    Path(dir_name).mkdir(parents=True, exist_ok=True)
-
-# Train model on the dataset
-losses = []
-for epoch in range(epochs):
-    epoch_loss = []
-    print(f'--- EPOCH {epoch+1}/{epochs} ---')
-
-    # Set to Train mode
-    model.train()
-    with tqdm.tqdm(total=len(trainloader.batch_sampler), file=sys.stdout) as pbar:
-        for i, batch in enumerate(trainloader, 0):
-            optimizer.zero_grad()
-
-            batch = batch.to(devices[0])
-            images, backbone_targets = batch.images, batch.backbone_targets
-            try:
-                # predict and comput loss
-                out = model(images, backbone_targets)
-
-                if options.model == 'ShapeNet':
-                    loss = out[0]
-                else:
-                    loss = sum(out[0].values())
-
-                loss.backward()
-                optimizer.step()
-
-                epoch_loss.append(loss.item())
-            except Exception as _:
-                pass
-
-            pbar.update()
-            avg_loss = np.nanmean(epoch_loss)
-
-            # prediodic loss updates
-            if (i + 1) % 128 == 0:
-                print(f"Epoch {epoch+1} batch {i+1}")
-                print(f"avg loss for this epoch sor far {avg_loss:.2f}")
-
-    # epoch ended
-    losses.append(epoch_loss)
-    print(
-        f'--- EPOCH {epoch+1}/{epochs} --- avg epoch loss {np.nanmean(epoch_loss):.2f}')
-    print(f"total avg loss so far {np.nanmean(losses):.2f}")
-    # save the model
-    print('saving net...')
-
-    # for eg checkpoints/ShapeNet/backbone/date/model_1.pth
-    file_name = f"model_{epoch}.pth"
-    try:
-        state_dict = model.module.state_dict()
-    except AttributeError:
-        state_dict = model.state_dict()
-    torch.save(state_dict, os.path.join(dir_name, file_name))
-
-print(f"backbone training done avg loss {np.mean(losses)}")
+if __name__ == "__main__":
+    main()
