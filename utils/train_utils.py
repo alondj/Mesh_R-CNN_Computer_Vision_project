@@ -1,14 +1,21 @@
 import time
 import torch
 import numpy as np
+from collections import OrderedDict
+
+
+def safe_print(rank, msg):
+    if rank == 0:
+        print(msg)
 
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
 
-    def __init__(self, name, fmt=':f'):
+    def __init__(self, name, fmt=':f', rank=0):
         self.name = name
         self.fmt = fmt
+        self.rank = rank
         self.reset()
 
     def reset(self):
@@ -26,7 +33,8 @@ class AverageMeter(object):
             self.count += n
             self.avg = self.sum / self.count
         else:
-            print(f"meter {self.name} recieved bad update value {val}")
+            safe_print(self.rank,
+                       f"meter {self.name} recieved bad update value {val}")
 
     def __str__(self):
         fmtstr = '{name} latest: {val' + self.fmt + \
@@ -35,16 +43,16 @@ class AverageMeter(object):
 
 
 class ProgressMeter(object):
-    def __init__(self, num_batches, meters, prefix=""):
+    def __init__(self, num_batches, meters, prefix="", rank=0):
         self.batch_fmtstr = self._get_batch_fmtstr(num_batches)
         self.meters = meters
         self.prefix = prefix
+        self.rank = rank
 
     def display(self, batch):
         entries = [self.prefix + self.batch_fmtstr.format(batch)]
         entries += [str(meter) for meter in self.meters]
-        print('\n'.join(entries))
-        print()
+        safe_print(self.rank, '\n'.join(entries)+'\n')
 
     def _get_batch_fmtstr(self, num_batches):
         num_digits = len(str(num_batches // 1))
@@ -52,22 +60,23 @@ class ProgressMeter(object):
         return '[' + fmt + '/' + fmt.format(num_batches) + ']'
 
 
-def train_backbone(model, optimizer, dataloader, epoch, is_pix3d=False,
+def train_backbone(rank, model, optimizer, dataloader, epoch, is_pix3d=False,
                    lr_count=0, curr_lr=0, print_freq=10):
     assert torch.cuda.is_available(), "gpu is required for training"
-    metrics = {'batch_time': AverageMeter('Batch Time', ':6.3f'),
-               'data_loading': AverageMeter('Data Loading Time', ':6.3f'),
-               'loss_classifier': AverageMeter('Classifier Loss', ':.4e')}
+    metrics = {'batch_time': AverageMeter('Batch Time', ':6.3f', rank=rank),
+               'data_loading': AverageMeter('Data Loading Time', ':6.3f', rank=rank),
+               'loss_classifier': AverageMeter('Classifier Loss', ':.4e', rank=rank)}
     if is_pix3d:
-        metrics.update({'loss_box_reg': AverageMeter('Box Regularization Loss', ':.4e'),
-                        'loss_mask': AverageMeter('Mask Loss', ':.4e'),
-                        'loss_objectness': AverageMeter('Objectness Loss', ':.4e'),
-                        'loss_rpn_box_reg': AverageMeter('RPN Regularization Loss', ':.4e')})
+        metrics.update({'loss_box_reg': AverageMeter('Box Regularization Loss', ':.4e', rank=rank),
+                        'loss_mask': AverageMeter('Mask Loss', ':.4e', rank=rank),
+                        'loss_objectness': AverageMeter('Objectness Loss', ':.4e', rank=rank),
+                        'loss_rpn_box_reg': AverageMeter('RPN Regularization Loss', ':.4e', rank=rank)})
 
     progress = ProgressMeter(
         len(dataloader),
         list(metrics.values()),
-        prefix="Epoch: [{}]".format(epoch))
+        prefix="Epoch: [{}]".format(epoch),
+        rank=rank)
 
     end = time.time()
     for i, batch in enumerate(dataloader):
@@ -117,29 +126,30 @@ def train_backbone(model, optimizer, dataloader, epoch, is_pix3d=False,
     return metrics, lr_count, curr_lr
 
 
-def train_gcn(model, optimizer, dataloader, epoch, loss_weights, backbone_train=True,
+def train_gcn(rank, model, optimizer, dataloader, epoch, loss_weights, backbone_train=True,
               is_pix3d=False, curr_lr=0, lr_count=0, print_freq=10):
     assert torch.cuda.is_available(), "gpu is required for training"
-    metrics = {'batch_time': AverageMeter('Batch Time', ':6.3f'),
-               'data_loading': AverageMeter('Data Loading Time', ':6.3f'),
-               'voxel_loss': AverageMeter('Voxel Loss', ':.4e'),
-               'edge_loss': AverageMeter('Edge Loss', ':.4e'),
-               'normal_loss': AverageMeter('Normal Loss', ':.4e'),
-               'chamfer_loss': AverageMeter('Chamfer Loss', ':.4e')}
+    metrics = {'batch_time': AverageMeter('Batch Time', ':6.3f', rank=rank),
+               'data_loading': AverageMeter('Data Loading Time', ':6.3f', rank=rank),
+               'voxel_loss': AverageMeter('Voxel Loss', ':.4e', rank=rank),
+               'edge_loss': AverageMeter('Edge Loss', ':.4e', rank=rank),
+               'normal_loss': AverageMeter('Normal Loss', ':.4e', rank=rank),
+               'chamfer_loss': AverageMeter('Chamfer Loss', ':.4e', rank=rank)}
 
     if backbone_train:
-        metrics['loss_classifier'] = AverageMeter('Classifier Loss', ':.4e')
+        metrics['loss_classifier'] = AverageMeter(
+            'Classifier Loss', ':.4e', rank=rank)
 
     if is_pix3d and backbone_train:
-        metrics.update({'loss_box_reg': AverageMeter('Box Regularization Loss', ':.4e'),
-                        'loss_mask': AverageMeter('Mask Loss', ':.4e'),
-                        'loss_objectness': AverageMeter('Objectness Loss', ':.4e'),
-                        'loss_rpn_box_reg': AverageMeter('RPN Regularization Loss', ':.4e')})
+        metrics.update({'loss_box_reg': AverageMeter('Box Regularization Loss', ':.4e', rank=rank),
+                        'loss_mask': AverageMeter('Mask Loss', ':.4e', rank=rank),
+                        'loss_objectness': AverageMeter('Objectness Loss', ':.4e', rank=rank),
+                        'loss_rpn_box_reg': AverageMeter('RPN Regularization Loss', ':.4e', rank=rank)})
 
     progress = ProgressMeter(
         len(dataloader),
         list(metrics.values()),
-        prefix="Epoch: [{}]".format(epoch))
+        prefix="Epoch: [{}]".format(epoch), rank=rank)
 
     end = time.time()
     for i, batch in enumerate(dataloader):
@@ -198,3 +208,17 @@ def train_gcn(model, optimizer, dataloader, epoch, loss_weights, backbone_train=
 
     progress.display(len(dataloader))
     return metrics, lr_count, curr_lr
+
+
+def load_dict(path):
+    state_dict: OrderedDict = torch.load(path)
+
+    res_dict = OrderedDict()
+
+    for k, v in state_dict.values():
+        new_k = k
+        if k.startswith('model.'):
+            new_k = k[len('model.'):]
+        res_dict[new_k] = v
+
+    return res_dict
