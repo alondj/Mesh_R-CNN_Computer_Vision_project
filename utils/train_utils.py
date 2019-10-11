@@ -215,7 +215,7 @@ def load_dict(path):
 
     res_dict = OrderedDict()
 
-    for k, v in state_dict.values():
+    for k, v in state_dict.items():
         new_k = k
         if k.startswith('model.'):
             new_k = k[len('model.'):]
