@@ -10,7 +10,8 @@ from collections import OrderedDict
 from data.dataloader import pix3dDataset, shapeNet_Dataset, dataLoader
 from model import pretrained_MaskRcnn, pretrained_ResNet50
 from parallel import CustomDP
-from utils.train_utils import train_backbone
+import torch.distributed as dist
+from utils.train_utils import train_backbone, load_dict, safe_print
 assert torch.cuda.is_available(), "the training process is slow and requires gpu"
 
 parser = argparse.ArgumentParser()
@@ -72,49 +73,73 @@ def main():
 
     print(f"options were:\n{options}\n")
 
+
+def worker(gpu_id, options, world_size):
+    if options.multiprocessing_distributed:
+        dist.init_process_group('nccl', init_method='tcp://127.0.0.1:FREEPORT',
+                                world_size=world_size, rank=gpu_id)
+        torch.cuda.set_device(gpu_id)
+
+    epochs = options.nEpoch
+    is_pix3d = options.model == 'Pix3D'
+
     # model and datasets/loaders definition
+    pretrained_backbone = options.backbone_path != ''
     classes = options.classes
     if classes != None:
         classes = [item for item in options.classes.split(',')]
 
     if is_pix3d:
-        model = pretrained_MaskRcnn(num_classes=10, pretrained=True)
+        model = pretrained_MaskRcnn(num_classes=10,
+                                    pretrained=pretrained_backbone)
         num_voxels = 24
         dataset_cls = pix3dDataset
     else:
         model = pretrained_ResNet50(nn.functional.nll_loss, num_classes=13,
-                                    pretrained=True)
+                                    pretrained=pretrained_backbone)
         num_voxels = 48
         dataset_cls = shapeNet_Dataset
 
     dataset = dataset_cls(options.dataRoot, classes=classes)
+    if options.multiprocessing_distributed:
+        section = gpu_id
+    else:
+        section = -1
     trainloader = dataLoader(dataset, options.batchSize, num_voxels=num_voxels,
                              num_workers=options.workers,
                              num_train_samples=options.num_sampels,
-                             train_ratio=options.train_ratio)
+                             train_ratio=options.train_ratio, rank=section)
 
     if options.backbone_path != '':
-        model.load_state_dict(torch.load(options.backbone_path))
+        safe_print(gpu_id, "loaded backbone checkpoint")
+        model.load_state_dict(load_dict(options.backbone_path))
 
-    # use data parallel if possible
-    if len(devices) > 1:
+    trained_parameters = model.parameters()
+    model.train()
+    model: nn.Module = model.cuda(gpu_id)
+
+    # use data parallel or distributed data parallel if possible
+    if options.multiprocessing_distributed:
+        safe_print(gpu_id, "using multiprocessing distributed training")
+        model = torch.nn.parallel.DistributedDataParallel(model,
+                                                          device_ids=[gpu_id])
+    elif torch.cuda.device_count() > 1:
+        safe_print(gpu_id, "using dataParallel")
         model = CustomDP(model, is_backbone=True, pix3d=is_pix3d)
-
-    model: nn.Module = model.to(devices[0])
 
     # Create Optimizer
     lrate = options.lr
     decay = options.weightDecay
     if options.optim == 'Adam':
-        optimizer = Adam(model.parameters(), lr=lrate, weight_decay=decay)
+        optimizer = Adam(trained_parameters, lr=lrate, weight_decay=decay)
     else:
-        optimizer = SGD(model.parameters(), lr=lrate, weight_decay=decay)
+        optimizer = SGD(trained_parameters, lr=lrate, weight_decay=decay)
 
     now = datetime.datetime.now()
     save_path = now.isoformat()
     dir_name = os.path.join('checkpoints',
                             options.model, 'backbone', save_path)
-    if not os.path.exists(dir_name):
+    if gpu_id == 0 and not os.path.exists(dir_name):
         Path(dir_name).mkdir(parents=True, exist_ok=True)
 
     stats = OrderedDict()
@@ -122,25 +147,28 @@ def main():
     curr_lr = lrate
     # Train model on the dataset
     for epoch in range(epochs):
-        print(f'--- EPOCH {epoch+1}/{epochs} ---')
-        epoch_stats, lr_count, curr_lr = train_backbone(model, optimizer, trainloader,
+        safe_print(gpu_id, f'--- EPOCH {epoch+1}/{epochs} ---')
+        epoch_stats, lr_count, curr_lr = train_backbone(gpu_id, model, optimizer, trainloader,
                                                         epoch, lr_count=lr_count,
                                                         curr_lr=curr_lr, is_pix3d=is_pix3d)
         stats[epoch] = epoch_stats
 
         # save the model
-        print('saving net...')
+        safe_print(gpu_id, 'saving net...')
 
         # for eg checkpoints/ShapeNet/backbone/date/model_1.pth
         file_name = f"model_{epoch}.pth"
-        try:
-            state_dict = model.module.state_dict()
-        except AttributeError:
-            state_dict = model.state_dict()
-        torch.save(state_dict, os.path.join(dir_name, file_name))
+        if gpu_id == 0:
+            try:
+                state_dict = model.module.state_dict()
+            except AttributeError:
+                state_dict = model.state_dict()
+            torch.save(state_dict, os.path.join(dir_name, file_name))
 
-    torch.save(stats, os.path.join(dir_name, f"stats.st"))
-    print(f"all Done")
+    if gpu_id == 0:
+        torch.save(stats, os.path.join(dir_name, f"stats.st"))
+    safe_print(gpu_id, f"all Done")
+    dist.destroy_process_group()
 
 
 if __name__ == "__main__":

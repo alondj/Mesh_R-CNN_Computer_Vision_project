@@ -7,6 +7,7 @@ import torch
 import PIL.Image
 from typing import List
 from utils import Mesh, load_mesh, load_voxels, resample_voxels
+from torch.utils.data.distributed import DistributedSampler
 
 
 class Batch():
@@ -296,8 +297,35 @@ def preparte_shapeNetBatch(num_voxels: int):
     return batch_input
 
 
+class DistributedSubSetSampler(DistributedSampler):
+    def __init__(self, indices, rank):
+        super(DistributedSubSetSampler, self).__init__(indices, rank=rank)
+        self.indices = indices
+
+    def __iter__(self):
+        # deterministically shuffle based on epoch
+        g = torch.Generator()
+        g.manual_seed(self.epoch)
+        if self.shuffle:
+            indices = torch.randperm(len(self.dataset), generator=g).tolist()
+        else:
+            indices = list(range(len(self.dataset)))
+
+        indices = [self.indices[i] for i in indices]
+
+        # add extra samples to make it evenly divisible
+        indices += indices[:(self.total_size - len(indices))]
+        assert len(indices) == self.total_size
+
+        # subsample
+        indices = indices[self.rank:self.total_size:self.num_replicas]
+        assert len(indices) == self.num_samples
+
+        return iter(indices)
+
+
 def dataLoader(dataset: Dataset, batch_size: int, num_voxels: int, num_workers: int, test=False, num_train_samples=None,
-               train_ratio=None):
+               train_ratio=None, rank=-1):
     assert (train_ratio is None) or (
         num_train_samples is None), "at most one of train_ration and num_train_samples can set"
 
@@ -321,6 +349,9 @@ def dataLoader(dataset: Dataset, batch_size: int, num_voxels: int, num_workers: 
     else:
         sampler = SubsetRandomSampler(train_indices)
 
+    if rank != -1:
+        sampler = DistributedSampler(sampler.indices, rank=rank)
+
     if isinstance(dataset, pix3dDataset):
         batch_fn = preparte_pix3dBatch
     else:
@@ -329,7 +360,7 @@ def dataLoader(dataset: Dataset, batch_size: int, num_voxels: int, num_workers: 
 
     return DataLoader(dataset, batch_size=batch_size, shuffle=False,
                       num_workers=num_workers, sampler=sampler,
-                      collate_fn=batch_fn(num_voxels))
+                      collate_fn=batch_fn(num_voxels), pin_memory=True)
 
 
 if __name__ == "__main__":
