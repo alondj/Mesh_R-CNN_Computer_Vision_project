@@ -52,7 +52,8 @@ class ProgressMeter(object):
         return '[' + fmt + '/' + fmt.format(num_batches) + ']'
 
 
-def train_backbone(model, optimizer, dataloader, epoch, is_pix3d=False, print_freq=10):
+def train_backbone(model, optimizer, dataloader, epoch, is_pix3d=False,
+                   lr_count=0, curr_lr=0, print_freq=10):
     assert torch.cuda.is_available(), "gpu is required for training"
     metrics = {'batch_time': AverageMeter('Batch Time', ':6.3f'),
                'data_loading': AverageMeter('Data Loading Time', ':6.3f'),
@@ -102,12 +103,22 @@ def train_backbone(model, optimizer, dataloader, epoch, is_pix3d=False, print_fr
         if i % print_freq == 0:
             progress.display(i)
 
+        # on pix3d linearly increase learning rate
+        lr_count += 1
+        if is_pix3d:
+            if lr_count < 1000:
+                curr_lr += (0.02-0.002)/1000.0
+            if lr_count in [8000, 10000]:
+                curr_lr /= 10
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = curr_lr
+
     progress.display(len(dataloader))
-    return metrics
+    return metrics, lr_count, curr_lr
 
 
 def train_gcn(model, optimizer, dataloader, epoch, loss_weights, backbone_train=True,
-              is_pix3d=False, print_freq=10):
+              is_pix3d=False, curr_lr=0, lr_count=0, print_freq=10):
     assert torch.cuda.is_available(), "gpu is required for training"
     metrics = {'batch_time': AverageMeter('Batch Time', ':6.3f'),
                'data_loading': AverageMeter('Data Loading Time', ':6.3f'),
@@ -175,5 +186,15 @@ def train_gcn(model, optimizer, dataloader, epoch, loss_weights, backbone_train=
         if i % print_freq == 0:
             progress.display(i)
 
+        # on pix3d linearly increase learning rate
+        lr_count += 1
+        if is_pix3d:
+            if lr_count < 1000:
+                curr_lr += (0.02-0.002)/1000.0
+            if lr_count in [8000, 10000]:
+                curr_lr /= 10
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = curr_lr
+
     progress.display(len(dataloader))
-    return metrics
+    return metrics, lr_count, curr_lr

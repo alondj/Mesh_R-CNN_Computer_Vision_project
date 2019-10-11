@@ -173,8 +173,6 @@ def main():
         optimizer = Adam(trained_parameters, lr=lrate, weight_decay=decay)
     else:
         optimizer = SGD(trained_parameters, lr=lrate, weight_decay=decay)
-        # TODO they increased learning rate do we wish to do the same?
-        # linearly increasing the learning rate from 0.002 to 0.02 over the first 1K iterations,
 
     # loss weights
     loss_weights = {'chamfer_loss': options.chamfer,
@@ -194,11 +192,14 @@ def main():
 
     # Train model on the dataset
     stats = OrderedDict()
+    lr_count = 0
+    curr_lr = lrate
     for epoch in range(epochs):
         print(f'--- EPOCH {epoch+1}/{epochs} ---')
 
-        epoch_stats = train_gcn(model, optimizer, trainloader, epoch, loss_weights,
-                                backbone_train=options.train_backbone, is_pix3d=is_pix3d)
+        epoch_stats, lr_count, curr_lr = train_gcn(model, optimizer, trainloader, epoch,
+                                                   loss_weights, backbone_train=options.train_backbone,
+                                                   is_pix3d=is_pix3d, lr_count=lr_count, curr_lr=curr_lr)
         stats[epoch] = epoch_stats
         # save the model
         print('saving net...')

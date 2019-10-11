@@ -118,11 +118,14 @@ def main():
         Path(dir_name).mkdir(parents=True, exist_ok=True)
 
     stats = OrderedDict()
+    lr_count = 0
+    curr_lr = lrate
     # Train model on the dataset
     for epoch in range(epochs):
         print(f'--- EPOCH {epoch+1}/{epochs} ---')
-        epoch_stats = train_backbone(model, optimizer, trainloader,
-                                     epoch, is_pix3d=is_pix3d)
+        epoch_stats, lr_count, curr_lr = train_backbone(model, optimizer, trainloader,
+                                                        epoch, lr_count=lr_count,
+                                                        curr_lr=curr_lr, is_pix3d=is_pix3d)
         stats[epoch] = epoch_stats
 
         # save the model
