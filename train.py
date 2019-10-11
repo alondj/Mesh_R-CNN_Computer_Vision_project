@@ -6,7 +6,7 @@ from itertools import chain
 from pathlib import Path
 import torch
 import torch.nn as nn
-from utils.train_utils import train_gcn
+from utils.train_utils import train_gcn, load_dict
 from torch.optim import SGD, Adam
 from collections import OrderedDict
 from data.dataloader import pix3dDataset, shapeNet_Dataset, dataLoader
@@ -137,11 +137,11 @@ def main():
 
     # load checkpoint if possible
     if options.backbone_path != '':
-        model.backbone.load_state_dict(torch.load(options.backbone_path))
+        model.backbone.load_state_dict(load_dict(options.backbone_path))
 
     # load checkpoint if possible
     if options.model_path != '':
-        model.load_state_dict(torch.load(options.model_path))
+        model.load_state_dict(load_dict(options.model_path))
 
     # select trainable parameters
     trained_parameters = model.voxelBranch.parameters()
@@ -197,7 +197,7 @@ def main():
     for epoch in range(epochs):
         print(f'--- EPOCH {epoch+1}/{epochs} ---')
 
-        epoch_stats, lr_count, curr_lr = train_gcn(model, optimizer, trainloader, epoch,
+        epoch_stats, lr_count, curr_lr = train_gcn(0, model, optimizer, trainloader, epoch,
                                                    loss_weights, backbone_train=options.train_backbone,
                                                    is_pix3d=is_pix3d, lr_count=lr_count, curr_lr=curr_lr)
         stats[epoch] = epoch_stats

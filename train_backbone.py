@@ -10,7 +10,7 @@ from collections import OrderedDict
 from data.dataloader import pix3dDataset, shapeNet_Dataset, dataLoader
 from model import pretrained_MaskRcnn, pretrained_ResNet50
 from parallel import CustomDP
-from utils.train_utils import train_backbone
+from utils.train_utils import train_backbone, load_dict
 assert torch.cuda.is_available(), "the training process is slow and requires gpu"
 
 parser = argparse.ArgumentParser()
@@ -94,7 +94,7 @@ def main():
                              train_ratio=options.train_ratio)
 
     if options.backbone_path != '':
-        model.load_state_dict(torch.load(options.backbone_path))
+        model.load_state_dict(load_dict(options.backbone_path))
 
     # use data parallel if possible
     if len(devices) > 1:
@@ -123,7 +123,7 @@ def main():
     # Train model on the dataset
     for epoch in range(epochs):
         print(f'--- EPOCH {epoch+1}/{epochs} ---')
-        epoch_stats, lr_count, curr_lr = train_backbone(model, optimizer, trainloader,
+        epoch_stats, lr_count, curr_lr = train_backbone(0, model, optimizer, trainloader,
                                                         epoch, lr_count=lr_count,
                                                         curr_lr=curr_lr, is_pix3d=is_pix3d)
         stats[epoch] = epoch_stats
