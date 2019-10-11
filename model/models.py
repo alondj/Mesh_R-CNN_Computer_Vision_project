@@ -56,8 +56,9 @@ class ShapeNetModel(nn.Module):
         if self.training and targets is None:
             raise ValueError("In training mode, targets should be passed")
 
+        backbone_targets = targets.backbone_targets if self.training else None
         backbone_out, feature_maps = self.backbone(images,
-                                                   targets.backbone_targets)
+                                                   backbone_targets)
         sizes = [i.shape[1:] for i in images]
         upscaled = F.interpolate(feature_maps[-1], scale_factor=4.8,
                                  mode='bilinear', align_corners=True)
@@ -190,9 +191,9 @@ class Pix3DModel(nn.Module):
         if self.training and targets is None:
             raise ValueError("In training mode, targets should be passed")
 
+        backbone_targets = targets.backbone_targets if self.training else None
         backbone_out, ROI_features = self.backbone(images,
-                                                   targets.backbone_targets)
-
+                                                   backbone_targets)
         # in this part we set the mesh index (how many meshes per image)
         # and filtering roi_input for training
         if self.training:
@@ -202,7 +203,7 @@ class Pix3DModel(nn.Module):
             else:
                 # backbone returns detection,ROI_features
                 detections = backbone_out
-            ROI_features = filter_ROI_input(targets.backbone_targets, detections,
+            ROI_features = filter_ROI_input(backbone_targets, detections,
                                             ROI_features)
             mesh_index = [1 for _ in images]
             detections = None
