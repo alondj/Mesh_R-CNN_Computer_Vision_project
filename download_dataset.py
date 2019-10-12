@@ -7,7 +7,7 @@ import json
 import argparse
 import torch
 from model.layers import Cubify
-from data.read_binvox import read_as_3d_array
+from utils.serialization import load_voxels
 from utils import save_mesh, normalize_mesh
 """
 the dataset should be built like that:
@@ -89,7 +89,8 @@ def render_shapenet_meshes(download_path):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     renderer = Cubify(threshold=0.5).to(device)
     print("render start")
-    pathlist = list(Path(f"{download_path}/dataset/shapeNet/ShapeNetVox32").glob('**/*.binvox'))
+    pathlist = list(
+        Path(f"{download_path}/dataset/shapeNet/ShapeNetVox32").glob('**/*.binvox'))
     print(len(pathlist))
     with torch.no_grad():
         # every time render 16 models
@@ -98,9 +99,7 @@ def render_shapenet_meshes(download_path):
             paths = [str(p) for p in b]
             # read a batch
             for p in paths:
-                with open(p, 'rb') as binvox_file:
-                    v = torch.from_numpy(read_as_3d_array(binvox_file))
-                    voxels.append(v)
+                voxels.append(load_voxels(p, tensor=True))
             v_batch = torch.stack(voxels).float().to(device)
 
             # render and split again
@@ -150,12 +149,13 @@ def get_shapenet_class_by_name(s: str):
     return -1
 
 
-def create_shapenet_Json(directory_str,pathlist):
+def create_shapenet_Json(directory_str, pathlist):
     json_obj = []
     if os.path.exists(f"{directory_str}/dataset/shapeNet/shapenet.json"):
         return
     if pathlist is None:
-        pathlist=list(Path(f"{download_path}/dataset/shapeNet/ShapeNetVox32").glob('**/*.binvox'))
+        pathlist = list(
+            Path(f"{download_path}/dataset/shapeNet/ShapeNetVox32").glob('**/*.binvox'))
 
     print(f"{directory_str}/dataset/shapeNet/shapenet.json")
     print("creating json")
@@ -175,10 +175,11 @@ def create_shapenet_Json(directory_str,pathlist):
         json.dump(json_obj, f)
     print("json done")
 
+
 def prepare_shapenet(download_path):
     download_shapenet(download_path)
-    pathlist=render_shapenet_meshes(download_path)
-    create_shapenet_Json(download_path,pathlist)
+    pathlist = render_shapenet_meshes(download_path)
+    create_shapenet_Json(download_path, pathlist)
 
 
 parser = argparse.ArgumentParser()
