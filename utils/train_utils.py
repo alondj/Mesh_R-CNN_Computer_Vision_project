@@ -94,7 +94,7 @@ def train_backbone(rank, model, optimizer, dataloader, epoch, is_pix3d=False,
         # compute loss update metrics
         if is_pix3d:
             loss = sum(output.values())
-            for k, l in output.values():
+            for k, l in output.items():
                 metrics[k].update(l.item(), len(images))
         else:
             loss = output
