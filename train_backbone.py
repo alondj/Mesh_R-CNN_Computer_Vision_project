@@ -168,7 +168,10 @@ def worker(gpu_id, options, world_size):
     if gpu_id == 0:
         torch.save(stats, os.path.join(dir_name, f"stats.st"))
     safe_print(gpu_id, f"all Done")
-    dist.destroy_process_group()
+
+    if options.multiprocessing_distributed:
+        dist.barrier()
+        dist.destroy_process_group()
 
 
 if __name__ == "__main__":
