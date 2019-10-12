@@ -139,7 +139,7 @@ def validate(rank, model, val_loader, num_classes, is_pix3d=False, print_freq=10
 
                 gt_labels = targets
                 preds = model_output['backbone']
-                preds = torch.argmax(preds, gt_labels)
+                preds = torch.argmax(preds, dim=1)
 
             # compute gcn loss
             vxl_loss = voxel_loss(voxels, voxel_gts)
