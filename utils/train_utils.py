@@ -4,6 +4,28 @@ import numpy as np
 from collections import OrderedDict
 
 
+def save_state(model, file_name):
+    try:
+        state_dict = model.module.state_dict()
+    except AttributeError:
+        state_dict = model.state_dict()
+    torch.save(state_dict, file_name)
+
+
+def load_dict(path):
+    state_dict: OrderedDict = torch.load(path)
+
+    res_dict = OrderedDict()
+
+    for k, v in state_dict.items():
+        new_k = k
+        if k.startswith('model.'):
+            new_k = k[len('model.'):]
+        res_dict[new_k] = v
+
+    return res_dict
+
+
 def safe_print(rank, msg):
     if rank == 0:
         print(msg)
@@ -60,17 +82,35 @@ class ProgressMeter(object):
         return '[' + fmt + '/' + fmt.format(num_batches) + ']'
 
 
+def basic_metrics(rank=0):
+    return {'batch_time': AverageMeter('Batch Time', ':6.3f', rank=rank),
+            'data_loading': AverageMeter('Data Loading Time', ':6.3f', rank=rank)}
+
+
+def maskrcnn_metrics(rank=0):
+    return {'loss_box_reg': AverageMeter('Box Regularization Loss', ':.4e', rank=rank),
+            'loss_mask': AverageMeter('Mask Loss', ':.4e', rank=rank),
+            'loss_objectness': AverageMeter('Objectness Loss', ':.4e', rank=rank),
+            'loss_rpn_box_reg': AverageMeter('RPN Regularization Loss', ':.4e', rank=rank)}
+
+
+def gcn_metrics(rank=0, voxel_only=False):
+    metrics = {'voxel_loss': AverageMeter('Voxel Loss', ':.4e', rank=rank)}
+    if not voxel_only:
+        metrics.update({'edge_loss': AverageMeter('Edge Loss', ':.4e', rank=rank),
+                        'normal_loss': AverageMeter('Normal Loss', ':.4e', rank=rank),
+                        'chamfer_loss': AverageMeter('Chamfer Loss', ':.4e', rank=rank)})
+    return metrics
+
+
 def train_backbone(rank, model, optimizer, dataloader, epoch, is_pix3d=False,
                    lr_count=0, curr_lr=0, print_freq=10):
     assert torch.cuda.is_available(), "gpu is required for training"
-    metrics = {'batch_time': AverageMeter('Batch Time', ':6.3f', rank=rank),
-               'data_loading': AverageMeter('Data Loading Time', ':6.3f', rank=rank),
-               'loss_classifier': AverageMeter('Classifier Loss', ':.4e', rank=rank)}
+    metrics = basic_metrics(rank=rank)
+    metrics['loss_classifier'] = AverageMeter('Classifier Loss', ':.4e',
+                                              rank=rank)
     if is_pix3d:
-        metrics.update({'loss_box_reg': AverageMeter('Box Regularization Loss', ':.4e', rank=rank),
-                        'loss_mask': AverageMeter('Mask Loss', ':.4e', rank=rank),
-                        'loss_objectness': AverageMeter('Objectness Loss', ':.4e', rank=rank),
-                        'loss_rpn_box_reg': AverageMeter('RPN Regularization Loss', ':.4e', rank=rank)})
+        metrics.update(maskrcnn_metrics(rank))
 
     progress = ProgressMeter(
         len(dataloader),
@@ -82,7 +122,7 @@ def train_backbone(rank, model, optimizer, dataloader, epoch, is_pix3d=False,
     for i, batch in enumerate(dataloader):
         # measure data loading time
         metrics['data_loading'].update(time.time() - end)
-        batch = batch.to('cuda:0', non_blocking=True)
+        batch = batch.to(rank, non_blocking=True)
         images, backbone_targets = batch.images, batch.backbone_targets
 
         # compute output
@@ -129,22 +169,16 @@ def train_backbone(rank, model, optimizer, dataloader, epoch, is_pix3d=False,
 def train_gcn(rank, model, optimizer, dataloader, epoch, loss_weights, backbone_train=True,
               is_pix3d=False, curr_lr=0, lr_count=0, print_freq=10):
     assert torch.cuda.is_available(), "gpu is required for training"
-    metrics = {'batch_time': AverageMeter('Batch Time', ':6.3f', rank=rank),
-               'data_loading': AverageMeter('Data Loading Time', ':6.3f', rank=rank),
-               'voxel_loss': AverageMeter('Voxel Loss', ':.4e', rank=rank),
-               'edge_loss': AverageMeter('Edge Loss', ':.4e', rank=rank),
-               'normal_loss': AverageMeter('Normal Loss', ':.4e', rank=rank),
-               'chamfer_loss': AverageMeter('Chamfer Loss', ':.4e', rank=rank)}
+    metrics = basic_metrics(rank=rank)
+
+    metrics.update(gcn_metrics(rank=rank, voxel_only=model.voxel_only))
 
     if backbone_train:
         metrics['loss_classifier'] = AverageMeter(
             'Classifier Loss', ':.4e', rank=rank)
 
     if is_pix3d and backbone_train:
-        metrics.update({'loss_box_reg': AverageMeter('Box Regularization Loss', ':.4e', rank=rank),
-                        'loss_mask': AverageMeter('Mask Loss', ':.4e', rank=rank),
-                        'loss_objectness': AverageMeter('Objectness Loss', ':.4e', rank=rank),
-                        'loss_rpn_box_reg': AverageMeter('RPN Regularization Loss', ':.4e', rank=rank)})
+        metrics.update(maskrcnn_metrics(rank=rank))
 
     progress = ProgressMeter(
         len(dataloader),
@@ -156,7 +190,7 @@ def train_gcn(rank, model, optimizer, dataloader, epoch, loss_weights, backbone_
         # measure data loading time
         metrics['data_loading'].update(time.time() - end)
 
-        batch = batch.to('cuda:0', non_blocking=True)
+        batch = batch.to(rank, non_blocking=True)
         images, targets = batch.images, batch
         # compute output
         try:
@@ -208,17 +242,3 @@ def train_gcn(rank, model, optimizer, dataloader, epoch, loss_weights, backbone_
 
     progress.display(len(dataloader))
     return metrics, lr_count, curr_lr
-
-
-def load_dict(path):
-    state_dict: OrderedDict = torch.load(path)
-
-    res_dict = OrderedDict()
-
-    for k, v in state_dict.items():
-        new_k = k
-        if k.startswith('model.'):
-            new_k = k[len('model.'):]
-        res_dict[new_k] = v
-
-    return res_dict
