@@ -41,12 +41,66 @@ def save_mesh(vertices, faces, filename: str):
     np.savetxt(filename + ".obj", mesh, fmt='%s', delimiter=' ')
 
 
+def _read_header(fp):
+    """ Read binvox header. Mostly meant for internal use.
+    """
+    line = fp.readline().strip()
+    dims = list(map(int, fp.readline().strip().split(b' ')[1:]))
+    translate = list(map(float, fp.readline().strip().split(b' ')[1:]))
+    scale = list(map(float, fp.readline().strip().split(b' ')[1:]))[0]
+    line = fp.readline()
+    return dims, translate, scale
+
+
+def _read_as_3d_array(fp, fix_coords=True):
+    """ Read binary binvox format as array.
+
+    Returns the model with accompanying metadata.
+
+    Voxels are stored in a three-dimensional numpy array, which is simple and
+    direct, but may use a lot of memory for large models. (Storage requirements
+    are 8*(d^3) bytes, where d is the dimensions of the binvox model. Numpy
+    boolean arrays use a byte per element).
+
+    Doesn't do any checks on input except for the '#binvox' line.
+    """
+    dims, translate, scale = _read_header(
+        fp)  # [32,32,32],[-0.302239, -0.169754,0.360326],[0.720652]
+    l = fp.read()
+    raw_data = np.fromstring(l, dtype=np.uint8)
+    # if just using reshape() on the raw data:
+    # indexing the array as array[i,j,k], the indices map into the
+    # coords as:
+    # i -> x
+    # j -> z
+    # k -> y
+    # if fix_coords is true, then data is rearranged so that
+    # mapping is
+    # i -> x
+    # j -> y
+    # k -> z
+    values, counts = raw_data[::2], raw_data[1::2]
+    data = np.repeat(values, counts).astype(np.bool)
+
+    data = data.reshape(dims)
+    if fix_coords:
+        # xzy to xyz TODO the right thing
+        data = np.transpose(data, (0, 2, 1))
+        axis_order = 'xyz'
+    else:
+        axis_order = 'xzy'
+    return 1*data
+
+
 def load_voxels(path: str, tensor=False):
     if path.endswith(".npy"):
         vxls = np.load(path)
-    else:
-        assert path.endswith(".mat")
+    elif path.endswith(".mat"):
         vxls = scipy.io.loadmat(path)['voxel']
+    else:
+        assert path.endswith(".binvox")
+        with open(path, 'rb') as binvox_file:
+            vxls = _read_as_3d_array(binvox_file)
     if tensor:
         return torch.from_numpy(vxls)
     return vxls

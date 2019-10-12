@@ -211,8 +211,16 @@ def main():
             state_dict = model.state_dict()
         torch.save(state_dict,
                    os.path.join(GCN_path, file_name))
+        torch.save(stats, os.path.join(GCN_path, f"stats_{epoch}.st"))
 
-    torch.save(stats, os.path.join(GCN_path, f"stats.st"))
+    file_name = f"model_final.pth"
+    try:
+        state_dict = model.module.state_dict()
+    except AttributeError:
+        state_dict = model.state_dict()
+    torch.save(state_dict,
+               os.path.join(GCN_path, file_name))
+    torch.save(stats, os.path.join(GCN_path, f"stats_final.st"))
     print("all Done")
 
 

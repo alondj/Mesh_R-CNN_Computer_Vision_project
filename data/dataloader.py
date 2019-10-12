@@ -2,7 +2,6 @@ import json
 import matplotlib.image as mpimg
 from torch.utils.data import Dataset, DataLoader, SubsetRandomSampler
 import numpy as np
-from data.read_binvox import read_as_3d_array
 import torch
 import PIL.Image
 from typing import List
@@ -272,8 +271,7 @@ class shapeNet_Dataset(Dataset):
             img = img / 255.
 
         mesh = load_mesh(mesh_src, tensor=True)
-        with open(voxel_src, 'rb') as binvox_file:
-            model = torch.from_numpy(read_as_3d_array(binvox_file))
+        model = load_voxels(voxel_src, tensor=True)
         return img, model, mesh, float(label)
 
     def get_class(self, s: str):

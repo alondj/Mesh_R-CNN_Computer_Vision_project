@@ -138,8 +138,15 @@ def main():
         except AttributeError:
             state_dict = model.state_dict()
         torch.save(state_dict, os.path.join(dir_name, file_name))
+        torch.save(stats, os.path.join(dir_name, f"stats_{epoch}.st"))
 
-    torch.save(stats, os.path.join(dir_name, f"stats.st"))
+    file_name = f"model_final.pth"
+    try:
+        state_dict = model.module.state_dict()
+    except AttributeError:
+        state_dict = model.state_dict()
+    torch.save(state_dict, os.path.join(dir_name, file_name))
+    torch.save(stats, os.path.join(dir_name, f"stats_final.st"))
     print(f"all Done")
 
 
