@@ -247,13 +247,15 @@ def worker(gpu_id, options, world_size):
                 state_dict = model.state_dict()
             torch.save(state_dict,
                        os.path.join(GCN_path, file_name))
-    if gpu_id == 0:
-        torch.save(stats, os.path.join(GCN_path, f"stats.st"))
-    safe_print(gpu_id, "all Done")
 
+    # finished training
     if options.multiprocessing_distributed:
         dist.barrier()
         dist.destroy_process_group()
+
+    if gpu_id == 0:
+        torch.save(stats, os.path.join(GCN_path, f"stats.st"))
+    safe_print(gpu_id, "all Done")
 
 
 if __name__ == "__main__":
