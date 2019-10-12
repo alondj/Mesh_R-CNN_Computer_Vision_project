@@ -11,7 +11,7 @@ from data.dataloader import pix3dDataset, shapeNet_Dataset, dataLoader
 from model import pretrained_MaskRcnn, pretrained_ResNet50
 from parallel import CustomDP
 import torch.distributed as dist
-from utils.train_utils import train_backbone, load_dict, safe_print
+from utils.train_utils import train_backbone, load_dict, safe_print, save_state
 assert torch.cuda.is_available(), "the training process is slow and requires gpu"
 
 parser = argparse.ArgumentParser()
@@ -147,23 +147,20 @@ def worker(gpu_id, options, world_size):
     curr_lr = lrate
     # Train model on the dataset
     for epoch in range(epochs):
-        safe_print(gpu_id, f'--- EPOCH {epoch+1}/{epochs} ---')
+        safe_print(gpu_id, f'--- EPOCH {epoch}/{epochs} ---')
         epoch_stats, lr_count, curr_lr = train_backbone(gpu_id, model, optimizer, trainloader,
                                                         epoch, lr_count=lr_count,
                                                         curr_lr=curr_lr, is_pix3d=is_pix3d)
         stats[epoch] = epoch_stats
 
         # save the model
-        safe_print(gpu_id, 'saving net...')
+        safe_print(gpu_id, f'finished epoch {epoch} saving net...')
 
         # for eg checkpoints/ShapeNet/backbone/date/model_1.pth
         file_name = f"model_{epoch}.pth"
         if gpu_id == 0:
-            try:
-                state_dict = model.module.state_dict()
-            except AttributeError:
-                state_dict = model.state_dict()
-            torch.save(state_dict, os.path.join(dir_name, file_name))
+            save_state(model, os.path.join(dir_name, file_name))
+            torch.save(stats, os.path.join(dir_name, f"stats_{epoch}.st"))
 
     # finished training
     if options.multiprocessing_distributed:
@@ -171,7 +168,10 @@ def worker(gpu_id, options, world_size):
         dist.destroy_process_group()
 
     if gpu_id == 0:
+        safe_print(gpu_id, "saving final model and stats")
         torch.save(stats, os.path.join(dir_name, f"stats.st"))
+        save_state(model, os.path.join(dir_name, "model_final.pth"))
+
     safe_print(gpu_id, f"all Done")
 
 

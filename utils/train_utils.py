@@ -4,6 +4,14 @@ import numpy as np
 from collections import OrderedDict
 
 
+def save_state(model, file_name):
+    try:
+        state_dict = model.module.state_dict()
+    except AttributeError:
+        state_dict = model.state_dict()
+    torch.save(state_dict, file_name)
+
+
 def safe_print(rank, msg):
     if rank == 0:
         print(msg)

@@ -6,7 +6,7 @@ from itertools import chain
 from pathlib import Path
 import torch
 import torch.nn as nn
-from utils.train_utils import train_gcn, safe_print, load_dict
+from utils.train_utils import train_gcn, safe_print, load_dict, save_state
 from torch.optim import SGD, Adam
 from collections import OrderedDict
 from data.dataloader import pix3dDataset, shapeNet_Dataset, dataLoader
@@ -230,23 +230,19 @@ def worker(gpu_id, options, world_size):
     lr_count = 0
     curr_lr = lrate
     for epoch in range(epochs):
-        safe_print(gpu_id, f'--- EPOCH {epoch+1}/{epochs} ---')
+        safe_print(gpu_id, f'--- EPOCH {epoch}/{epochs} ---')
 
         epoch_stats, lr_count, curr_lr = train_gcn(gpu_id, model, optimizer, trainloader, epoch,
                                                    loss_weights, backbone_train=options.train_backbone,
                                                    is_pix3d=is_pix3d, lr_count=lr_count, curr_lr=curr_lr)
         stats[epoch] = epoch_stats
         # save the model
-        safe_print(gpu_id, 'saving net...')
+        safe_print(gpu_id, f'finished epoch {epoch} saving net...')
         # for eg checkpoints/Pix3D/date/model_{1}.pth
         file_name = f"model_{epoch}.pth"
         if gpu_id == 0:
-            try:
-                state_dict = model.module.state_dict()
-            except AttributeError:
-                state_dict = model.state_dict()
-            torch.save(state_dict,
-                       os.path.join(GCN_path, file_name))
+            save_state(model, os.path.join(GCN_path, file_name))
+            torch.save(stats, os.path.join(GCN_path, f"stats_{epoch}.st"))
 
     # finished training
     if options.multiprocessing_distributed:
@@ -254,7 +250,10 @@ def worker(gpu_id, options, world_size):
         dist.destroy_process_group()
 
     if gpu_id == 0:
-        torch.save(stats, os.path.join(GCN_path, f"stats.st"))
+        safe_print(gpu_id, "saving final model and stats")
+        torch.save(stats, os.path.join(GCN_path, f"stats_final.st"))
+        save_state(model, os.path.join(GCN_path, "model_final.pth"))
+
     safe_print(gpu_id, "all Done")
 
 
