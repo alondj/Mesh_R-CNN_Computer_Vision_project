@@ -4,7 +4,7 @@ import torch
 import numpy as np
 from torchvision.ops.boxes import box_iou
 from model.loss_functions import voxel_loss, batched_mesh_loss
-from utils.train_utils import gcn_metrics, AverageMeter, ProgressMeter, safe_print
+from utils.train_utils import gcn_metrics, AverageMeter, ProgressMeter, safe_print, basic_metrics
 from utils.metrics import f_score, calc_precision_box, calc_precision_mask, mesh_precision_recall
 
 
@@ -73,7 +73,8 @@ def get_only_max(max_indexes, voxels, vertex_positions, faces, vertice_index, fa
 
 
 def validate(rank, model, val_loader, num_classes, is_pix3d=False, print_freq=10):
-    metrics = gcn_metrics(rank=rank)
+    metrics = basic_metrics(rank=rank)
+    metrics.update(gcn_metrics(rank=rank))
     if is_pix3d:
         metrics['AP_mask'] = AverageMeter('Average Precision Mask',
                                           ":4e", rank=rank)
