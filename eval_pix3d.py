@@ -65,7 +65,7 @@ if options.classes is not None:
 dataset = pix3dDataset(options.dataRoot, classes=classes)
 
 testloader = dataLoader(dataset, options.batch_size, 24, options.num_workers,
-                        test=True, num_train_samples=None, train_ratio=1 - options.train_ratio)
+                        test=True, num_train_samples=None, train_ratio=1 - options.test_ratio)
 
 # load checkpoint
 model.load_state_dict(torch.load(options.model_path))
