@@ -1,6 +1,6 @@
 # Pixel2Mesh-Pytorch
 
-This repository aims to implement the ICCV 2018 paper: [Mesh R-CNN](https://arxiv.org/pdf/1906.02739.pdf) in PyTorch. The [official code](https://github.com/nywang16/Pixel2Mesh).
+This repository aims to implement the ICCV 2019 paper: [Mesh R-CNN](https://arxiv.org/pdf/1906.02739.pdf) in PyTorch.
 
 ## Requirements
 
@@ -9,7 +9,7 @@ This repository aims to implement the ICCV 2018 paper: [Mesh R-CNN](https://arxi
 
 ## External Codes
 
-- [pixel2mesh](https://github.com/nywang16/Pixel2Mesh): Base code of Vertice Align
+- [pixel2mesh](https://github.com/nywang16/Pixel2Mesh): Base code of Vertice Align layer
 
 ## Datasets
 
@@ -17,7 +17,7 @@ We use the datasets as specified in the article
 
 ### ShapeNet
 
-The rendered views are from [3D-R2N2](https://github.com/chrischoy/3D-R2N2).
+The dataset was obtained from [3D-R2N2](https://github.com/chrischoy/3D-R2N2).
 Please respect the [ShapeNet license](https://shapenet.org/terms) while using.
 
 ### Pix3D
@@ -25,9 +25,9 @@ Please respect the [ShapeNet license](https://shapenet.org/terms) while using.
 The dataset was obtained from[Pix3D](https://github.com/xingyuansun/pix3d).
 Please respect the [Pix3D license](https://creativecommons.org/licenses/by/4.0/)
 
-# Getting Started
+## Getting Started
 
-## Data Preparation
+### Data Preparation
 
 \*\* as part of the data preparation for ShapeNet we render meshes
 this process is slow and using a GPU is highly recommended
@@ -52,7 +52,7 @@ this will download and prepare the dataset creating the following structure
 
 ### Train
 
-We provide 2 scipts in order to train the model
+We provide 2 scripts in order to train the model
 train_backbone in order to train a backbone feature extractor for the GCN
 and train in order to train backbone+GCN at the same time
 

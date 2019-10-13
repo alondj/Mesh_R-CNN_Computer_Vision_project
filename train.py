@@ -10,7 +10,7 @@ from utils.train_utils import train_gcn, load_dict
 from torch.optim import SGD, Adam
 from collections import OrderedDict
 from data.dataloader import pix3dDataset, shapeNet_Dataset, dataLoader
-from meshRCNN import Pix3DModel, ShapeNetModel, pretrained_MaskRcnn, pretrained_ResNet5
+from meshRCNN import Pix3DModel, ShapeNetModel, pretrained_MaskRcnn, pretrained_ResNet50
 from dataParallel import CustomDP
 
 

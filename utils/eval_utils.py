@@ -3,7 +3,7 @@ import time
 import torch
 import numpy as np
 from torchvision.ops.boxes import box_iou
-from model.loss_functions import voxel_loss, batched_mesh_loss
+from meshRCNN.loss_functions import voxel_loss, batched_mesh_loss
 from utils.train_utils import gcn_metrics, AverageMeter, ProgressMeter, safe_print, basic_metrics
 from utils.metrics import f_score, calc_precision_box, calc_precision_mask, mesh_precision_recall
 
@@ -159,7 +159,7 @@ def validate(rank, model, val_loader, num_classes, is_pix3d=False, print_freq=10
             # update f scores
             for f in [1, 3, 5]:
                 metrics[f'f0_{f}'].update(f_score(confusion_matrix,
-                                                  f/10).mean().item())
+                                                  f / 10).mean().item())
 
             if is_pix3d:
                 f1_0_3_score = metrics['f0_3'].val
