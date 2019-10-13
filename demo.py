@@ -59,7 +59,6 @@ else:
 model.load_state_dict(torch.load(options.modelPath))
 model: nn.Module = model.to('cuda').eval()
 
-
 rgba_image = PIL.Image.open(options.imagePath)
 rgb_image = rgba_image.convert('RGB')
 img = torch.from_numpy(np.array(rgb_image))
@@ -88,14 +87,14 @@ for idx, v in enumerate(voxels.split(1)):
     if options.show:
         show_voxels(v)
 
-        # save the intermediate meshes
-for stage, (vs, fs) in enumerate(zip(vertex_positions, faces)):
-    for idx, (pos, faces) in enumerate(zip(vs.split(vertice_index), fs.split(face_index))):
-        mesh_file = os.path.join(options.savePath,
-                                 f"{filename}_mesh_stage{stage}_obj_{idx}")
-        save_mesh(pos, faces, mesh_file)
+# save the intermediate meshes
+for stage, vs in enumerate(vertex_positions):
+    for idx, (pos, fs) in enumerate(zip(vs.split(vertice_index), faces.split(face_index))):
+        mesh_file = os.path.join(options.savePath, f"{filename}_mesh_stage{stage}_obj_{idx}")
+        pos = pos.detach()
+        save_mesh(pos, fs, mesh_file)
         if options.show:
-            show_mesh(vs, fs)
-            show_mesh_pointCloud((vs, fs))
+            show_mesh(pos, fs)
+            show_mesh_pointCloud((pos, fs))
 
 print("Finish!")
