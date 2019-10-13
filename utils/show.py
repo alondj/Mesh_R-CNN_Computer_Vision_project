@@ -25,7 +25,7 @@ def show_mesh(mesh, alpha=0):
         mesh = load_mesh(mesh)
 
     vertices, triangles = mesh
-    if vertices.abs().max() > 1:
+    if np.absolute(vertices).max() > 1:
         vertices = normalize_mesh(vertices)
     if not isinstance(vertices, np.ndarray):
         vertices = vertices.cpu().numpy()
@@ -37,7 +37,7 @@ def show_mesh(mesh, alpha=0):
     vertices = np.matmul(vertices, rotation(alpha))
     x = vertices[:, 0]
     y = vertices[:, 1]
-    z = vertices[:, 2]*-1
+    z = vertices[:, 2] * -1
     ax = plt.axes(projection='3d')
     ax.set_xlim([-1, 1])
     ax.set_ylim([-1, 1])

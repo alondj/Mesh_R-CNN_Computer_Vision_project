@@ -1,0 +1,12 @@
+name: mesh_rcnn
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - cudatoolkit=10.0.130
+  - matplotlib=3.1.0
+  - python=3.7.3
+  - pytorch=1.2.0
+  - scikit-learn=0.21.3
+  - torchvision=0.4.0

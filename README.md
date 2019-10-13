@@ -5,7 +5,16 @@ This repository aims to implement the ICCV 2019 paper: [Mesh R-CNN](https://arxi
 ## Requirements
 
 - PyTorch 1.2
-- \>= Python 3
+- Torchvision 0.4.0
+- Python 3.7
+- Sklearn 0.21.3
+- Matplotlib 3.1.0
+
+we've provided an environment file in order to setup a conda environment
+named mesh_rcnn
+```
+conda env create -f environment.yml
+```
 
 ## External Codes
 
@@ -65,7 +74,7 @@ to run for eg. a full model training run.
 python train.py *training_args
 ```
 
-## Usage
+#### Usage
 
 ```
 usage: train.py [-h] --model {ShapeNet,Pix3D} [--featDim FEATDIM]
@@ -132,7 +141,7 @@ to run for eg. backbone only training:
 python backbone_train.py *backbone_args
 ```
 
-## Usage
+#### Usage
 
 ```
 usage: train_backbone.py [-h] --model {ShapeNet,Pix3D}
@@ -179,7 +188,7 @@ To evaluate the model on a dataset, please use the following command
 python evaluate.py *evaluation_args
 ```
 
-## Usage
+#### Usage
 
 ```
 usage: eval_model.py [-h] --model {ShapeNet,Pix3D} [--featDim FEATDIM]
@@ -224,7 +233,7 @@ to run inference on an image, please use the following command
 python demo.py *demo_args
 ```
 
-## Usage
+#### Usage
 
 ```
 usage: model inference script [-h] --model {ShapeNet,Pix3D}
@@ -281,8 +290,10 @@ in order to run our model on multiple GPUS<br>
 ----data
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 a module providing our custom datasets and data loading procedures<br>
+
 ----utils
 &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;
 a package containing various methods to manipulate voxels and meshes,<br>
 &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;
 such as serialization,displaying and sampling
+
