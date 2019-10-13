@@ -4,7 +4,8 @@ import torch
 import torch.nn as nn
 import os
 from data.dataloader import pix3dDataset, shapeNet_Dataset, dataLoader
-from meshRCNN import Pix3DModel, ShapeNetModel, pretrained_MaskRcnn, pretrained_ResNet50, CustomDP
+from meshRCNN import Pix3DModel, ShapeNetModel, pretrained_MaskRcnn, pretrained_ResNet50
+from dataParallel import CustomDP
 from utils.eval_utils import validate, safe_print
 
 assert torch.cuda.is_available(), "the training process is slow and requires gpu"
