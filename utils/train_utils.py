@@ -1,10 +1,14 @@
 import time
 import torch
+from torch.nn import Module
+from torch.optim import Optimizer
+from torch.utils.data import DataLoader
 import numpy as np
 from collections import OrderedDict
+from typing import List, Dict
 
 
-def save_state(model, file_name):
+def save_state(model: Module, file_name: str):
     try:
         state_dict = model.module.state_dict()
     except AttributeError:
@@ -12,7 +16,7 @@ def save_state(model, file_name):
     torch.save(state_dict, file_name)
 
 
-def load_dict(path):
+def load_dict(path: str) -> OrderedDict:
     state_dict: OrderedDict = torch.load(path)
 
     res_dict = OrderedDict()
@@ -26,7 +30,7 @@ def load_dict(path):
     return res_dict
 
 
-def safe_print(rank, msg):
+def safe_print(rank: int, msg: str):
     if rank == 0:
         print(msg)
 
@@ -34,7 +38,7 @@ def safe_print(rank, msg):
 class AverageMeter(object):
     """Computes and stores the average and current value"""
 
-    def __init__(self, name, fmt=':f', rank=0):
+    def __init__(self, name: str, fmt: str = ':f', rank: int = 0):
         self.name = name
         self.fmt = fmt
         self.rank = rank
@@ -65,36 +69,36 @@ class AverageMeter(object):
 
 
 class ProgressMeter(object):
-    def __init__(self, num_batches, meters, prefix="", rank=0):
+    def __init__(self, num_batches: int, meters: List[AverageMeter], prefix: str = "", rank: int = 0):
         self.batch_fmtstr = self._get_batch_fmtstr(num_batches)
         self.meters = meters
         self.prefix = prefix
         self.rank = rank
 
-    def display(self, batch):
+    def display(self, batch: int):
         entries = [self.prefix + self.batch_fmtstr.format(batch)]
         entries += [str(meter) for meter in self.meters]
-        safe_print(self.rank, '\n'.join(entries)+'\n')
+        safe_print(self.rank, '\n'.join(entries) + '\n')
 
-    def _get_batch_fmtstr(self, num_batches):
+    def _get_batch_fmtstr(self, num_batches: int) -> str:
         num_digits = len(str(num_batches // 1))
         fmt = '{:' + str(num_digits) + 'd}'
         return '[' + fmt + '/' + fmt.format(num_batches) + ']'
 
 
-def basic_metrics(rank=0):
+def basic_metrics(rank: int = 0) -> Dict[str, AverageMeter]:
     return {'batch_time': AverageMeter('Batch Time', ':6.3f', rank=rank),
             'data_loading': AverageMeter('Data Loading Time', ':6.3f', rank=rank)}
 
 
-def maskrcnn_metrics(rank=0):
+def maskrcnn_metrics(rank: int = 0) -> Dict[str, AverageMeter]:
     return {'loss_box_reg': AverageMeter('Box Regularization Loss', ':.4e', rank=rank),
             'loss_mask': AverageMeter('Mask Loss', ':.4e', rank=rank),
             'loss_objectness': AverageMeter('Objectness Loss', ':.4e', rank=rank),
             'loss_rpn_box_reg': AverageMeter('RPN Regularization Loss', ':.4e', rank=rank)}
 
 
-def gcn_metrics(rank=0, voxel_only=False):
+def gcn_metrics(rank: int = 0, voxel_only: bool = False) -> Dict[str, AverageMeter]:
     metrics = {'voxel_loss': AverageMeter('Voxel Loss', ':.4e', rank=rank)}
     if not voxel_only:
         metrics.update({'edge_loss': AverageMeter('Edge Loss', ':.4e', rank=rank),
@@ -103,8 +107,9 @@ def gcn_metrics(rank=0, voxel_only=False):
     return metrics
 
 
-def train_backbone(rank, model, optimizer, dataloader, epoch, is_pix3d=False,
-                   lr_count=0, curr_lr=0, print_freq=10):
+def train_backbone(rank: int, model: Module, optimizer: Optimizer, dataloader: DataLoader,
+                   epoch: int, is_pix3d: bool = False,
+                   lr_count: int = 0, curr_lr: float = 0, print_freq: int = 10):
     assert torch.cuda.is_available(), "gpu is required for training"
     metrics = basic_metrics(rank=rank)
     metrics['loss_classifier'] = AverageMeter('Classifier Loss', ':.4e',
@@ -156,7 +161,7 @@ def train_backbone(rank, model, optimizer, dataloader, epoch, is_pix3d=False,
         lr_count += 1
         if is_pix3d:
             if lr_count < 1000:
-                curr_lr += (0.02-0.002)/1000.0
+                curr_lr += (0.02 - 0.002) / 1000.0
             if lr_count in [8000, 10000]:
                 curr_lr /= 10
             for param_group in optimizer.param_groups:
@@ -166,8 +171,9 @@ def train_backbone(rank, model, optimizer, dataloader, epoch, is_pix3d=False,
     return metrics, lr_count, curr_lr
 
 
-def train_gcn(rank, model, optimizer, dataloader, epoch, loss_weights, backbone_train=True,
-              is_pix3d=False, curr_lr=0, lr_count=0, print_freq=10):
+def train_gcn(rank: int, model: Module, optimizer: Optimizer, dataloader: DataLoader,
+              epoch: int, loss_weights: Dict[str, float], backbone_train: bool = True,
+              is_pix3d: bool = False, curr_lr: float = 0, lr_count: int = 0, print_freq: int = 10):
     assert torch.cuda.is_available(), "gpu is required for training"
     metrics = basic_metrics(rank=rank)
 
@@ -234,7 +240,7 @@ def train_gcn(rank, model, optimizer, dataloader, epoch, loss_weights, backbone_
         lr_count += 1
         if is_pix3d:
             if lr_count < 1000:
-                curr_lr += (0.02-0.002)/1000.0
+                curr_lr += (0.02 - 0.002) / 1000.0
             if lr_count in [8000, 10000]:
                 curr_lr /= 10
             for param_group in optimizer.param_groups:

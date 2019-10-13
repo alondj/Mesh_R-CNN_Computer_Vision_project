@@ -5,38 +5,6 @@ import torch.nn as nn
 from torch import Tensor
 from data import Batch
 from utils import sample
-from utils.time_decorator import time
-
-
-# compute combined losses of the bacbone and GCN
-def total_loss(ws: dict, model_output: dict, voxel_gts: Tensor, batch: Batch,
-               train_backbone: bool,
-               backbone_type: str) -> Tensor:
-    v_loss = voxel_loss(model_output['voxels'], voxel_gts)
-
-    if 'edge_index' in model_output:
-        chamfer_loss, normal_loss, edge_loss = batched_mesh_loss(
-            # we do not compute loss for the first mesh as it was directly computed
-            # from the voxels and not from the refine stages
-            model_output['vertex_positions'][1:],
-            model_output['faces'],
-            model_output['edge_index'],
-            model_output['vertice_index'],
-            model_output['face_index'],
-            batch
-        )
-    else:
-        chamfer_loss, normal_loss, edge_loss = 0, 0, 0
-
-    # if we train the backbone just add the losses
-    backbone_loss = 0
-    if train_backbone:
-        if backbone_type == 'ShapeNet':
-            backbone_loss = model_output['backbone']
-        else:
-            backbone_loss = sum(model_output['backbone'].values())
-
-    return backbone_loss*ws['b']+chamfer_loss*ws['c']+normal_loss*ws['n']+edge_loss*ws['e']+v_loss*ws['v']
 
 
 def voxel_loss(voxel_prediction: Tensor, voxel_gts: Tensor) -> Tensor:
@@ -95,7 +63,7 @@ def mesh_loss(vertex_positions_pred: Tensor, mesh_faces_pred: Tensor, pred_adjac
 
     # chamfer distance
     chamfer_p, idx_p, chamfer_gt, idx_gt = batched_chamfer_distance(p2p_dist)
-    chamfer_loss = (chamfer_p+chamfer_gt)/point_cloud_size
+    chamfer_loss = (chamfer_p + chamfer_gt) / point_cloud_size
 
     # normal_distance
     normal_dist_p, normal_dist_gt = batched_normal_distance(point_cloud_pred, point_cloud_gt,
@@ -233,7 +201,7 @@ def batched_point2point_distance(pt0: Tensor, pt1: Optional[Tensor] = None) -> T
     if pt1 is None:
         xx = torch.bmm(pt0, pt0.transpose(2, 1))
         rx = xx.diagonal(dim1=1, dim2=2).unsqueeze(1).expand(xx.shape)
-        p2p = rx.transpose(2, 1) + rx - 2*xx
+        p2p = rx.transpose(2, 1) + rx - 2 * xx
         return p2p
 
     if pt1.ndim == 2:
@@ -248,5 +216,5 @@ def batched_point2point_distance(pt0: Tensor, pt1: Optional[Tensor] = None) -> T
     rx = xx.diagonal(dim1=1, dim2=2).unsqueeze(1).expand_as(zz.transpose(2, 1))
 
     ry = yy.diagonal(dim1=1, dim2=2).unsqueeze(1).expand_as(zz)
-    P = (rx.transpose(2, 1) + ry - 2*zz)
+    P = (rx.transpose(2, 1) + ry - 2 * zz)
     return P

@@ -110,6 +110,9 @@ def dummy(*dims):
 
 # ------------------------------------------------------------------------------------------------------
 def filter_ROI_input(targets, backbone_out, featuers):
+    ''' given maskrcnn_targets and output and corresponding ROI features
+        return the roi features corresponding to the boxes with highest IOU score
+    '''
     filtered_output = []
     for target, proposal, roi_featuers in zip(targets, backbone_out, featuers):
         the_box = target["boxes"]

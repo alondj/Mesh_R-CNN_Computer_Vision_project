@@ -2,7 +2,6 @@ import torch
 from torch import Tensor
 import torch.nn as nn
 from typing import Tuple, Optional, List
-from datetime import datetime
 import math
 from .utils import aggregate_neighbours
 import numpy as np
@@ -11,7 +10,7 @@ from utils.rotation import rotation
 # adjacency matrix: we just save occupied indices in coo format
 # vertex features matrix: we concatenate over the vertex dim resulting in total_vertices x Num_features
 # this representation allows us to batch graph operations
-# mesh_faces: a matrix of relevant vertex indices
+# mesh_faces: a matrix of relevant vertex indices of size total_faces x 3
 Point = Tuple[float, float, float]
 Face = Tuple[Point, Point, Point]
 
@@ -331,11 +330,6 @@ class VertixRefinePix3D(nn.Module):
         new_positions = vertex_positions+new_positions
 
         return new_positions, new_featues
-
-
-# there is also the marching cube algorithm https://github.com/pmneila/PyMCubes
-# explained https://medium.com/zeg-ai/voxel-to-mesh-conversion-marching-cube-algorithm-43dbb0801359
-# we might want to compare between them
 
 
 class Cubify(nn.Module):

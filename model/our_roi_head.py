@@ -9,6 +9,10 @@ from torchvision.models.detection.mask_rcnn import MaskRCNNHeads
 
 
 class ModifiedRoIHead(RoIHeads):
+    '''ROI_Heads implementation that returns ROI features of detections
+       during training and inference
+    '''
+
     def postprocess_detections(self, box_features, class_logits, box_regression, proposals, image_shapes):
         device = class_logits.device
         num_classes = class_logits.shape[-1]
@@ -50,25 +54,28 @@ class ModifiedRoIHead(RoIHeads):
             # remove low scoring boxes
             inds = torch.nonzero(scores > self.score_thresh).squeeze(1)
             if boxes[inds].shape[0] > 0:
-                boxes, scores, labels, box_keep_idxs = boxes[inds], scores[inds], labels[inds], box_keep_idxs[inds]
+                boxes, scores, labels, box_keep_idxs = boxes[
+                    inds], scores[inds], labels[inds], box_keep_idxs[inds]
 
             # remove empty boxes
             keep = box_ops.remove_small_boxes(boxes, min_size=1e-2)
             if boxes[keep].shape[0] > 0:
-                boxes, scores, labels, box_keep_idxs = boxes[keep], scores[keep], labels[keep], box_keep_idxs[keep]
+                boxes, scores, labels, box_keep_idxs = boxes[
+                    keep], scores[keep], labels[keep], box_keep_idxs[keep]
 
             # non-maximum suppression, independently done per class
             keep = box_ops.batched_nms(boxes, scores, labels, self.nms_thresh)
             # keep only topk scoring predictions
             keep = keep[:self.detections_per_img]
             if boxes[keep].shape[0] > 0:
-                boxes, scores, labels, box_keep_idxs = boxes[keep], scores[keep], labels[keep], box_keep_idxs[keep]
+                boxes, scores, labels, box_keep_idxs = boxes[
+                    keep], scores[keep], labels[keep], box_keep_idxs[keep]
 
             all_boxes.append(boxes)
             all_scores.append(scores)
             all_labels.append(labels)
 
-            feature_indices = box_keep_idxs / (num_classes-1)
+            feature_indices = box_keep_idxs / (num_classes - 1)
             all_features.append(features[feature_indices])
         return all_boxes, all_scores, all_labels, all_features
 

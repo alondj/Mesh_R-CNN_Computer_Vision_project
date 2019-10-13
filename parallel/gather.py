@@ -7,6 +7,8 @@ from torch.nn.parallel._functions import Broadcast, Gather
 
 
 class Reduce(Function):
+    ''' Differentiable reduce add
+    '''
     @staticmethod
     def forward(ctx, target_gpu, *inputs):
         ctx.target_gpus = [inputs[i].get_device() for i in range(len(inputs))]
@@ -72,8 +74,8 @@ def gather_GCN_outputs(outs, out_device, voxel_only=False):
                                         for out in outs]))
 
     offsets = [np.sum(out['vertice_index']) for out in outs]
-    offsets = np.cumsum(offsets)-offsets
-    res['edge_index'] = gather([out['edge_index']+off for out, off in zip(outs, offsets)],
+    offsets = np.cumsum(offsets) - offsets
+    res['edge_index'] = gather([out['edge_index'] + off for out, off in zip(outs, offsets)],
                                out_device, dim=1)
 
     res['face_index'] = list(chain(*[out['face_index']
