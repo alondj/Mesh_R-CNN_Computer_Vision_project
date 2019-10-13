@@ -237,7 +237,7 @@ to run inference on an image, please use the following command
 ```
 python demo.py demo.py -m ShapeNet --modelPath  --threshold 0.2 
 --imagePath *path to an image file to test on* 
---savePath *path to save output files to*  --residual
+--savePath *path to save output files to*  --residual --show
 ```
 
 #### Usage

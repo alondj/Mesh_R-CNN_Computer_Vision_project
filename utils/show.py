@@ -25,11 +25,12 @@ def show_mesh(mesh, alpha=0):
         mesh = load_mesh(mesh)
 
     vertices, triangles = mesh
-    if np.absolute(vertices).max() > 1:
-        vertices = normalize_mesh(vertices)
     if not isinstance(vertices, np.ndarray):
         vertices = vertices.cpu().numpy()
         triangles = triangles.cpu().numpy()
+
+    if np.absolute(vertices).max() > 1:
+        vertices = normalize_mesh(vertices)
 
     if triangles.min() == 1:
         triangles -= 1
@@ -46,11 +47,13 @@ def show_mesh(mesh, alpha=0):
     plt.show()
 
 
-def show_voxels(voxel_mask):
+def show_voxels(voxel_mask, threshold: float = 0.5):
     if isinstance(voxel_mask, str):
         voxel_mask = load_voxels(voxel_mask)
     if not isinstance(voxel_mask, np.ndarray):
         voxel_mask = voxel_mask.cpu().numpy()
+
+    voxel_mask = (voxel_mask > threshold).astype(np.int32)
 
     fig = plt.figure()
     ax = fig.gca(projection='3d')
