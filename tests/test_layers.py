@@ -4,7 +4,7 @@ import torch.nn as nn
 from meshRCNN.layers import Cubify, GraphConv, ResGraphConv, VoxelBranch,\
     VertexAlign, ResVertixRefineShapenet, VertixRefineShapeNet, VertixRefinePix3D
 
-from meshRCNN.models import pretrained_ResNet50
+from meshRCNN import pretrained_ResNet50
 from meshRCNN.utils import aggregate_neighbours
 
 devices = ['cpu']
