@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
-from parallel.scatter import custom_scatter
-from parallel.gather import pix3d_backbone_gather, pix3d_gather, shapenet_backbone_gather, shapenet_gather
+from .scatter import custom_scatter
+from .gather import pix3d_backbone_gather, pix3d_gather, shapenet_backbone_gather, shapenet_gather
 from data.dataloader import Batch
-from parallel.replicate import replicate
+from .replicate import replicate
 
 
 class CustomDP(nn.Module):

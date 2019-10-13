@@ -9,8 +9,8 @@ import torch
 import torch.nn as nn
 from pathlib import Path
 
-from model import (Pix3DModel, ShapeNetModel, pretrained_MaskRcnn,
-                   pretrained_ResNet50)
+from meshRCNN import (Pix3DModel, ShapeNetModel, pretrained_MaskRcnn,
+                      pretrained_ResNet50)
 from utils import save_mesh, save_voxels
 
 assert torch.cuda.is_available(), "the training process is slow and requires gpu"

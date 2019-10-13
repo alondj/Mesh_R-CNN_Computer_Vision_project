@@ -9,20 +9,15 @@ from torch.utils.model_zoo import load_url
 from torchvision.models.resnet import ResNet, Bottleneck, model_urls as res_urls
 from torchvision.models.detection import MaskRCNN
 from torchvision.models.detection.backbone_utils import resnet_fpn_backbone
-from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
-from torchvision.models.detection.image_list import ImageList
 from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
 from torchvision.models.detection.mask_rcnn import model_urls as mask_urls
-from torchvision.models.detection.roi_heads import RoIHeads
-from torchvision.models.detection.transform import GeneralizedRCNNTransform
-from torchvision.ops import MultiScaleRoIAlign, RoIAlign
+from torchvision.ops import MultiScaleRoIAlign
 
-from model.our_roi_head import build_RoI_head
-from model.utils import filter_ROI_input
+from .utils import filter_ROI_input
 
 from .layers import (Cubify, ResVertixRefineShapenet, VertixRefinePix3D,
-                     VertixRefineShapeNet, VoxelBranch)
-from model.loss_functions import voxel_loss, batched_mesh_loss
+                     VertixRefineShapeNet, VoxelBranch, build_RoI_head)
+from .loss_functions import voxel_loss, batched_mesh_loss
 from data.dataloader import Batch
 
 

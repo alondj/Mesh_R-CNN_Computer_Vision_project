@@ -8,8 +8,7 @@ import torch.nn as nn
 from torch.optim import SGD, Adam
 from collections import OrderedDict
 from data.dataloader import pix3dDataset, shapeNet_Dataset, dataLoader
-from model import pretrained_MaskRcnn, pretrained_ResNet50
-from parallel import CustomDP
+from meshRCNN import pretrained_MaskRcnn, pretrained_ResNet50, CustomDP
 from utils.train_utils import train_backbone, load_dict
 assert torch.cuda.is_available(), "the training process is slow and requires gpu"
 

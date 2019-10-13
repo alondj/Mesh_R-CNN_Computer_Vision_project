@@ -6,7 +6,7 @@ from pathlib import Path
 import json
 import argparse
 import torch
-from model.layers import Cubify
+from meshRCNN.layers import Cubify
 from utils.serialization import load_voxels
 from utils import save_mesh, normalize_mesh
 """
@@ -28,7 +28,6 @@ the dataset should be built like that:
 def download_pix3d(download_path):
     """
     pix3d img,voxel,masks http://pix3d.csail.mit.edu/data/pix3d.zip
-    pix3d pointclouds https://drive.google.com/file/d/1RZakyBu9lPbG85SyconBn4sR8r2faInV/view
     """
     if os.path.exists(f"{download_path}/dataset/pix3d"):
         return
@@ -49,7 +48,6 @@ def download_shapenet(download_path):
     """
     shapeNet imgs http://cvgl.stanford.edu/data2/ShapeNetRendering.tgz
     shapeNet voxel http://cvgl.stanford.edu/data2/ShapeNetVox32.tgz
-    shapeNet pointclouds https://drive.google.com/open?id=1cfoe521iTgcB_7-g_98GYAqO553W8Y0g
     """
     if os.path.exists(f"{download_path}/dataset/shapeNet"):
         return

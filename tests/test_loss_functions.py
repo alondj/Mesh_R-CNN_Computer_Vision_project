@@ -1,8 +1,8 @@
 import pytest
 import torch
-from model.loss_functions import batched_point2point_distance, total_edge_length, batched_chamfer_distance
+from meshRCNN.loss_functions import batched_point2point_distance, total_edge_length, batched_chamfer_distance
 
-from model.utils import dummy
+from meshRCNN.utils import dummy
 from utils.mesh_sampling import surface_areas, sample
 
 devices = ['cpu']

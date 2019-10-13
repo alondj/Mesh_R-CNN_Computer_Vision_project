@@ -1,11 +1,11 @@
 import pytest
 import torch
 import torch.nn as nn
-from model.layers import Cubify, GraphConv, ResGraphConv, VoxelBranch,\
+from meshRCNN.layers import Cubify, GraphConv, ResGraphConv, VoxelBranch,\
     VertexAlign, ResVertixRefineShapenet, VertixRefineShapeNet, VertixRefinePix3D
 
-from model.models import pretrained_ResNet50
-from model.utils import aggregate_neighbours
+from meshRCNN.models import pretrained_ResNet50
+from meshRCNN.utils import aggregate_neighbours
 
 devices = ['cpu']
 if torch.cuda.is_available():

@@ -4,9 +4,8 @@ import torch
 import torch.nn as nn
 import os
 from data.dataloader import pix3dDataset, shapeNet_Dataset, dataLoader
-from model import Pix3DModel, ShapeNetModel, pretrained_MaskRcnn, pretrained_ResNet50
+from meshRCNN import Pix3DModel, ShapeNetModel, pretrained_MaskRcnn, pretrained_ResNet50, CustomDP
 from utils.eval_utils import validate, safe_print
-from parallel import CustomDP
 
 assert torch.cuda.is_available(), "the training process is slow and requires gpu"
 
@@ -103,7 +102,7 @@ dataset = dataset_cls(options.dataRoot, classes=classes)
 testloader = dataLoader(dataset, options.batchSize, num_voxels=num_voxels,
                         num_workers=options.workers,
                         num_train_samples=None,
-                        train_ratio=1-options.test_ratio)
+                        train_ratio=1 - options.test_ratio)
 
 # load checkpoint
 safe_print(0, "loaded gcn checkpoint")
