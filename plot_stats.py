@@ -5,7 +5,8 @@ import argparse
 parser = argparse.ArgumentParser(description="metrics plotting script")
 parser.add_argument("--model", "-m", help="the model we wish plot metrics for", choices=["ShapeNet", "Pix3D"],
                     required=True)
-parser.add_argument('--statPath', type=str, required=True, help='the path to the stats file(.st)')
+parser.add_argument('--statPath', type=str, required=True,
+                    help='the path to the stats file(.st)')
 
 if __name__ == "__main__":
     options = parser.parse_args()
@@ -69,7 +70,6 @@ if __name__ == "__main__":
         objectness_losses = []
         rpn_box_reg_loss = []
         epochs = []
-        print(results)
         for epoch, meters in results.items():
             epochs.append(epoch)
             batch_times.append(meters['batch_time'].avg)

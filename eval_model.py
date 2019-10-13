@@ -79,7 +79,7 @@ if is_pix3d:
                        cubify_threshold=options.threshold,
                        vertex_feature_dim=options.featDim,
                        num_refinement_stages=options.num_refinement_stages,
-                       voxel_only=options.voxel_only)
+                       voxel_only=False)
 
     dataset_cls = pix3dDataset
     num_voxels = 24
@@ -93,7 +93,7 @@ else:
                           cubify_threshold=options.threshold,
                           vertex_feature_dim=options.featDim,
                           num_refinement_stages=options.num_refinement_stages,
-                          voxel_only=options.voxel_only)
+                          voxel_only=False)
 
     dataset_cls = shapeNet_Dataset
     num_voxels = 48
