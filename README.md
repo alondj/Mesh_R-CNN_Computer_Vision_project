@@ -50,16 +50,13 @@ this will download and prepare the dataset creating the following structure
 -------model<br>
 -------pix3d.json<br>
 
-### Train
+### Training
 
-We provide 2 scripts in order to train the model
-train_backbone in order to train a backbone feature extractor for the GCN
-and train in order to train backbone+GCN at the same time
+We provide 2 scripts in order to train the model,<br>
+`train_backbone.py` in order to train a backbone feature extractor for the GCN,<br>
+and `train.py` in order to train backbone+GCN at the same time
 
-it is recommended to first train a backbone feature extractor before
-training the full model
-
-we also supprot multi-GPU training in the form of DataParallelisem,
+we also support multi-GPU training in the form of Data Parallelism,
 if more than 1 GPU is detected.
 
 to run for eg. a full model training run.
@@ -68,10 +65,110 @@ to run for eg. a full model training run.
 python train.py *training_args
 ```
 
-The hyper-parameters can be changed from command. To get more help, please use
+## Usage
 
 ```
-python train.py -h
+usage: train.py [-h] --model {ShapeNet,Pix3D} [--featDim FEATDIM]
+                [--model_path MODEL_PATH] [--backbone_path BACKBONE_PATH]
+                [--num_refinement_stages NUM_REFINEMENT_STAGES]
+                [--threshold THRESHOLD] [--voxel_only] [--residual]
+                [--train_backbone] [--chamfer CHAMFER] [--voxel VOXEL]
+                [--normal NORMAL] [--edge EDGE] [--backbone BACKBONE]
+                [--num_sampels NUM_SAMPELS] [--train_ratio TRAIN_RATIO]
+                [-c CLASSES] [--dataRoot DATAROOT] [--batchSize BATCHSIZE]
+                [--workers WORKERS] [--nEpoch NEPOCH] [--optim {Adam,SGD}]
+                [--weightDecay WEIGHTDECAY] [--lr LR]
+
+GCN training script
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --model {ShapeNet,Pix3D}, -m {ShapeNet,Pix3D}
+                        the model we wish to train
+  --featDim FEATDIM     number of vertex features
+  --model_path MODEL_PATH
+                        path of a pretrained model to cintinue training
+  --backbone_path BACKBONE_PATH, -bp BACKBONE_PATH
+                        path of a pretrained backbone if we wish to continue
+                        training from checkpoint must be provided with
+                        GCN_path
+  --num_refinement_stages NUM_REFINEMENT_STAGES, -nr NUM_REFINEMENT_STAGES
+                        number of mesh refinement stages
+  --threshold THRESHOLD, -th THRESHOLD
+                        Cubify threshold
+  --voxel_only          whether to return only the cubified mesh resulting
+                        from cubify
+  --residual            whether to use residual refinement for ShapeNet
+  --train_backbone      whether to train the backbone in additon to the GCN
+  --chamfer CHAMFER     weight of the chamfer loss
+  --voxel VOXEL         weight of the voxel loss
+  --normal NORMAL       weight of the normal loss
+  --edge EDGE           weight of the edge loss
+  --backbone BACKBONE   weight of the backbone loss
+  --num_sampels NUM_SAMPELS
+                        number of sampels to dataset
+  --train_ratio TRAIN_RATIO
+                        ration of samples used for training
+  -c CLASSES, --classes CLASSES
+                        classes of the exampels in the dataset
+  --dataRoot DATAROOT   file root
+  --batchSize BATCHSIZE, -b BATCHSIZE
+                        batch size
+  --workers WORKERS     number of data loading workers
+  --nEpoch NEPOCH       number of epochs to train for
+  --optim {Adam,SGD}    optimizer to use
+  --weightDecay WEIGHTDECAY
+                        weight decay for L2 loss
+  --lr LR               learning rate
+```
+
+it is recommended to train a voxel only model before training the full GCN model<br>
+by running `python train.py --voxel_only`<br>
+because when the model is untrained it will predict huge graphs which can cause memory issues.
+
+to run for eg. backbone only training:
+
+```
+python backbone_train.py *backbone_args
+```
+
+## Usage
+
+```
+usage: train_backbone.py [-h] --model {ShapeNet,Pix3D}
+                         [--backbone_path BACKBONE_PATH]
+                         [--num_sampels NUM_SAMPELS]
+                         [--train_ratio TRAIN_RATIO] [-c CLASSES]
+                         [--dataRoot DATAROOT] [--batchSize BATCHSIZE]
+                         [--workers WORKERS] [--nEpoch NEPOCH]
+                         [--optim {Adam,SGD}] [--weightDecay WEIGHTDECAY]
+                         [--lr LR]
+
+backbone training script
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --model {ShapeNet,Pix3D}, -m {ShapeNet,Pix3D}
+                        the backbone model we wish to train
+  --backbone_path BACKBONE_PATH, -bp BACKBONE_PATH
+                        path of a pretrained backbone if we wish to continue
+                        training from checkpoint must be provided with
+                        GCN_path
+  --num_sampels NUM_SAMPELS
+                        number of sampels to dataset
+  --train_ratio TRAIN_RATIO
+                        ration of samples used for training
+  -c CLASSES, --classes CLASSES
+                        classes of the exampels in the dataset
+  --dataRoot DATAROOT   file root
+  --batchSize BATCHSIZE, -b BATCHSIZE
+                        batch size
+  --workers WORKERS     number of data loading workers
+  --nEpoch NEPOCH       number of epochs to train for
+  --optim {Adam,SGD}    optimizer to use
+  --weightDecay WEIGHTDECAY
+                        weight decay for L2 loss
+  --lr LR               learning rate
 ```
 
 ### Validation
@@ -82,6 +179,43 @@ To evaluate the model on a dataset, please use the following command
 python evaluate.py *evaluation_args
 ```
 
+## Usage
+
+```
+usage: eval_model.py [-h] --model {ShapeNet,Pix3D} [--featDim FEATDIM]
+                     [--model_path MODEL_PATH]
+                     [--num_refinement_stages NUM_REFINEMENT_STAGES]
+                     [--threshold THRESHOLD] [--residual]
+                     [--test_ratio TEST_RATIO] [-c CLASSES]
+                     [--dataRoot DATAROOT] [--batchSize BATCHSIZE]
+                     [--workers WORKERS] [--output_path OUTPUT_PATH]
+
+dataset evaluation script
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --model {ShapeNet,Pix3D}, -m {ShapeNet,Pix3D}
+                        the model we wish to train
+  --featDim FEATDIM     number of vertex features
+  --model_path MODEL_PATH
+                        the path to the model we wish to evaluate
+  --num_refinement_stages NUM_REFINEMENT_STAGES, -nr NUM_REFINEMENT_STAGES
+                        number of mesh refinement stages
+  --threshold THRESHOLD, -th THRESHOLD
+                        Cubify threshold
+  --residual            whether to use residual refinement for ShapeNet
+  --test_ratio TEST_RATIO
+                        ratio of samples to test
+  -c CLASSES, --classes CLASSES
+                        classes of the exampels in the dataset
+  --dataRoot DATAROOT   file root
+  --batchSize BATCHSIZE, -b BATCHSIZE
+                        batch size
+  --workers WORKERS     number of data loading workers
+  --output_path OUTPUT_PATH
+                        path to output folder
+```
+
 ### Demo
 
 to run inference on an image, please use the following command
@@ -90,16 +224,65 @@ to run inference on an image, please use the following command
 python demo.py *demo_args
 ```
 
+## Usage
+
+```
+usage: model inference script [-h] --model {ShapeNet,Pix3D}
+                              [--featDim FEATDIM] --modelPath MODELPATH
+                              [--num_refinement_stages NUM_REFINEMENT_STAGES]
+                              [--threshold THRESHOLD] [--residual]
+                              [--imagePath IMAGEPATH] [--savePath SAVEPATH]
+                              [--show]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --model {ShapeNet,Pix3D}, -m {ShapeNet,Pix3D}
+                        the model to run the demo with
+  --featDim FEATDIM     number of vertex features
+  --modelPath MODELPATH
+                        the path to find the trained model
+  --num_refinement_stages NUM_REFINEMENT_STAGES, -nr NUM_REFINEMENT_STAGES
+                        number of mesh refinement stages
+  --threshold THRESHOLD, -th THRESHOLD
+                        Cubify threshold
+  --residual            whether to use residual refinement for ShapeNet
+  --imagePath IMAGEPATH
+                        the path to find the data
+  --savePath SAVEPATH   the path to save the reconstructed meshes
+  --show                whether to display the predicted voxels and meshes
+```
+
 # Code Structure
 
-----meshRCNN our main package containing architecture definitions<br>
--------layers.py implementation of all custom GCN layers<br>
--------loss_functions.py implementation of loss functions<br>
--------pix3d_model.py definition of Pix3D's backbone and GCN models<br>
--------shapenet_model.py definition of ShaPenet's backbone and GCN models<br>
+----meshRCNN
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+our main package containing architecture definitions<br>
+-------layers.py
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+implementation of all custom GCN layers<br>
+-------loss_functions.py
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+implementation of loss functions<br>
+-------pix3d_model.py
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+definition of Pix3D's backbone and GCN models<br>
+-------shapenet_model.py
+&nbsp;&nbsp;&nbsp;
+definition of ShaPenet's backbone and GCN models<br>
 
------dataParallel a package implementing custom scatter gather methods in order to run our model on multiple GPUS<br>
+-----dataParallel
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+a package implementing custom scatter gather methods,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+in order to run our model on multiple GPUS<br>
 
-----data a module providing our custom datasets and data loading procedures<br>
-----utils a package containing various methods to manipulate voxels and meshes,<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;such as serialization,displaying and sampling
+----data
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+a module providing our custom datasets and data loading procedures<br>
+----utils
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;
+a package containing various methods to manipulate voxels and meshes,<br>
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;
+such as serialization,displaying and sampling

@@ -13,7 +13,7 @@ from dataParallel import CustomDP
 from utils.train_utils import train_backbone, load_dict
 assert torch.cuda.is_available(), "the training process is slow and requires gpu"
 
-parser = argparse.ArgumentParser()
+parser = argparse.ArgumentParser(description="backbone training script")
 
 # model args
 parser.add_argument(

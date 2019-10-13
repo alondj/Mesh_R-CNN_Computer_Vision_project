@@ -10,7 +10,7 @@ from utils.eval_utils import validate, safe_print
 
 assert torch.cuda.is_available(), "the training process is slow and requires gpu"
 
-parser = argparse.ArgumentParser()
+parser = argparse.ArgumentParser(description="dataset evaluation script")
 
 # model args
 parser.add_argument(

@@ -11,11 +11,11 @@ from pathlib import Path
 
 from meshRCNN import (Pix3DModel, ShapeNetModel, pretrained_MaskRcnn,
                       pretrained_ResNet50)
-from utils import save_mesh, save_voxels
+from utils import save_mesh, save_voxels, show_mesh, show_voxels, show_mesh_pointCloud
 
 assert torch.cuda.is_available(), "the training process is slow and requires gpu"
 
-parser = argparse.ArgumentParser()
+parser = argparse.ArgumentParser("model inference script")
 
 # model args
 parser.add_argument(
@@ -35,6 +35,9 @@ parser.add_argument("--residual", default=False,
 parser.add_argument('--imagePath', type=str, help='the path to find the data')
 parser.add_argument('--savePath', type=str, default='eval/',
                     help='the path to save the reconstructed meshes')
+
+parser.add_argument('--show', default=False, action='store_true',
+                    help='whether to display the predicted voxels and meshes')
 
 options = parser.parse_args()
 
@@ -82,12 +85,17 @@ filename = os.path.basename(options.imgPath).split('.')[0]
 for idx, v in enumerate(voxels.split(1)):
     f_name = f"{filename}_voxel_obj{idx}"
     save_voxels(v.squeeze(0), os.path.join(options.savePath, f_name))
+    if options.show:
+        show_voxels(v)
 
-# save the intermediate meshes
+        # save the intermediate meshes
 for stage, (vs, fs) in enumerate(zip(vertex_positions, faces)):
     for idx, (pos, faces) in enumerate(zip(vs.split(vertice_index), fs.split(face_index))):
         mesh_file = os.path.join(options.savePath,
                                  f"{filename}_mesh_stage{stage}_obj_{idx}")
         save_mesh(pos, faces, mesh_file)
+        if options.show:
+            show_mesh(vs, fs)
+            show_mesh_pointCloud((vs, fs))
 
 print("Finish!")

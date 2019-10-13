@@ -16,7 +16,7 @@ from dataParallel import CustomDP
 
 assert torch.cuda.is_available(), "the training process is slow and requires gpu"
 
-parser = argparse.ArgumentParser()
+parser = argparse.ArgumentParser(description="GCN training script")
 
 # model args
 parser.add_argument(
