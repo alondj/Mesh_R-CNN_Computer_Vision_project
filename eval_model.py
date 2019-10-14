@@ -7,7 +7,7 @@ from data.dataloader import pix3dDataset, shapeNet_Dataset, dataLoader
 from meshRCNN import Pix3DModel, ShapeNetModel, pretrained_MaskRcnn, pretrained_ResNet50
 from dataParallel import CustomDP
 from utils.eval_utils import validate, safe_print
-
+from pathlib import Path
 assert torch.cuda.is_available(), "the training process is slow and requires gpu"
 
 parser = argparse.ArgumentParser(description="dataset evaluation script")
@@ -43,80 +43,89 @@ parser.add_argument('--workers', type=int,
 
 parser.add_argument('--output_path', type=str, help='path to output folder')
 
-options = parser.parse_args()
 
-devices = [torch.device('cuda', i)
-           for i in range(torch.cuda.device_count())]
+def main():
+    options = parser.parse_args()
 
-# print header
-model_name = options.model
-title = f'{model_name} evaluation \n used_gpus: {len(devices)}\n'
-print(title)
+    devices = [torch.device('cuda', i)
+               for i in range(torch.cuda.device_count())]
 
-gpus = [torch.cuda.get_device_name(device) for device in devices]
-print('system information\n python: %s, torch: %s, cudnn: %s, cuda: %s, \ngpus: %s' % (
-    platform.python_version(),
-    torch.__version__,
-    torch.backends.cudnn.version(),
-    torch.version.cuda,
-    gpus))
-print("\n")
+    # print header
+    model_name = options.model
+    title = f'{model_name} evaluation \n used_gpus: {len(devices)}\n'
+    print(title)
 
-print(f"options were:\n{options}\n")
+    gpus = [torch.cuda.get_device_name(device) for device in devices]
+    print('system information\n python: %s, torch: %s, cudnn: %s, cuda: %s, \ngpus: %s' % (
+        platform.python_version(),
+        torch.__version__,
+        torch.backends.cudnn.version(),
+        torch.version.cuda,
+        gpus))
+    print("\n")
 
-gpus = [torch.cuda.get_device_name(device) for device in devices]
-is_pix3d = model_name == 'Pix3D'
+    print(f"options were:\n{options}\n")
 
-classes = options.classes
-if classes != None:
-    classes = [item for item in options.classes.split(',')]
+    gpus = [torch.cuda.get_device_name(device) for device in devices]
+    is_pix3d = model_name == 'Pix3D'
 
-if is_pix3d:
-    num_classes = 10
-    backbone = pretrained_MaskRcnn(
-        num_classes=num_classes, pretrained=False)
-    model = Pix3DModel(backbone,
-                       cubify_threshold=options.threshold,
-                       vertex_feature_dim=options.featDim,
-                       num_refinement_stages=options.num_refinement_stages,
-                       voxel_only=False)
+    classes = options.classes
+    if classes != None:
+        classes = [item for item in options.classes.split(',')]
 
-    dataset_cls = pix3dDataset
-    num_voxels = 24
-else:
-    num_classes = 13
-    backbone = pretrained_ResNet50(nn.functional.nll_loss,
-                                   num_classes=num_classes,
-                                   pretrained=False)
-    model = ShapeNetModel(backbone,
-                          residual=options.residual,
-                          cubify_threshold=options.threshold,
-                          vertex_feature_dim=options.featDim,
-                          num_refinement_stages=options.num_refinement_stages,
-                          voxel_only=False)
+    if is_pix3d:
+        num_classes = 10
+        backbone = pretrained_MaskRcnn(
+            num_classes=num_classes, pretrained=False)
+        model = Pix3DModel(backbone,
+                           cubify_threshold=options.threshold,
+                           vertex_feature_dim=options.featDim,
+                           num_refinement_stages=options.num_refinement_stages,
+                           voxel_only=False)
 
-    dataset_cls = shapeNet_Dataset
-    num_voxels = 48
+        dataset_cls = pix3dDataset
+        num_voxels = 24
+    else:
+        num_classes = 13
+        backbone = pretrained_ResNet50(nn.functional.nll_loss,
+                                       num_classes=num_classes,
+                                       pretrained=False)
+        model = ShapeNetModel(backbone,
+                              residual=options.residual,
+                              cubify_threshold=options.threshold,
+                              vertex_feature_dim=options.featDim,
+                              num_refinement_stages=options.num_refinement_stages,
+                              voxel_only=False)
 
-dataset = dataset_cls(options.dataRoot, classes=classes)
+        dataset_cls = shapeNet_Dataset
+        num_voxels = 48
 
-testloader = dataLoader(dataset, options.batchSize, num_voxels=num_voxels,
-                        num_workers=options.workers,
-                        num_train_samples=None,
-                        train_ratio=1 - options.test_ratio)
+    dataset = dataset_cls(options.dataRoot, classes=classes)
 
-# load checkpoint
-safe_print(0, "loaded gcn checkpoint")
-model.load_state_dict(torch.load(options.model_path))
+    testloader = dataLoader(dataset, options.batchSize, num_voxels=num_voxels,
+                            num_workers=options.workers,
+                            num_train_samples=None,
+                            train_ratio=1 - options.test_ratio)
 
-if len(devices) > 1:
-    safe_print(0, "using dataParallel")
-    model = CustomDP(model, is_backbone=False, pix3d=is_pix3d)
+    # load checkpoint
+    safe_print(0, "loaded gcn checkpoint")
+    model.load_state_dict(torch.load(options.model_path))
 
-model: nn.Module = model.to(devices[0]).eval()
-with torch.no_grad():
-    metrics = validate(0, model, testloader, num_classes, is_pix3d=is_pix3d)
+    if len(devices) > 1:
+        safe_print(0, "using dataParallel")
+        model = CustomDP(model, is_backbone=False, pix3d=is_pix3d)
 
-    safe_print(0, "saving metrics")
-    torch.save(metrics, os.path.join(options.output_path,
-                                     f"metrics_{model_name}.st"))
+    model: nn.Module = model.to(devices[0]).eval()
+    with torch.no_grad():
+        metrics = validate(0, model, testloader,
+                           num_classes, is_pix3d=is_pix3d)
+
+        safe_print(0, "saving metrics")
+        if not os.path.exists(options.output_path):
+            Path(options.output_path).mkdir(parents=True, exist_ok=True)
+        torch.save(metrics, os.path.join(options.output_path,
+                                         f"metrics_{model_name}.st"))
+
+
+if __name__ == "__main__":
+    main()

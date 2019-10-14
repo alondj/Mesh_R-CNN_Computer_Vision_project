@@ -39,65 +39,71 @@ parser.add_argument('--savePath', type=str, default='eval/',
 parser.add_argument('--show', default=False, action='store_true',
                     help='whether to display the predicted voxels and meshes')
 
-options = parser.parse_args()
 
-# model definition
-if options.model == 'ShapeNet':
-    model = ShapeNetModel(pretrained_ResNet50(nn.functional.nll_loss, num_classes=13,
-                                              pretrained=False),
-                          residual=options.residual,
-                          cubify_threshold=options.threshold,
-                          vertex_feature_dim=options.featDim,
-                          num_refinement_stages=options.num_refinement_stages, voxel_only=False)
-else:
-    model = Pix3DModel(pretrained_MaskRcnn(num_classes=10, pretrained=False),
-                       cubify_threshold=options.threshold,
-                       vertex_feature_dim=options.featDim,
-                       num_refinement_stages=options.num_refinement_stages, voxel_only=False)
+def main():
+    options = parser.parse_args()
 
-# load checkpoint
-model.load_state_dict(torch.load(options.modelPath))
-model: nn.Module = model.to('cuda').eval()
+    # model definition
+    if options.model == 'ShapeNet':
+        model = ShapeNetModel(pretrained_ResNet50(nn.functional.nll_loss, num_classes=13,
+                                                  pretrained=False),
+                              residual=options.residual,
+                              cubify_threshold=options.threshold,
+                              vertex_feature_dim=options.featDim,
+                              num_refinement_stages=options.num_refinement_stages, voxel_only=False)
+    else:
+        model = Pix3DModel(pretrained_MaskRcnn(num_classes=10, pretrained=False),
+                           cubify_threshold=options.threshold,
+                           vertex_feature_dim=options.featDim,
+                           num_refinement_stages=options.num_refinement_stages, voxel_only=False)
 
-rgba_image = PIL.Image.open(options.imagePath)
-rgb_image = rgba_image.convert('RGB')
-img = torch.from_numpy(np.array(rgb_image))
-img = img.transpose(2, 0)
-img = img.type(torch.cuda.FloatTensor)
-if img.max() > 1.:
-    img = img / 255.
-img = img.unsqueeze(0)
-with torch.no_grad():
-    output = model(img)
+    # load checkpoint
+    model.load_state_dict(torch.load(options.modelPath))
+    model: nn.Module = model.to('cuda').eval()
 
-vertex_positions = output['vertex_positions']
-edge_index = output['edge_index']  # adj matrix
-face_index = output['face_index']  # faces per graph
-vertice_index = output['vertice_index']  # vertices per graph
-faces = output['faces']
-voxels = output['voxels']
+    rgba_image = PIL.Image.open(options.imagePath)
+    rgb_image = rgba_image.convert('RGB')
+    img = torch.from_numpy(np.array(rgb_image))
+    img = img.transpose(2, 0)
+    img = img.type(torch.cuda.FloatTensor)
+    if img.max() > 1.:
+        img = img / 255.
+    img = img.unsqueeze(0)
+    with torch.no_grad():
+        output = model(img)
 
-print(f"saving output to {options.savePath}")
+    vertex_positions = output['vertex_positions']
+    edge_index = output['edge_index']  # adj matrix
+    face_index = output['face_index']  # faces per graph
+    vertice_index = output['vertice_index']  # vertices per graph
+    faces = output['faces']
+    voxels = output['voxels']
 
-if not os.path.exists(options.savePath):
-    Path(options.savePath).mkdir(parents=True, exist_ok=True)
+    print(f"saving output to {options.savePath}")
 
-filename = os.path.basename(options.imagePath).split('.')[0]
-# save voxels
-for idx, v in enumerate(voxels.split(1)):
-    f_name = f"{filename}_voxel_obj{idx}"
-    save_voxels(v.squeeze(0), os.path.join(options.savePath, f_name))
-    if options.show:
-        show_voxels(v.squeeze(0), threshold=options.threshold)
+    if not os.path.exists(options.savePath):
+        Path(options.savePath).mkdir(parents=True, exist_ok=True)
 
-# save the intermediate meshes
-for stage, vs in enumerate(vertex_positions):
-    for idx, (pos, fs) in enumerate(zip(vs.split(vertice_index), faces.split(face_index))):
-        mesh_file = os.path.join(
-            options.savePath, f"{filename}_mesh_stage{stage}_obj_{idx}")
-        pos = pos.detach()
-        save_mesh(pos, fs, mesh_file)
+    filename = os.path.basename(options.imagePath).split('.')[0]
+    # save voxels
+    for idx, v in enumerate(voxels.split(1)):
+        f_name = f"{filename}_voxel_obj{idx}"
+        save_voxels(v.squeeze(0), os.path.join(options.savePath, f_name))
         if options.show:
-            show_mesh((pos, fs))
+            show_voxels(v.squeeze(0), threshold=options.threshold)
 
-print("Finish!")
+    # save the intermediate meshes
+    for stage, vs in enumerate(vertex_positions):
+        for idx, (pos, fs) in enumerate(zip(vs.split(vertice_index), faces.split(face_index))):
+            mesh_file = os.path.join(
+                options.savePath, f"{filename}_mesh_stage{stage}_obj_{idx}")
+            pos = pos.detach()
+            save_mesh(pos, fs, mesh_file)
+            if options.show:
+                show_mesh((pos, fs))
+
+    print("Finish!")
+
+
+if __name__ == "__main__":
+    main()

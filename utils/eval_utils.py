@@ -14,62 +14,80 @@ def get_max_box(boxes, gt_box):
     return boxes[max_idx], max_idx
 
 
-def get_out_of_dicts(bbo, gt_bbox=None):
-    boxes, labels, masks, max_indexes = [], [], [], []
-    if gt_bbox is None:
-        for dic in bbo:
-            boxes.append(dic['boxes'])
-            labels.append(dic['labels'][0])
-            masks.append(dic['masks'])
+def extract_pix3d_gts(gts):
+    boxes, labels, masks = [], [], []
+    for gt in gts:
+        boxes.append(gt['boxes'])
+        labels.append(gt['labels'][0])
+        masks.append(gt['masks'])
 
-    else:
-        for dic, gt_box in zip(bbo, gt_bbox):
-            max_box, max_idx = get_max_box(dic['boxes'], gt_box)
-            max_indexes.append(max_idx)
-            boxes.append(max_box)
-            labels.append(dic['labels'][max_idx][0])
-            masks.append(dic['masks'][max_idx])
+    return boxes, labels, masks
+
+
+def get_out_of_dicts(predictions, gt_boxes):
+    boxes, labels, masks, max_indexes = [], [], [], []
+
+    for prediction, gt_box in zip(predictions, gt_boxes):
+        max_box, max_idx = get_max_box(prediction['boxes'], gt_box)
+        max_indexes.append(max_idx)
+        boxes.append(max_box)
+        labels.append(prediction['labels'][max_idx])
+        masks.append(prediction['masks'][max_idx])
 
     return boxes, labels, masks, max_indexes
 
 
-def get_only_max(max_indexes, voxels, vertex_positions, faces, vertice_index, face_index):
-    new_max_indexes_lst = []
-    for i in range(0, 3 * len(max_indexes), step=3):
-        new_max_indexes_lst.append(i + max_indexes[i])
+def get_only_max(max_indexes, voxels, vertex_positions, faces, vertice_index, face_index, mesh_index):
+    # take voxels
+    vxls = [g[idx] for g, idx in zip(voxels.split(mesh_index), max_indexes)]
+    vxls = torch.stack(vxls)
+    assert len(vxls) == len(mesh_index)
+    fs = faces.split(face_index)
+    i = 0
+    res_fs = []
+    res_f_index = []
+    # take faces
+    for n, idx in zip(mesh_index, max_indexes):
+        res_fs.append(fs[i:i + n][idx])
+        i += n
+        res_f_index.append(res_fs[-1].size(0))
+    assert len(res_fs) == len(mesh_index)
 
-    new_max_indexes = torch.Tensor(new_max_indexes_lst).type(torch.LongTensor)
+    # take vertices and vertice_index
+    res_vs = []
+    res_vs_index = []
+    for j, stage in enumerate(vertex_positions):
+        i = 0
+        stage_vs = []
+        vs = stage.split(vertice_index)
+        for n, idx in zip(mesh_index, max_indexes):
+            stage_vs.append(vs[i:i + n][idx])
+            if j == 0:
+                res_vs_index.append(stage_vs[-1].size(0))
+            i += n
+        assert len(stage_vs) == len(mesh_index)
+        res_vs.append(torch.cat(stage_vs))
 
-    old_offset = np.cumsum(vertice_index) - vertice_index
+    assert len(res_vs_index) == len(mesh_index)
 
-    vertex_positions_return = []
+    # create_adj matrix
+    offsets = np.cumsum(res_vs_index) - res_vs_index
+    tmp_fs = [f + offset for f, offset in zip(res_fs, offsets)]
+    res_fs = torch.cat(res_fs)
 
-    voxels = voxels[new_max_indexes]
+    # create adj_matrix
+    faces_t = torch.cat(tmp_fs).t()
+    # get all directed edges
+    idx_i, idx_j = torch.cat(
+        [faces_t[:2], faces_t[1:], faces_t[::2]], dim=1)
 
-    for stage in vertex_positions:
-        stage = stage.split(vertice_index)
-        filtered_stage = torch.cat([stage[idx] for idx in new_max_indexes_lst])
-        vertex_positions_return.append(filtered_stage)
-
-    faces = faces.split(face_index)
-    faces = [f + off for f, off in zip(faces, old_offset)]
-    filtered_faces = [faces[idx] for idx in new_max_indexes_lst]
-    faces = torch.cat(filtered_faces)
-
-    vertice_index = [vertice_index[idx] for idx in new_max_indexes_lst]
-    face_index = [face_index[idx] for idx in new_max_indexes_lst]
-
-    faces_t = faces.t()
-    idx_i, idx_j = torch.cat([faces_t[:2], faces_t[1:], faces_t[::2]], dim=1)
+    # duplicate to get undirected edges
     idx_i, idx_j = torch.cat([idx_i, idx_j], dim=0), torch.cat(
         [idx_j, idx_i], dim=0)
+
     adj_index = torch.stack([idx_i, idx_j], dim=0).unique(dim=1)
 
-    new_offset = np.cumsum(vertice_index) - vertice_index
-    faces = torch.cat(
-        [f - off for f, off in zip(faces.split(face_index), new_offset)])
-
-    return voxels, vertex_positions_return, faces, adj_index, vertice_index, face_index
+    return vxls, res_vs, res_fs, adj_index, res_vs_index, res_f_index
 
 
 def validate(rank, model, val_loader, num_classes, is_pix3d=False, print_freq=10):
@@ -113,16 +131,15 @@ def validate(rank, model, val_loader, num_classes, is_pix3d=False, print_freq=10
 
             # update backbone metrics
             if is_pix3d:
-                gt_boxes, gt_labels, gt_masks, _ = get_out_of_dicts(targets,
-                                                                    gt_bbox=None)
+                gt_boxes, gt_labels, gt_masks = extract_pix3d_gts(targets)
 
                 boxes, preds, masks, max_indexes = get_out_of_dicts(model_output['backbone'],
-                                                                    gt_bbox=gt_boxes)
+                                                                    gt_boxes)
 
                 pred = get_only_max(max_indexes, model_output['voxels'],
                                     model_output['vertex_positions'],
                                     model_output['faces'], model_output['vertice_index'],
-                                    model_output['face_index'])
+                                    model_output['face_index'], model_output['mesh_index'])
 
                 metrics['AP_box'].update(calc_precision_box(boxes,
                                                             gt_boxes), n=1)
