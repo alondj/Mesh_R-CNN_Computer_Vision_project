@@ -64,8 +64,11 @@ rgb_image = rgba_image.convert('RGB')
 img = torch.from_numpy(np.array(rgb_image))
 img = img.transpose(2, 0)
 img = img.type(torch.cuda.FloatTensor)
+if img.max() > 1.:
+    img = img / 255.
 img = img.unsqueeze(0)
-output = model(img)
+with torch.no_grad():
+    output = model(img)
 
 vertex_positions = output['vertex_positions']
 edge_index = output['edge_index']  # adj matrix
@@ -79,22 +82,22 @@ print(f"saving output to {options.savePath}")
 if not os.path.exists(options.savePath):
     Path(options.savePath).mkdir(parents=True, exist_ok=True)
 
-filename = os.path.basename(options.imgPath).split('.')[0]
+filename = os.path.basename(options.imagePath).split('.')[0]
 # save voxels
 for idx, v in enumerate(voxels.split(1)):
     f_name = f"{filename}_voxel_obj{idx}"
     save_voxels(v.squeeze(0), os.path.join(options.savePath, f_name))
     if options.show:
-        show_voxels(v)
+        show_voxels(v.squeeze(0), threshold=options.threshold)
 
 # save the intermediate meshes
 for stage, vs in enumerate(vertex_positions):
     for idx, (pos, fs) in enumerate(zip(vs.split(vertice_index), faces.split(face_index))):
-        mesh_file = os.path.join(options.savePath, f"{filename}_mesh_stage{stage}_obj_{idx}")
+        mesh_file = os.path.join(
+            options.savePath, f"{filename}_mesh_stage{stage}_obj_{idx}")
         pos = pos.detach()
         save_mesh(pos, fs, mesh_file)
         if options.show:
-            show_mesh(pos, fs)
-            show_mesh_pointCloud((pos, fs))
+            show_mesh((pos, fs))
 
 print("Finish!")

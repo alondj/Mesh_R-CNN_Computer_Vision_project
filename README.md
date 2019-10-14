@@ -5,7 +5,16 @@ This repository aims to implement the ICCV 2019 paper: [Mesh R-CNN](https://arxi
 ## Requirements
 
 - PyTorch 1.2
-- \>= Python 3
+- Torchvision 0.4.0
+- Python 3.7
+- Sklearn 0.21.3
+- Matplotlib 3.1.0
+
+we've provided an environment file in order to setup a conda environment
+named mesh_rcnn
+```
+conda env create -f environment.yml
+```
 
 ## External Codes
 
@@ -59,13 +68,16 @@ and `train.py` in order to train backbone+GCN at the same time
 we also support multi-GPU training in the form of Data Parallelism,
 if more than 1 GPU is detected.
 
-to run for eg. a full model training run.
+to run for eg. a full model training run for pix3d:.
 
 ```
-python train.py *training_args
+python train.py  -m Pix3D --threshold 0.2 --dataRoot *path to the directory with the json file* -b 4 --nEpoch 30 
+--optim SGD --lr 2e-3 --weightDecay 1e-4 --voxel 3.0 --residual  -c desk --train_backbone 
+--model_path *path to checkpoint.pth* 
+--train_ratio 0.7
 ```
 
-## Usage
+#### Usage
 
 ```
 usage: train.py [-h] --model {ShapeNet,Pix3D} [--featDim FEATDIM]
@@ -129,10 +141,11 @@ because when the model is untrained it will predict huge graphs which can cause 
 to run for eg. backbone only training:
 
 ```
-python backbone_train.py *backbone_args
+python backbone_train.py --model ShapeNet --backbone_path *path to backbone.pth* -c airplane 
+--dataRoot *path to directory with json file* -b 32 --train_ratio 0.7 --nEpoch 100 --optim Adam
 ```
 
-## Usage
+#### Usage
 
 ```
 usage: train_backbone.py [-h] --model {ShapeNet,Pix3D}
@@ -176,10 +189,11 @@ optional arguments:
 To evaluate the model on a dataset, please use the following command
 
 ```
-python evaluate.py *evaluation_args
+python eval_model.py e-m ShapeNet --model_path *path to checkpoint.pth* --residual --test_ratio 0.7 -c airplane 
+--dataRoot *path to directory with json file* -b 2 --output_path *path to save the output to*
 ```
 
-## Usage
+#### Usage
 
 ```
 usage: eval_model.py [-h] --model {ShapeNet,Pix3D} [--featDim FEATDIM]
@@ -221,10 +235,12 @@ optional arguments:
 to run inference on an image, please use the following command
 
 ```
-python demo.py *demo_args
+python demo.py demo.py -m ShapeNet --modelPath  --threshold 0.2 
+--imagePath *path to an image file to test on* 
+--savePath *path to save output files to*  --residual --show
 ```
 
-## Usage
+#### Usage
 
 ```
 usage: model inference script [-h] --model {ShapeNet,Pix3D}
@@ -250,6 +266,29 @@ optional arguments:
                         the path to find the data
   --savePath SAVEPATH   the path to save the reconstructed meshes
   --show                whether to display the predicted voxels and meshes
+```
+
+
+### plot stats
+
+to plot graphs of the training metrics from a .st file
+
+```
+python plot_stats.py -m Pix3D --statPath *path to stats.st file*
+```
+
+#### Usage
+
+```
+usage: plot_stats.py [-h] --model {ShapeNet,Pix3D} --statPath STATPATH
+
+metrics plotting script
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --model {ShapeNet,Pix3D}, -m {ShapeNet,Pix3D}
+                        the model we wish plot metrics for
+  --statPath STATPATH   the path to the stats file(.st)
 ```
 
 # Code Structure
@@ -281,8 +320,10 @@ in order to run our model on multiple GPUS<br>
 ----data
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 a module providing our custom datasets and data loading procedures<br>
+
 ----utils
 &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;
 a package containing various methods to manipulate voxels and meshes,<br>
 &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;
 such as serialization,displaying and sampling
+

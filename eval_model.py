@@ -79,7 +79,7 @@ if is_pix3d:
                        cubify_threshold=options.threshold,
                        vertex_feature_dim=options.featDim,
                        num_refinement_stages=options.num_refinement_stages,
-                       voxel_only=options.voxel_only)
+                       voxel_only=False)
 
     dataset_cls = pix3dDataset
     num_voxels = 24
@@ -93,7 +93,7 @@ else:
                           cubify_threshold=options.threshold,
                           vertex_feature_dim=options.featDim,
                           num_refinement_stages=options.num_refinement_stages,
-                          voxel_only=options.voxel_only)
+                          voxel_only=False)
 
     dataset_cls = shapeNet_Dataset
     num_voxels = 48
@@ -114,9 +114,9 @@ if len(devices) > 1:
     model = CustomDP(model, is_backbone=False, pix3d=is_pix3d)
 
 model: nn.Module = model.to(devices[0]).eval()
+with torch.no_grad():
+    metrics = validate(0, model, testloader, num_classes, is_pix3d=is_pix3d)
 
-metrics = validate(0, model, testloader, num_classes, is_pix3d=is_pix3d)
-
-safe_print(0, "saving metrics")
-torch.save(metrics, os.path.join(options.output_path,
-                                 f"metrics_{model_name}.st"))
+    safe_print(0, "saving metrics")
+    torch.save(metrics, os.path.join(options.output_path,
+                                     f"metrics_{model_name}.st"))
