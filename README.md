@@ -260,6 +260,18 @@ python demo.py demo.py -m ShapeNet --modelPath  --threshold 0.2
 
 it will create a .obj file containing the predicted meshes and .npy files containing the predicted voxel grids
 
+the following snippet can be used to visualize output after the fact.
+
+```
+from utils import show_voxels,show_mesh,show_mesh_pointCloud
+
+show_voxels('shapenet_ex/00_voxels_obj0.npy')
+# this will display the mesh both in complete form 
+# and in sampled form. alpha is a rotation angle
+show_mesh('shapenet_ex/00_mesh_stage3_obj_0.obj',alpha=-90)
+show_mesh_pointCloud('shapenet_ex/00_mesh_stage3_obj_0.obj',alpha=-90)
+```
+
 #### Usage
 
 ```
