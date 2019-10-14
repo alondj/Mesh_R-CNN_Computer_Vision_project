@@ -293,7 +293,7 @@ optional arguments:
 to plot graphs of the training metrics from a .st file
 
 ```
-python plot_stats.py -m Pix3D --statPath *path to stats.st file*
+python plot_stats.py --stat *path to stats.st file*
 ```
 
 #### Usage
