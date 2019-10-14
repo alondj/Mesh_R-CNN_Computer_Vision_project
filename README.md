@@ -59,6 +59,12 @@ this will download and prepare the dataset creating the following structure
 -------model<br>
 -------pix3d.json<br>
 
+to download and extract trained models and there training metrics download the zip file to the projects directory
+and extract it will create a folder named checkpoint containing trained models and there training metrics:
+`https://drive.google.com/file/d/1tEB2weVl6wv2I0okIkEZtvSI1G7_16es/view?usp=sharing`
+the files that end with .pth are the trained models weights  and the files ending with .st are the training metrics 
+saved in objects.
+
 ### Training
 
 We provide 2 scripts in order to train the model,<br>
@@ -239,6 +245,7 @@ python demo.py demo.py -m ShapeNet --modelPath  --threshold 0.2
 --imagePath *path to an image file to test on* 
 --savePath *path to save output files to*  --residual --show
 ```
+it will create a .obj file containing the predicted meshes and .npy files containing the predicted voxel grids
 
 #### Usage
 
