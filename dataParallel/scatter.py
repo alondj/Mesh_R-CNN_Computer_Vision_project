@@ -3,14 +3,22 @@ import torch
 
 
 def split_to_n(l, n):
+    '''
+    return a list of n even chunks of l 
+    '''
     sizes = np.full(n, len(l) // n)
     sizes[:len(l) % n] += 1
     ends = np.cumsum(sizes)
 
-    return[l[ends[i]-sizes[i]:ends[i]] for i in range(len(sizes))]
+    return[l[ends[i] - sizes[i]:ends[i]] for i in range(len(sizes))]
 
 
 def custom_scatter(images, targets=None, target_gpus=None, pix3d=False):
+    '''
+    a custom scatter method designed to split lists and targets evenly
+    '''
+    # we cannot use the builtin scatter as it attempts to split each sample
+    # in the list instead of splitting the list itself
     if targets is not None:
         assert len(images) == len(targets)
     if target_gpus is None:

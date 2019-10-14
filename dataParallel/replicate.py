@@ -73,6 +73,8 @@ def replicate(network, devices, detach=False):
                 replica.__dict__ = module.__dict__.copy()
 
                 for k in module.__dict__.keys():
+                    # we modify the state copy to perform a deep copy
+                    # of custom fields
                     if k not in special_names:
                         replica.__dict__[k] = deepcopy(module.__dict__[k])
 

@@ -6,6 +6,10 @@ import torch.cuda.comm as comm
 from torch.nn.parallel._functions import Broadcast, Gather
 
 
+# as our models do not return batched output in the
+# traditional manner aka lists/dict which do not have a batch dimention
+# we need custom methods in order to merge the output of different workers
+
 class Reduce(Function):
     ''' Differentiable reduce add
     '''
