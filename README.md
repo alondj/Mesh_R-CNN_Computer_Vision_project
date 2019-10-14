@@ -12,6 +12,7 @@ This repository aims to implement the ICCV 2019 paper: [Mesh R-CNN](https://arxi
 
 we've provided an environment file in order to setup a conda environment
 named mesh_rcnn
+
 ```
 conda env create -f environment.yml
 ```
@@ -59,12 +60,22 @@ this will download and prepare the dataset creating the following structure
 -------model<br>
 -------pix3d.json<br>
 
-to download and extract trained models and there training metrics download the zip file to the projects directory
-and extract it will create a folder named checkpoint containing trained models and there training metrics:
-[checkpoints](https://drive.google.com/file/d/1tEB2weVl6wv2I0okIkEZtvSI1G7_16es/view?usp=sharing)
-`the link: https://drive.google.com/file/d/1tEB2weVl6wv2I0okIkEZtvSI1G7_16es/view?usp=sharing`
-the files that end with .pth are the trained models weights  and the files ending with .st are the training metrics 
-saved in objects.
+### Pretrained Models
+
+We provide our pretrained models and their respective training statistics
+via this [link:](https://drive.google.com/file/d/1tEB2weVl6wv2I0okIkEZtvSI1G7_16es/view?usp=sharing)<br>
+`https://drive.google.com/file/d/1tEB2weVl6wv2I0okIkEZtvSI1G7_16es/view?usp=sharing`<br>
+
+simply download and extract the file inside the project root,<br>
+this will create a folder named checkpoints with the following files:<br>
+----checkpoints <br>
+-------shapenet.pth&emsp;&emsp; our shapenet model weights<br>
+-------shapenet.st &emsp;&emsp;&emsp;our shapenet model training statistics<br>
+-------pix3d.pth &emsp;&emsp;&emsp;our pix3d model weights<br>
+-------pix3d.st &emsp;&emsp;&emsp;our pix3d model training statistics<br>
+
+the shapenet model was trained on the airplane class<br>
+and the pix3d model trained in the desk class
 
 ### Training
 
@@ -78,9 +89,9 @@ if more than 1 GPU is detected.
 to run for eg. a full model training run for pix3d:.
 
 ```
-python train.py  -m Pix3D --threshold 0.2 --dataRoot *path to the directory with the json file* -b 4 --nEpoch 30 
---optim SGD --lr 2e-3 --weightDecay 1e-4 --voxel 3.0 --residual  -c desk --train_backbone 
---model_path *path to checkpoint.pth* 
+python train.py  -m Pix3D --threshold 0.2 --dataRoot *path to the directory with the json file* -b 4 --nEpoch 30
+--optim SGD --lr 2e-3 --weightDecay 1e-4 --voxel 3.0 --residual  -c desk --train_backbone
+--model_path *path to checkpoint.pth*
 --train_ratio 0.7
 ```
 
@@ -148,7 +159,7 @@ because when the model is untrained it will predict huge graphs which can cause 
 to run for eg. backbone only training:
 
 ```
-python backbone_train.py --model ShapeNet --backbone_path *path to backbone.pth* -c airplane 
+python backbone_train.py --model ShapeNet --backbone_path *path to backbone.pth* -c airplane
 --dataRoot *path to directory with json file* -b 32 --train_ratio 0.7 --nEpoch 100 --optim Adam
 ```
 
@@ -196,7 +207,7 @@ optional arguments:
 To evaluate the model on a dataset, please use the following command
 
 ```
-python eval_model.py e-m ShapeNet --model_path *path to checkpoint.pth* --residual --test_ratio 0.7 -c airplane 
+python eval_model.py e-m ShapeNet --model_path *path to checkpoint.pth* --residual --test_ratio 0.7 -c airplane
 --dataRoot *path to directory with json file* -b 2 --output_path *path to save the output to*
 ```
 
@@ -242,10 +253,11 @@ optional arguments:
 to run inference on an image, please use the following command
 
 ```
-python demo.py demo.py -m ShapeNet --modelPath  --threshold 0.2 
---imagePath *path to an image file to test on* 
+python demo.py demo.py -m ShapeNet --modelPath  --threshold 0.2
+--imagePath *path to an image file to test on*
 --savePath *path to save output files to*  --residual --show
 ```
+
 it will create a .obj file containing the predicted meshes and .npy files containing the predicted voxel grids
 
 #### Usage
@@ -275,7 +287,6 @@ optional arguments:
   --savePath SAVEPATH   the path to save the reconstructed meshes
   --show                whether to display the predicted voxels and meshes
 ```
-
 
 ### plot stats
 
@@ -334,4 +345,3 @@ a module providing our custom datasets and data loading procedures<br>
 a package containing various methods to manipulate voxels and meshes,<br>
 &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;
 such as serialization,displaying and sampling
-
