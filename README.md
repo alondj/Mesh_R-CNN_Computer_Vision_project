@@ -1,6 +1,6 @@
 # Pixel2Mesh-Pytorch
 
-This repository aims to implement the ICCV 2019 paper: [Mesh R-CNN](https://arxiv.org/pdf/1906.02739.pdf) in PyTorch.
+This repository aims to implement the ICCV 2019 paper: [Mesh R-CNN](https://arxiv.org/pdf/1906.02739.pdf) in PyTorch as part of a project in Computer Vision.
 
 ## Requirements
 
